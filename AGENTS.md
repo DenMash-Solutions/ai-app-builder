@@ -25,8 +25,10 @@ Next.js 16 (App Router) + React 19 + TypeScript app styled with Tailwind CSS 4 �
 | `bun run build` | `next build` |
 | `bun run start` | `next start` |
 | `bun run lint` | `eslint` |
+| `bun run test` | `bun test` (unit tests) |
+| `bun run test:e2e` | `playwright test` |
 
-Before finishing any change: `bun run lint && bunx tsc --noEmit`.
+Before finishing any change: `bun run lint && bunx tsc --noEmit && bun run test`.
 
 ## Structure
 
@@ -34,7 +36,7 @@ Before finishing any change: `bun run lint && bunx tsc --noEmit`.
 - `public/` — static assets (SVGs)
 - Config at root: `next.config.ts`, `tsconfig.json`, `eslint.config.mjs` (flat config), `postcss.config.mjs`
 - `CLAUDE.md` contains `@AGENTS.md` (reference alias)
-- No `components/` or `lib/` yet — create them as needed; colocate feature code
+- `components/`, `lib/` — shared UI and utilities; create as needed and colocate feature code
 
 ## Rules and lessons
 
