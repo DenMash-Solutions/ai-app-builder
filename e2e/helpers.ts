@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Page } from "@playwright/test";
-import { STORAGE_KEY } from "../lib/history";
-import type { GenerateMockConfig } from "./msw/fixture";
+import { STORAGE_KEY } from "@/lib/history";
+import type { GenerateMockConfig } from "@/e2e/msw/fixture";
 
 export type { GenerateMockConfig };
 
@@ -22,8 +22,9 @@ export async function mockGenerate(
 ): Promise<void> {
   await page.addInitScript({ path: MSW_INIT_BUNDLE });
   await page.addInitScript((cfg: GenerateMockConfig) => {
-    (window as unknown as { __GENERATE_MOCK__?: GenerateMockConfig }).__GENERATE_MOCK__ =
-      cfg;
+    (
+      window as unknown as { __GENERATE_MOCK__?: GenerateMockConfig }
+    ).__GENERATE_MOCK__ = cfg;
   }, config);
 }
 
@@ -39,8 +40,8 @@ export async function waitForMsw(page: Page): Promise<void> {
 export function generateCalls(page: Page): Promise<number> {
   return page.evaluate(
     () =>
-      (window as unknown as { __GENERATE_CALLS__?: number }).__GENERATE_CALLS__ ??
-      0,
+      (window as unknown as { __GENERATE_CALLS__?: number })
+        .__GENERATE_CALLS__ ?? 0,
   );
 }
 
@@ -51,9 +52,7 @@ export interface StoredEntry {
   spec: { root: string; elements: Record<string, unknown> };
 }
 
-export async function readHistoryStorage(
-  page: Page,
-): Promise<StoredEntry[]> {
+export async function readHistoryStorage(page: Page): Promise<StoredEntry[]> {
   return page.evaluate((key) => {
     const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as StoredEntry[]) : [];

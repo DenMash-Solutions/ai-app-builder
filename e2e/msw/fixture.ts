@@ -1,4 +1,10 @@
-import { COMPONENT, MOCK_KEYS, PATCH_OP, PATCH_PATH, UI } from "../constants";
+import {
+  COMPONENT,
+  MOCK_KEYS,
+  PATCH_OP,
+  PATCH_PATH,
+  UI,
+} from "@/e2e/constants";
 
 export interface GenerateMockConfig {
   status?: number;
