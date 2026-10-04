@@ -1,29 +1,44 @@
-import { EXAMPLE_PROMPTS } from "../lib/example-prompts";
+import { EXAMPLE_PROMPTS } from "@/lib/example-prompts";
+import { LOCALE_LABELS } from "@/lib/i18n/routing";
+import en from "@/lib/i18n/locale/en.json";
+import es from "@/lib/i18n/locale/es.json";
 
 export const ROLE = {
   button: "button",
   heading: "heading",
+  link: "link",
 } as const;
 
 export const UI = {
-  heading: "GenUI Playground",
-  emptyState: "The generated UI will render here.",
-  promptPlaceholder: "Describe the UI you want…",
-  generationFailed: "Generation failed",
-  historyEmpty: "No generations yet — create one to build your history.",
+  heading: en.playground.title,
+  subtitle: en.playground.subtitle,
+  emptyState: en.playground.emptyState,
+  promptPlaceholder: en.playground.promptPlaceholder,
+  generationFailed: en.playground.generationFailed,
+  historyEmpty: en.historyDrawer.emptyState,
+  justNow: en.historyDrawer.relativeTime.now,
   mockCardTitle: "Mock Dashboard",
   mockHeading: "Mock UI",
   mockBody: "Rendered from MSW mock",
-  justNow: "Just now",
+} as const;
+
+export const ES_UI = {
+  heading: es.playground.title,
+  subtitle: es.playground.subtitle,
+  generate: es.playground.generate,
+  promptPlaceholder: es.playground.promptPlaceholder,
+  history: es.playground.history,
 } as const;
 
 export const ACTIONS = {
-  history: "History",
-  generate: "Generate",
-  clearAll: "Clear all",
-  deleteEntry: "Delete entry",
-  close: "Close",
+  history: en.playground.history,
+  generate: en.playground.generate,
+  clearAll: en.historyDrawer.clearAll,
+  deleteEntry: en.historyDrawer.deleteEntry,
+  close: en.historyDrawer.close,
 } as const;
+
+export const SWITCHER_LABELS = LOCALE_LABELS;
 
 export const MOCK_ERROR_MESSAGE = "boom";
 

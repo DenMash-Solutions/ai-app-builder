@@ -11,12 +11,14 @@ import {
 } from "@json-render/react";
 import { useRef, useState, useSyncExternalStore } from "react";
 import type { FormEvent } from "react";
+import { useTranslations } from "next-intl";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { HistoryDrawer } from "@/components/history-drawer";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 import { EXAMPLE_PROMPTS } from "@/lib/example-prompts";
 import type { HistoryEntry } from "@/lib/history";
 import {
@@ -33,6 +35,7 @@ import { registry } from "@/lib/registry";
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
 
 function Playground() {
+  const t = useTranslations();
   const history = useSyncExternalStore(
     subscribeHistory,
     getHistory,
@@ -104,24 +107,22 @@ function Playground() {
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-semibold tracking-tight">
-            GenUI Playground
+            {t("playground.title")}
           </h1>
           <Badge variant="secondary">json-render</Badge>
         </div>
-        <p className="text-muted-foreground">
-          Describe an interface — the model streams a JSONL spec that renders
-          with the shadcn catalog.
-        </p>
+        <p className="text-muted-foreground">{t("playground.subtitle")}</p>
       </header>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <LocaleSwitcher />
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={() => setHistoryOpen(true)}
         >
-          History
+          {t("playground.history")}
           {history.length > 0 && (
             <Badge variant="secondary" className="ml-2">
               {history.length}
@@ -134,12 +135,14 @@ function Playground() {
         <div className="flex gap-2">
           <Input
             name="prompt"
-            placeholder="Describe the UI you want…"
+            placeholder={t("playground.promptPlaceholder")}
             disabled={isStreaming}
             className="h-9 flex-1"
           />
           <Button type="submit" disabled={isStreaming} className="h-9 px-4">
-            {isStreaming ? "Generating…" : "Generate"}
+            {isStreaming
+              ? t("playground.generating")
+              : t("playground.generate")}
           </Button>
         </div>
 
@@ -164,7 +167,7 @@ function Playground() {
               onClick={handleClearCurrent}
               className="ml-auto text-destructive hover:text-destructive"
             >
-              Clear
+              {t("playground.clear")}
             </Button>
           )}
         </div>
@@ -172,7 +175,7 @@ function Playground() {
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Generation failed</AlertTitle>
+          <AlertTitle>{t("playground.generationFailed")}</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       )}
@@ -181,7 +184,7 @@ function Playground() {
         <CardContent className="flex min-h-40 flex-col">
           {!displayedSpec && !isStreaming && (
             <p className="text-sm text-muted-foreground">
-              The generated UI will render here.
+              {t("playground.emptyState")}
             </p>
           )}
           <Renderer

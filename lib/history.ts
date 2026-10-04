@@ -103,16 +103,36 @@ export function createEntry(prompt: string, spec: Spec): HistoryEntry {
   };
 }
 
-export function formatRelativeTime(timestamp: number): string {
+export type TranslateFn = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
+
+export function formatRelativeTime(
+  timestamp: number,
+  t: TranslateFn,
+  locale: string,
+): string {
   const elapsed = Date.now() - timestamp;
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
 
-  if (elapsed < minute) return "Just now";
-  if (elapsed < minute * 2) return "1m ago";
-  if (elapsed < hour) return `${Math.floor(elapsed / minute)}m ago`;
-  if (elapsed < day) return `${Math.floor(elapsed / hour)}h ago`;
-  if (elapsed < 7 * day) return `${Math.floor(elapsed / day)}d ago`;
-  return new Date(timestamp).toLocaleDateString();
+  if (elapsed < minute) return t("historyDrawer.relativeTime.now");
+  if (elapsed < hour) {
+    return t("historyDrawer.relativeTime.minutes", {
+      n: Math.floor(elapsed / minute),
+    });
+  }
+  if (elapsed < day) {
+    return t("historyDrawer.relativeTime.hours", {
+      n: Math.floor(elapsed / hour),
+    });
+  }
+  if (elapsed < 7 * day) {
+    return t("historyDrawer.relativeTime.days", {
+      n: Math.floor(elapsed / day),
+    });
+  }
+  return new Date(timestamp).toLocaleDateString(locale);
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -32,20 +33,23 @@ export function HistoryDrawer({
   onDelete,
   onClear,
 }: HistoryDrawerProps) {
+  const t = useTranslations();
+  const locale = useLocale();
+
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
       <DrawerContent className="max-w-md">
         <DrawerHeader>
-          <DrawerTitle>History</DrawerTitle>
+          <DrawerTitle>{t("historyDrawer.title")}</DrawerTitle>
           <DrawerDescription>
-            Your last {entries.length} generations, stored in this browser.
+            {t("historyDrawer.description", { count: entries.length })}
           </DrawerDescription>
         </DrawerHeader>
 
         <div className="flex-1 overflow-y-auto px-4 pb-2">
           {entries.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No generations yet — create one to build your history.
+              {t("historyDrawer.emptyState")}
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -67,14 +71,14 @@ export function HistoryDrawer({
                         {entry.prompt}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {formatRelativeTime(entry.createdAt)}
+                        {formatRelativeTime(entry.createdAt, t, locale)}
                       </p>
                     </button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label="Delete entry"
+                      aria-label={t("historyDrawer.deleteEntry")}
                       className="h-7 px-2 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                       onClick={() => onDelete(entry.id)}
                     >
@@ -90,7 +94,7 @@ export function HistoryDrawer({
         <DrawerFooter>
           <DrawerClose asChild>
             <Button type="button" variant="outline">
-              Close
+              {t("historyDrawer.close")}
             </Button>
           </DrawerClose>
           {entries.length > 0 && (
@@ -100,7 +104,7 @@ export function HistoryDrawer({
               className="text-destructive hover:text-destructive"
               onClick={onClear}
             >
-              Clear all
+              {t("historyDrawer.clearAll")}
             </Button>
           )}
         </DrawerFooter>

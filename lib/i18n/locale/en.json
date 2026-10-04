@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "title": "GenUI Playground",
+    "description": "POC: AI-generated UI with json-render, shadcn/ui, and Gemini"
+  },
+  "playground": {
+    "title": "GenUI Playground",
+    "subtitle": "Describe an interface — the model streams a JSONL spec that renders with the shadcn catalog.",
+    "promptPlaceholder": "Describe the UI you want…",
+    "generate": "Generate",
+    "generating": "Generating…",
+    "clear": "Clear",
+    "history": "History",
+    "generationFailed": "Generation failed",
+    "emptyState": "The generated UI will render here."
+  },
+  "historyDrawer": {
+    "title": "History",
+    "description": "Your last {count} generations, stored in this browser.",
+    "emptyState": "No generations yet — create one to build your history.",
+    "close": "Close",
+    "clearAll": "Clear all",
+    "deleteEntry": "Delete entry",
+    "relativeTime": {
+      "now": "Just now",
+      "minutes": "{n}m ago",
+      "hours": "{n}h ago",
+      "days": "{n}d ago"
+    }
+  },
+  "localeSwitcher": {
+    "label": "Language"
+  }
+}
