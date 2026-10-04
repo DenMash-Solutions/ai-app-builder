@@ -8,11 +8,42 @@
     "subtitle": "Describe an interface — the model streams a JSONL spec that renders with the shadcn catalog.",
     "promptPlaceholder": "Describe the UI you want…",
     "generate": "Generate",
+    "steer": "Steer",
     "generating": "Generating…",
     "clear": "Clear",
     "history": "History",
     "generationFailed": "Generation failed",
     "emptyState": "The generated UI will render here."
+  },
+  "editor": {
+    "pick": "Pick",
+    "panelTitle": "Element editor",
+    "close": "Close",
+    "undo": "Undo",
+    "redo": "Redo",
+    "apply": "Apply",
+    "noEditableProps": "No editable properties",
+    "freeformPlaceholder": "Describe the change…",
+    "tabs": {
+      "properties": "Properties",
+      "actions": "Actions"
+    },
+    "generalActions": {
+      "bolder": "Bolder",
+      "quieter": "Quieter",
+      "polish": "Polish",
+      "colorize": "Colorize",
+      "distill": "Distill",
+      "layout": "Layout"
+    },
+    "instructions": {
+      "bolder": "Increase the visual weight and prominence of this element with stronger typography and higher contrast.",
+      "quieter": "Make this element more understated and subtle with lighter, lower-contrast styling.",
+      "polish": "Refine the copy of this element for clarity, tone, and impact.",
+      "colorize": "Improve the color treatment of this element so it fits a cohesive palette.",
+      "distill": "Condense this element to its essential message — shorter, tighter copy.",
+      "layout": "Improve the layout, spacing, and alignment around this element for better balance."
+    }
   },
   "historyDrawer": {
     "title": "History",
@@ -30,5 +61,9 @@
   },
   "localeSwitcher": {
     "label": "Language"
+  },
+  "theme": {
+    "toggleToDark": "Switch to dark mode",
+    "toggleToLight": "Switch to light mode"
   }
 }

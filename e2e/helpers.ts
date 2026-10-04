@@ -50,6 +50,8 @@ export interface StoredEntry {
   prompt: string;
   createdAt: number;
   spec: { root: string; elements: Record<string, unknown> };
+  revisions?: { label: string; createdAt: number }[];
+  head?: number;
 }
 
 export async function readHistoryStorage(page: Page): Promise<StoredEntry[]> {

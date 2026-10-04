@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
-import { playgroundCatalog } from "@/lib/catalog";
+import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
+import { playgroundCatalog } from "@/lib/playground/catalog";
 
 export const maxDuration = 60;
 
@@ -33,22 +34,29 @@ export async function POST(req: Request) {
     );
   }
 
-  const systemPrompt = playgroundCatalog.prompt() + COMPLETENESS_RULES;
+  const spec = isNonEmptySpec(currentSpec) ? currentSpec : null;
+  const isEdit = spec !== null;
 
-  // Optionally include current UI state so the model can edit the existing UI
-  const contextPrompt =
-    currentSpec && currentSpec.root
-      ? `\n\nCurrent UI state:\n${JSON.stringify(currentSpec, null, 2)}`
-      : "";
+  // Edit mode documents JSONL patch semantics; completeness rules only apply
+  // to fresh generations (a patch never needs to "finish every section").
+  const systemPrompt =
+    playgroundCatalog.prompt({ editModes: ["patch"] }) +
+    (isEdit ? "" : COMPLETENESS_RULES);
+
+  const userPrompt = buildUserPrompt({
+    prompt,
+    currentSpec: spec,
+    editModes: ["patch"],
+  });
 
   const result = streamText({
     model: google(process.env.GEMINI_MODEL ?? DEFAULT_MODEL),
-    system: systemPrompt + contextPrompt,
-    prompt,
+    system: systemPrompt,
+    prompt: userPrompt,
     temperature: 0.7,
     onFinish: ({ finishReason, usage, text }) => {
       console.log(
-        `[generate] finish=${finishReason} in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"}`,
+        `[${isEdit ? "edit" : "generate"}] finish=${finishReason} in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"}`,
       );
       console.log(`[generate] tail=${JSON.stringify(text.slice(-300))}`);
     },

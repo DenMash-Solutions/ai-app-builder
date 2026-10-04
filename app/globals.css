@@ -132,3 +132,18 @@
     @apply font-sans;
   }
 }
+
+/* Pick mode: json-render tags each element with a display:contents span
+   ([data-jr-key]) which paints no outline itself — style its element child.
+   :has() keeps the hover ring on the deepest picked element only. */
+.jr-pick-enabled [data-jr-key] {
+  cursor: crosshair;
+}
+.jr-pick-enabled [data-jr-key]:hover:not(:has([data-jr-key]:hover)) > * {
+  outline: 2px dashed #fbbf24;
+  outline-offset: 2px;
+}
+.jr-pick-enabled [data-jr-selected="true"] > * {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
+}

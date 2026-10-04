@@ -1,4 +1,4 @@
-import { EXAMPLE_PROMPTS } from "@/lib/example-prompts";
+import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { LOCALE_LABELS } from "@/lib/i18n/routing";
 import en from "@/lib/i18n/locale/en.json";
 import es from "@/lib/i18n/locale/es.json";
@@ -7,6 +7,7 @@ export const ROLE = {
   button: "button",
   heading: "heading",
   link: "link",
+  tab: "tab",
 } as const;
 
 export const UI = {
@@ -20,6 +21,7 @@ export const UI = {
   mockCardTitle: "Mock Dashboard",
   mockHeading: "Mock UI",
   mockBody: "Rendered from MSW mock",
+  editedHeading: "Edited heading",
 } as const;
 
 export const ES_UI = {
@@ -58,6 +60,7 @@ export const COMPONENT = {
 
 export const PATCH_OP = {
   add: "add",
+  replace: "replace",
 } as const;
 
 export const PATCH_PATH = {
@@ -65,9 +68,26 @@ export const PATCH_PATH = {
   elements: "/elements",
 } as const;
 
+export const EDITOR = {
+  pick: en.editor.pick,
+  panelTitle: en.editor.panelTitle,
+  close: en.editor.close,
+  undo: en.editor.undo,
+  redo: en.editor.redo,
+  apply: en.editor.apply,
+  freeformPlaceholder: en.editor.freeformPlaceholder,
+  properties: en.editor.tabs.properties,
+  actions: en.editor.tabs.actions,
+} as const;
+
 export const PROMPTS = {
   ...EXAMPLE_PROMPTS,
   customBilling: "A billing settings page with a table",
+} as const;
+
+export const THEME = {
+  toggleToDark: en.theme.toggleToDark,
+  toggleToLight: en.theme.toggleToLight,
 } as const;
 
 export const historyButtonName = (count?: number): string =>

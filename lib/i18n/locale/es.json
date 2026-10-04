@@ -8,11 +8,42 @@
     "subtitle": "Describe una interfaz — el modelo transmite una especificación JSONL que se renderiza con el catálogo shadcn.",
     "promptPlaceholder": "Describe la interfaz que quieres…",
     "generate": "Generar",
+    "steer": "Dirigir",
     "generating": "Generando…",
     "clear": "Limpiar",
     "history": "Historial",
     "generationFailed": "Error al generar",
     "emptyState": "La interfaz generada se mostrará aquí."
+  },
+  "editor": {
+    "pick": "Seleccionar",
+    "panelTitle": "Editor de elemento",
+    "close": "Cerrar",
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "apply": "Aplicar",
+    "noEditableProps": "Sin propiedades editables",
+    "freeformPlaceholder": "Describe el cambio…",
+    "tabs": {
+      "properties": "Propiedades",
+      "actions": "Acciones"
+    },
+    "generalActions": {
+      "bolder": "Más audaz",
+      "quieter": "Más sobrio",
+      "polish": "Pulir",
+      "colorize": "Colorear",
+      "distill": "Destilar",
+      "layout": "Componer"
+    },
+    "instructions": {
+      "bolder": "Aumenta el peso visual y la prominencia de este elemento con una tipografía más fuerte y más contraste.",
+      "quieter": "Haz este elemento más discreto y sutil, con estilos más suaves y de menor contraste.",
+      "polish": "Refina el texto de este elemento para mayor claridad, tono e impacto.",
+      "colorize": "Mejora el tratamiento del color de este elemento para que encaje en una paleta coherente.",
+      "distill": "Condensa este elemento a su mensaje esencial — texto más corto y directo.",
+      "layout": "Mejora la composición, el espaciado y la alineación de este elemento para lograr más equilibrio."
+    }
   },
   "historyDrawer": {
     "title": "Historial",
@@ -30,5 +61,9 @@
   },
   "localeSwitcher": {
     "label": "Idioma"
+  },
+  "theme": {
+    "toggleToDark": "Cambiar a modo oscuro",
+    "toggleToLight": "Cambiar a modo claro"
   }
 }

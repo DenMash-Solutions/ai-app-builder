@@ -10,6 +10,7 @@ export interface GenerateMockConfig {
   status?: number;
   body?: Record<string, unknown>;
   lines?: string[];
+  editLines?: string[];
 }
 
 function line(op: Record<string, unknown>): string {
@@ -48,5 +49,17 @@ export const MOCK_UI_LINES: string[] = [
       props: { text: UI.mockBody },
       children: [],
     },
+  }),
+];
+
+/**
+ * Canned response for edit requests (body carries a non-empty currentSpec):
+ * a single replace patch against the generated heading.
+ */
+export const MOCK_EDIT_LINES: string[] = [
+  line({
+    op: PATCH_OP.replace,
+    path: `${PATCH_PATH.elements}/${MOCK_KEYS.heading}/props/text`,
+    value: UI.editedHeading,
   }),
 ];
