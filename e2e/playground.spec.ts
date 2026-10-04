@@ -28,9 +28,7 @@ test.describe("playground", () => {
     await expect(
       page.getByRole(ROLE.button, { name: ACTIONS.history }),
     ).toBeVisible();
-    await expect(
-      page.getByPlaceholder(UI.promptPlaceholder),
-    ).toBeVisible();
+    await expect(page.getByPlaceholder(UI.promptPlaceholder)).toBeVisible();
   });
 
   test("renders the mocked UI from an example chip", async ({ page }) => {
@@ -38,9 +36,7 @@ test.describe("playground", () => {
     await page.goto("/");
     await waitForMsw(page);
 
-    await page
-      .getByRole(ROLE.button, { name: PROMPTS.signIn })
-      .click();
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
 
     await expect(page.getByText(UI.mockHeading)).toBeVisible();
     await expect(page.getByText(UI.mockBody)).toBeVisible();
@@ -59,9 +55,7 @@ test.describe("playground", () => {
 
     const prompt = PROMPTS.customBilling;
     await page.getByPlaceholder(UI.promptPlaceholder).fill(prompt);
-    await page
-      .getByRole(ROLE.button, { name: ACTIONS.generate })
-      .click();
+    await page.getByRole(ROLE.button, { name: ACTIONS.generate }).click();
 
     await expect(page.getByText(UI.mockHeading)).toBeVisible();
 
@@ -81,9 +75,7 @@ test.describe("playground", () => {
     await page.goto("/");
     await waitForMsw(page);
 
-    await page
-      .getByRole(ROLE.button, { name: PROMPTS.signIn })
-      .click();
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
 
     await expect(page.getByText(UI.generationFailed)).toBeVisible();
     await expect(page.getByText(MOCK_ERROR_MESSAGE)).toBeVisible();

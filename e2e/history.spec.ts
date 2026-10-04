@@ -1,11 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  ACTIONS,
-  PROMPTS,
-  ROLE,
-  UI,
-  historyButtonName,
-} from "./constants";
+import { ACTIONS, PROMPTS, ROLE, UI, historyButtonName } from "./constants";
 import {
   generateCalls,
   mockGenerate,
@@ -42,9 +36,7 @@ test.describe("history", () => {
     await expect(page.getByText(UI.emptyState)).toBeVisible();
 
     // Restore from the drawer without calling the API
-    await page
-      .getByRole(ROLE.button, { name: historyButtonName(1) })
-      .click();
+    await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
     const entry = page.getByRole(ROLE.button, {
       name: new RegExp(PROMPTS.signIn),
     });
@@ -57,9 +49,7 @@ test.describe("history", () => {
     expect(await generateCalls(page)).toBe(0);
 
     // Delete the entry (drawer stays open showing the empty state)
-    await page
-      .getByRole(ROLE.button, { name: historyButtonName(1) })
-      .click();
+    await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
     await page.getByRole(ROLE.button, { name: ACTIONS.deleteEntry }).click();
 
     await expect(page.getByText(UI.historyEmpty)).toBeVisible();
@@ -88,9 +78,7 @@ test.describe("history", () => {
     ).toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(2);
 
-    await page
-      .getByRole(ROLE.button, { name: historyButtonName(2) })
-      .click();
+    await page.getByRole(ROLE.button, { name: historyButtonName(2) }).click();
     await expect(
       page.getByRole(ROLE.button, {
         name: new RegExp(PROMPTS.signIn),

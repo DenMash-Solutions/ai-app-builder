@@ -10,7 +10,7 @@ export default function globalSetup() {
       "e2e/msw/init.generated.js",
       "--format=iife",
       "--target=browser",
-      "--define:process.env.NODE_ENV=\"development\"",
+      '--define:process.env.NODE_ENV="development"',
     ],
     { stdio: "inherit" },
   );

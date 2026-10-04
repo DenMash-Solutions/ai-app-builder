@@ -1,0 +1,27 @@
+# dependencies / build
+node_modules
+.next
+out
+build
+next-env.d.ts
+*.tsbuildinfo
+
+# lockfiles
+bun.lock
+
+# generated artifacts
+public/mockServiceWorker.js
+e2e/msw/init.generated.js
+test-results
+playwright-report
+
+# markdown excluded per project rules (code only)
+*.md
+AGENTS.md
+CLAUDE.md
+commit-plan.md
+.agents
+.opencode
+
+# vercel
+.vercel
