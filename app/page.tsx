@@ -1,69 +1,128 @@
-import Image from "next/image";
+"use client";
+
+import {
+  ActionProvider,
+  Renderer,
+  StateProvider,
+  ValidationProvider,
+  VisibilityProvider,
+  useUIStream,
+} from "@json-render/react";
+import type { FormEvent } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { registry } from "@/lib/registry";
+
+const EXAMPLE_PROMPTS = [
+  "Revenue dashboard with 4 KPI metrics",
+  "Sign-in form with email and password",
+  "Pricing comparison of three plans",
+  "Crea una página en español con 2 secciones (Hero y Servicios) para una clínica dental. En el hero se debe mostrar una imagen",
+];
+
+function Playground() {
+  const { spec, isStreaming, error, send, clear } = useUIStream({
+    api: "/api/generate",
+  });
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const prompt = formData.get("prompt");
+    if (typeof prompt === "string" && prompt.trim().length > 0) {
+      void send(prompt.trim());
+    }
+  };
+
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 p-8">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            GenUI Playground
+          </h1>
+          <Badge variant="secondary">json-render</Badge>
+        </div>
+        <p className="text-muted-foreground">
+          Describe an interface — the model streams a JSONL spec that renders
+          with the shadcn catalog.
+        </p>
+      </header>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <Input
+            name="prompt"
+            placeholder="Describe the UI you want…"
+            disabled={isStreaming}
+            className="h-9 flex-1"
+          />
+          <Button type="submit" disabled={isStreaming} className="h-9 px-4">
+            {isStreaming ? "Generating…" : "Generate"}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {EXAMPLE_PROMPTS.map((example) => (
+            <Button
+              key={example}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isStreaming}
+              onClick={() => void send(example)}
+            >
+              {example}
+            </Button>
+          ))}
+          {spec && !isStreaming && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clear}
+              className="ml-auto text-destructive hover:text-destructive"
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </form>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Generation failed</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="flex-1">
+        <CardContent className="flex min-h-40 flex-col">
+          {!spec && !isStreaming && (
+            <p className="text-sm text-muted-foreground">
+              The generated UI will render here.
+            </p>
+          )}
+          <Renderer spec={spec} registry={registry} loading={isStreaming} />
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <StateProvider initialState={{}}>
+      <VisibilityProvider>
+        <ActionProvider handlers={{}}>
+          <ValidationProvider customFunctions={{}}>
+            <Playground />
+          </ValidationProvider>
+        </ActionProvider>
+      </VisibilityProvider>
+    </StateProvider>
   );
 }
