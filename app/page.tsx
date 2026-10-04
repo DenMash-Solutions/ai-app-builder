@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { HistoryDrawer } from "@/components/history-drawer";
+import { EXAMPLE_PROMPTS } from "@/lib/example-prompts";
 import type { HistoryEntry } from "@/lib/history";
 import {
   addEntry,
@@ -29,12 +30,7 @@ import {
 } from "@/lib/history";
 import { registry } from "@/lib/registry";
 
-const EXAMPLE_PROMPTS = [
-  "Revenue dashboard with 4 KPI metrics",
-  "Sign-in form with email and password",
-  "Pricing comparison of three plans",
-  "Crea una página en español con 2 secciones (Hero y Servicios) para una clínica dental. En el hero se debe mostrar una imagen",
-];
+const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
 
 function Playground() {
   const history = useSyncExternalStore(
@@ -148,7 +144,7 @@ function Playground() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {EXAMPLE_PROMPTS.map((example) => (
+          {EXAMPLE_PROMPT_LIST.map((example) => (
             <Button
               key={example}
               type="button"

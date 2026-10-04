@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated artifacts:
+    "public/mockServiceWorker.js",
+    "e2e/msw/init.generated.js",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 

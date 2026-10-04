@@ -1,6 +1,6 @@
 import type { Spec } from "@json-render/core";
 
-const STORAGE_KEY = "genui-playground-history";
+export const STORAGE_KEY = "genui-playground-history";
 const MAX_ENTRIES = 50;
 const EMPTY_HISTORY: HistoryEntry[] = [];
 
