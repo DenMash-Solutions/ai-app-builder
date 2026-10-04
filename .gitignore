@@ -46,3 +46,6 @@ next-env.d.ts
 
 # opencode local state
 .opencode/tui.json
+
+# git-commit skill scratch file
+commit-plan.md
