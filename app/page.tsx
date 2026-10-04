@@ -1,5 +1,6 @@
 "use client";
 
+import type { Spec } from "@json-render/core";
 import {
   ActionProvider,
   Renderer,
@@ -8,12 +9,24 @@ import {
   VisibilityProvider,
   useUIStream,
 } from "@json-render/react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { FormEvent } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { HistoryDrawer } from "@/components/history-drawer";
+import type { HistoryEntry } from "@/lib/history";
+import {
+  addEntry,
+  clearHistory,
+  createEntry,
+  getHistory,
+  getServerHistory,
+  removeEntry,
+  subscribeHistory,
+} from "@/lib/history";
 import { registry } from "@/lib/registry";
 
 const EXAMPLE_PROMPTS = [
@@ -24,18 +37,71 @@ const EXAMPLE_PROMPTS = [
 ];
 
 function Playground() {
+  const history = useSyncExternalStore(
+    subscribeHistory,
+    getHistory,
+    getServerHistory,
+  );
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [restoredSpec, setRestoredSpec] = useState<Spec | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const pendingPromptRef = useRef<string | null>(null);
+
   const { spec, isStreaming, error, send, clear } = useUIStream({
     api: "/api/generate",
+    onComplete: (completedSpec) => {
+      const prompt = pendingPromptRef.current;
+      pendingPromptRef.current = null;
+      if (!prompt) return;
+      const entry = createEntry(prompt, completedSpec);
+      addEntry(entry);
+      setActiveId(entry.id);
+    },
   });
+
+  const handleSend = (prompt: string) => {
+    pendingPromptRef.current = prompt;
+    setRestoredSpec(null);
+    setActiveId(null);
+    void send(prompt);
+  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const prompt = formData.get("prompt");
     if (typeof prompt === "string" && prompt.trim().length > 0) {
-      void send(prompt.trim());
+      handleSend(prompt.trim());
     }
   };
+
+  const handleSelect = (entry: HistoryEntry) => {
+    setRestoredSpec(entry.spec);
+    setActiveId(entry.id);
+    setHistoryOpen(false);
+  };
+
+  const handleDelete = (id: string) => {
+    removeEntry(id);
+    if (activeId === id) {
+      setActiveId(null);
+      setRestoredSpec(null);
+    }
+  };
+
+  const handleClear = () => {
+    clearHistory();
+    setActiveId(null);
+    setRestoredSpec(null);
+  };
+
+  const handleClearCurrent = () => {
+    clear();
+    setRestoredSpec(null);
+    setActiveId(null);
+  };
+
+  const displayedSpec = restoredSpec ?? spec;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 p-8">
@@ -51,6 +117,22 @@ function Playground() {
           with the shadcn catalog.
         </p>
       </header>
+
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setHistoryOpen(true)}
+        >
+          History
+          {history.length > 0 && (
+            <Badge variant="secondary" className="ml-2">
+              {history.length}
+            </Badge>
+          )}
+        </Button>
+      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div className="flex gap-2">
@@ -73,17 +155,17 @@ function Playground() {
               variant="outline"
               size="sm"
               disabled={isStreaming}
-              onClick={() => void send(example)}
+              onClick={() => handleSend(example)}
             >
               {example}
             </Button>
           ))}
-          {spec && !isStreaming && (
+          {displayedSpec && !isStreaming && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={clear}
+              onClick={handleClearCurrent}
               className="ml-auto text-destructive hover:text-destructive"
             >
               Clear
@@ -101,14 +183,28 @@ function Playground() {
 
       <Card className="flex-1">
         <CardContent className="flex min-h-40 flex-col">
-          {!spec && !isStreaming && (
+          {!displayedSpec && !isStreaming && (
             <p className="text-sm text-muted-foreground">
               The generated UI will render here.
             </p>
           )}
-          <Renderer spec={spec} registry={registry} loading={isStreaming} />
+          <Renderer
+            spec={displayedSpec}
+            registry={registry}
+            loading={isStreaming}
+          />
         </CardContent>
       </Card>
+
+      <HistoryDrawer
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        entries={history}
+        activeId={activeId}
+        onSelect={handleSelect}
+        onDelete={handleDelete}
+        onClear={handleClear}
+      />
     </main>
   );
 }
