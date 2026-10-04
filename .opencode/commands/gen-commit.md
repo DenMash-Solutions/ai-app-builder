@@ -8,6 +8,16 @@ This workflow analyzes all changes, groups them intelligently by scope/feature, 
 
 ## Steps
 
+0. **Format the code first (CRITICAL)** - Never commit unformatted code
+
+   ```bash
+   bun run format && bun run format:check
+   ```
+
+   If `format:check` fails: fix the reported files and re-run until it
+   passes. Block the commit until formatting is clean. Skip only when the
+   project has no formatter configured (no `format` script, no `.prettierrc`).
+
 1. **Analyze all changes** - Examine git status and diff to understand what changed
 
    ```bash
@@ -52,6 +62,9 @@ This workflow analyzes all changes, groups them intelligently by scope/feature, 
    git add <group-files>
    git commit -m "<approved-commit-message>"
    ```
+   - Stage **explicit paths only** — never `git add -A` or `git add .`
+   - After staging, verify with `git diff --cached --name-only` that
+     `commit-plan.md` (gitignored scratch), `.env*`, and secrets are not staged
 
 ## Commit Message Format
 
