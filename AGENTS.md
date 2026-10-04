@@ -7,3 +7,37 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# ai-app-builder
+
+Next.js 16 (App Router) + React 19 + TypeScript app styled with Tailwind CSS 4 — a starter for building AI-powered apps.
+
+## Package manager (bun only)
+
+- Install: `bun install`
+- `bun.lock` is the only lockfile (`package-lock.json` must not exist)
+
+## Commands
+
+| Command | Script |
+| ------- | ------ |
+| `bun run dev` | `next dev` (dev server) |
+| `bun run build` | `next build` |
+| `bun run start` | `next start` |
+| `bun run lint` | `eslint` |
+
+Before finishing any change: `bun run lint && bunx tsc --noEmit`.
+
+## Structure
+
+- `app/` — Next.js App Router: `layout.tsx`, `page.tsx`, `globals.css`, `favicon.ico`
+- `public/` — static assets (SVGs)
+- Config at root: `next.config.ts`, `tsconfig.json`, `eslint.config.mjs` (flat config), `postcss.config.mjs`
+- `CLAUDE.md` contains `@AGENTS.md` (reference alias)
+- No `components/` or `lib/` yet — create them as needed; colocate feature code
+
+## Rules and lessons
+
+- Always-on rules load from `.agents/rules/` (wired via `instructions` in `opencode.json`)
+- Lessons in `.agents/lessons/` are lazy — read the relevant one before implementing (start with `lessons/implementation-checklist.md` and `rules/my-mistakes.md`)
+- Commands: `/learn`, `/review`, `/gen-commit`, `/devtools-error-scan` (in `.opencode/commands/`)
