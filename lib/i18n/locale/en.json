@@ -13,7 +13,8 @@
     "clear": "Clear",
     "history": "History",
     "generationFailed": "Generation failed",
-    "emptyState": "The generated UI will render here."
+    "emptyState": "The generated UI will render here.",
+    "openMenu": "Open menu"
   },
   "editor": {
     "pick": "Pick",

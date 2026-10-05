@@ -70,6 +70,8 @@ test.describe("history", () => {
       page.getByRole(ROLE.button, { name: historyButtonName(1) }),
     ).toBeVisible();
 
+    // Example chips only show in the empty state — clear the canvas first.
+    await page.getByRole(ROLE.button, { name: ACTIONS.clear }).click();
     await page
       .getByRole(ROLE.button, { name: PROMPTS.revenueDashboard })
       .click();

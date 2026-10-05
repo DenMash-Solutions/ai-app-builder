@@ -4,6 +4,7 @@ import {
   MOCK_ERROR_MESSAGE,
   MOCK_ROOT_KEY,
   PROMPTS,
+  QUOTA,
   ROLE,
   UI,
   historyButtonName,
@@ -65,7 +66,7 @@ test.describe("playground", () => {
     expect(history[0].spec.root).toBe(MOCK_ROOT_KEY);
   });
 
-  test("shows an error alert when the API fails and saves nothing", async ({
+  test("shows an error toast when the API fails and saves nothing", async ({
     page,
   }) => {
     await mockGenerate(page, {
@@ -79,6 +80,7 @@ test.describe("playground", () => {
 
     await expect(page.getByText(UI.generationFailed)).toBeVisible();
     await expect(page.getByText(MOCK_ERROR_MESSAGE)).toBeVisible();
+    await expect(page.getByText(QUOTA.title)).not.toBeVisible();
     await expect(
       page.getByRole(ROLE.button, { name: ACTIONS.history }),
     ).toBeVisible();

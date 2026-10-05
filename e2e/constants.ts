@@ -36,6 +36,8 @@ export const ES_UI = {
 export const ACTIONS = {
   history: en.playground.history,
   generate: en.playground.generate,
+  clear: en.playground.clear,
+  openMenu: en.playground.openMenu,
   clearAll: en.historyDrawer.clearAll,
   deleteEntry: en.historyDrawer.deleteEntry,
   close: en.historyDrawer.close,

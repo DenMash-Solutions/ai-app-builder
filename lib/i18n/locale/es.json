@@ -13,7 +13,8 @@
     "clear": "Limpiar",
     "history": "Historial",
     "generationFailed": "Error al generar",
-    "emptyState": "La interfaz generada se mostrará aquí."
+    "emptyState": "La interfaz generada se mostrará aquí.",
+    "openMenu": "Abrir menú"
   },
   "editor": {
     "pick": "Seleccionar",

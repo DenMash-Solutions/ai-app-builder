@@ -17,17 +17,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { EditPanel, PickOverlay } from "@/components/editor";
 import { HistoryDrawer } from "@/components/history-drawer";
-import { LocaleSwitcher } from "@/components/locale-switcher";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { PromptBar, ToolRail, TopBar } from "@/components/playground";
+import { QuotaDialog } from "@/components/quota-dialog";
 import {
   promptRevisionLabel,
   propertyRevisionLabel,
@@ -35,6 +31,8 @@ import {
   scopeInstruction,
 } from "@/lib/editor";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
+import { getModel, setModel } from "@/lib/playground/model-store";
+import { RATE_LIMIT_PATTERN, type ModelId } from "@/lib/playground/models";
 import type { HistoryEntry } from "@/lib/history";
 import {
   addEntry,
@@ -87,6 +85,12 @@ function Playground() {
     left: number;
   } | null>(null);
   const pendingOpRef = useRef<PendingOp | null>(null);
+  const [quotaOpen, setQuotaOpen] = useState(false);
+  const quotaMessageRef = useRef("");
+  const lastRequestRef = useRef<{
+    prompt: string;
+    context: Record<string, unknown>;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Element keys ([data-jr-key]) only render while devtools are marked
@@ -98,8 +102,21 @@ function Playground() {
       ? null
       : (history.find((entry) => entry.id === activeId) ?? null);
 
-  const { spec, isStreaming, error, send, clear } = useUIStream({
+  const { spec, isStreaming, send, clear } = useUIStream({
     api: "/api/generate",
+    onError: (streamError) => {
+      // A failed fresh generation leaves the hook's empty spec mounted, which
+      // hides the empty state — restore it. Failed edits keep their spec.
+      if (!lastRequestRef.current?.context.previousSpec) clear();
+      if (RATE_LIMIT_PATTERN.test(streamError.message)) {
+        quotaMessageRef.current = streamError.message;
+        setQuotaOpen(true);
+        return;
+      }
+      toast.error(t("playground.generationFailed"), {
+        description: streamError.message,
+      });
+    },
     onComplete: (completedSpec) => {
       const op = pendingOpRef.current;
       pendingOpRef.current = null;
@@ -123,6 +140,16 @@ function Playground() {
     },
   });
 
+  // Every request records its payload so a quota-dialog retry can replay it
+  // with the newly selected model (pendingOpRef still holds the operation).
+  const sendNow = (
+    prompt: string,
+    context: Record<string, unknown> = {},
+  ): void => {
+    lastRequestRef.current = { prompt, context };
+    void send(prompt, { ...context, model: getModel() });
+  };
+
   const displayedSpec = restoredSpec ?? spec;
   // Derived selection: stale keys (removed by a patch/undo) simply read as
   // unselected — no effect round trip needed.
@@ -143,7 +170,7 @@ function Playground() {
         label: promptRevisionLabel(prompt),
       };
       setRestoredSpec(null);
-      void send(prompt, { previousSpec: structuredClone(base) });
+      sendNow(prompt, { previousSpec: structuredClone(base) });
       return;
     }
     handleGenerate(prompt);
@@ -157,16 +184,7 @@ function Playground() {
     };
     setRestoredSpec(null);
     setActiveId(null);
-    void send(prompt);
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const prompt = formData.get("prompt");
-    if (typeof prompt === "string" && prompt.trim().length > 0) {
-      handleSend(prompt.trim());
-    }
+    sendNow(prompt);
   };
 
   const handleSelect = (entry: HistoryEntry) => {
@@ -213,9 +231,26 @@ function Playground() {
       label,
     };
     setRestoredSpec(null);
-    void send(scopeInstruction(selectedKey, element.type, instruction), {
+    sendNow(scopeInstruction(selectedKey, element.type, instruction), {
       previousSpec: structuredClone(base),
     });
+  };
+
+  const handleQuotaConfirm = (model: ModelId) => {
+    setModel(model);
+    setQuotaOpen(false);
+    const last = lastRequestRef.current;
+    if (last) sendNow(last.prompt, last.context);
+  };
+
+  // Dismissing without retrying surfaces the original failure as a toast.
+  const handleQuotaOpenChange = (open: boolean) => {
+    if (!open) {
+      toast.error(t("playground.generationFailed"), {
+        description: quotaMessageRef.current,
+      });
+    }
+    setQuotaOpen(open);
   };
 
   const handlePropChange = (prop: string, value: unknown) => {
@@ -264,12 +299,13 @@ function Playground() {
     }
     const containerRect = container.getBoundingClientRect();
     const elementRect = element.getBoundingClientRect();
+    const scrollTop = container.scrollTop;
     const left = Math.min(
-      Math.max(elementRect.left - containerRect.left, 8),
-      Math.max(containerRect.width - PANEL_WIDTH - 8, 8),
+      Math.max(elementRect.left - containerRect.left + container.scrollLeft, 8),
+      Math.max(container.scrollWidth - PANEL_WIDTH - 8, 8),
     );
     setPanelPos({
-      top: elementRect.bottom - containerRect.top + 8,
+      top: elementRect.bottom - containerRect.top + scrollTop + 8,
       left,
     });
   }, [effectiveKey]);
@@ -315,146 +351,99 @@ function Playground() {
   }, [activeEntry, applyRevision, isStreaming]);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 p-8">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {t("playground.title")}
-          </h1>
-          <Badge variant="secondary">json-render</Badge>
-        </div>
-        <p className="text-muted-foreground">{t("playground.subtitle")}</p>
-      </header>
+    <main className="dot-grid relative h-[100dvh] w-full overflow-hidden">
+      <TopBar
+        historyCount={history.length}
+        onOpenHistory={() => setHistoryOpen(true)}
+      />
 
-      <div className="flex items-center justify-end gap-2">
-        <LocaleSwitcher />
-        <ThemeToggle />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setHistoryOpen(true)}
-        >
-          {t("playground.history")}
-          {history.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {history.length}
-            </Badge>
-          )}
-        </Button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <Input
-            name="prompt"
-            placeholder={t("playground.promptPlaceholder")}
-            disabled={isStreaming}
-            className="h-9 flex-1"
-          />
-          <Button type="submit" disabled={isStreaming} className="h-9 px-4">
-            {isStreaming
-              ? t("playground.generating")
-              : displayedSpec
-                ? t("playground.steer")
-                : t("playground.generate")}
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {EXAMPLE_PROMPT_LIST.map((example) => (
-            <Button
-              key={example}
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isStreaming}
-              onClick={() => handleGenerate(example)}
-            >
-              {example}
-            </Button>
-          ))}
-          <div className="ml-auto flex items-center gap-2">
-            {displayedSpec && !isStreaming && (
-              <Button
-                type="button"
-                variant={pickMode ? "default" : "outline"}
-                size="sm"
-                aria-pressed={pickMode}
-                onClick={handleTogglePick}
-              >
-                {t("editor.pick")}
-              </Button>
-            )}
-            {displayedSpec && !isStreaming && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleClearCurrent}
-                className="text-destructive hover:text-destructive"
-              >
-                {t("playground.clear")}
-              </Button>
-            )}
-          </div>
-        </div>
-      </form>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>{t("playground.generationFailed")}</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
+      {displayedSpec && !isStreaming && (
+        <ToolRail
+          pickMode={pickMode}
+          onTogglePick={handleTogglePick}
+          onClear={handleClearCurrent}
+        />
       )}
 
-      <Card className="flex-1">
-        <CardContent className="flex min-h-40 flex-col">
-          <div
-            ref={containerRef}
-            className={`relative flex min-h-40 flex-1 flex-col ${
-              pickMode ? "jr-pick-enabled" : ""
-            }`}
-          >
-            {!displayedSpec && !isStreaming && (
-              <p className="text-sm text-muted-foreground">
-                {t("playground.emptyState")}
-              </p>
+      <div
+        ref={containerRef}
+        className={`absolute inset-0 overflow-y-auto ${
+          pickMode ? "jr-pick-enabled" : ""
+        }`}
+      >
+        <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
+          {!displayedSpec && !isStreaming && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+              <div className="w-full max-w-xl space-y-3">
+                <p className="text-balance text-muted-foreground">
+                  {t("playground.subtitle")}
+                </p>
+                <p className="text-sm text-muted-foreground/80">
+                  {t("playground.emptyState")}
+                </p>
+              </div>
+              <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
+                {EXAMPLE_PROMPT_LIST.map((example) => (
+                  <Button
+                    key={example}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="max-w-full h-auto whitespace-normal break-words py-1.5"
+                    onClick={() => handleGenerate(example)}
+                  >
+                    {example}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          <Renderer
+            spec={displayedSpec}
+            registry={registry}
+            loading={isStreaming}
+          />
+          {displayedSpec &&
+            !isStreaming &&
+            pickMode &&
+            effectiveKey &&
+            selectedElement &&
+            panelPos && (
+              <EditPanel
+                key={effectiveKey}
+                elementKey={effectiveKey}
+                element={selectedElement}
+                position={panelPos}
+                canUndo={activeEntry !== null && canUndo(activeEntry)}
+                canRedo={activeEntry !== null && canRedo(activeEntry)}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                onClose={() => setSelectedKey(null)}
+                onPropChange={handlePropChange}
+                onAction={handleAction}
+              />
             )}
-            <Renderer
-              spec={displayedSpec}
-              registry={registry}
-              loading={isStreaming}
-            />
-            {displayedSpec &&
-              !isStreaming &&
-              pickMode &&
-              effectiveKey &&
-              selectedElement &&
-              panelPos && (
-                <EditPanel
-                  key={effectiveKey}
-                  elementKey={effectiveKey}
-                  element={selectedElement}
-                  position={panelPos}
-                  canUndo={activeEntry !== null && canUndo(activeEntry)}
-                  canRedo={activeEntry !== null && canRedo(activeEntry)}
-                  onUndo={handleUndo}
-                  onRedo={handleRedo}
-                  onClose={() => setSelectedKey(null)}
-                  onPropChange={handlePropChange}
-                  onAction={handleAction}
-                />
-              )}
-            <PickOverlay
-              enabled={pickMode && !isStreaming && displayedSpec !== null}
-              containerRef={containerRef}
-              selectedKey={effectiveKey}
-              onSelect={setSelectedKey}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          <PickOverlay
+            enabled={pickMode && !isStreaming && displayedSpec !== null}
+            containerRef={containerRef}
+            selectedKey={effectiveKey}
+            onSelect={setSelectedKey}
+          />
+        </div>
+      </div>
+
+      {quotaOpen && (
+        <QuotaDialog
+          onOpenChange={handleQuotaOpenChange}
+          onConfirm={handleQuotaConfirm}
+        />
+      )}
+
+      <PromptBar
+        isStreaming={isStreaming}
+        hasSpec={displayedSpec !== null}
+        onSend={handleSend}
+      />
 
       <HistoryDrawer
         open={historyOpen}
