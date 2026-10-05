@@ -104,6 +104,18 @@
 **Lesson Reference**: `implementation-protocol.md` - "WAIT for user approval before proceeding to implementation"
 **Prevention**: Never proceed with implementation until user explicitly approves the plan
 
+### 18. Raw Inline `<script>` in React Trees (NEW)
+
+**Problem**: Rendering a raw executable `<script>` (e.g., theme pre-paint init) from a React component → "Encountered a script tag while rendering React component" warning on client re-creates (Fast Refresh recovery, Strict Mode remounts)
+**Lesson Reference**: `react-inline-scripts.md` + Next guide `node_modules/next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md`
+**Prevention**: Client-component wrapper with `type={typeof window === "undefined" ? "text/javascript" : "text/plain"}` + `suppressHydrationWarning`, placed in `<head>`; re-apply script-set `<html>` attributes in `useLayoutEffect`. Head placement alone does NOT fix it
+
+### 19. Controlled Input Drafts Ignored + Wrong Debug Triage Order (NEW)
+
+**Problem**: New `style` field kind rendered `serialize(props)` directly instead of `draft ?? serialize(props)` → keystrokes vanished on re-render ("typing does nothing"); then debugged React event internals / CDP occlusion for a long spiral while the bug was one line of own code
+**Lesson Reference**: `controlled-input-drafts.md`
+**Prevention**: Controlled inputs with drafts always resolve `draft ?? serialize(props)` for every field kind; new field kind → update `currentText` AND `commitText` together + test; triage order: app pipeline → React fiber state → environment (last)
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -228,6 +240,10 @@ When I see these → STOP and check lessons:
 - **NEW**: Flat component structure → No sub-component organization
 - **NEW**: Business logic in components → Mixed responsibilities
 - **NEW**: About to implement code → Must show preview and ask clarifying questions
+- **NEW**: Rendering `<script>` from a component → Must use client-component type trick (`react-inline-scripts.md`)
+- **NEW**: HMR `X is not defined` during edits → Edit import + usage in one atomic edit
+- **NEW**: Input "ignores what I type" → draft must win: `draft ?? serialize(props)` (`controlled-input-drafts.md`)
+- **NEW**: Debugging a single input for >10 min → verify app renders keystroke first, environment last
 
 ## ⚡ Quick Recovery Commands
 

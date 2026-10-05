@@ -63,6 +63,18 @@ This file serves as the central entry point for all lessons learned and problem-
 - Responsive design patterns
 - Component conventions
 
+#### **[react-inline-scripts.md](../lessons/react-inline-scripts.md)** - REACT INLINE SCRIPTS & HYDRATION
+
+- Pre-paint scripts without React warnings (client `type` trick)
+- Next.js `preventing-flash-before-hydration.md` guide
+- Dev Strict Mode remount guards (`useLayoutEffect`)
+
+#### **[controlled-input-drafts.md](../lessons/controlled-input-drafts.md)** - CONTROLLED INPUT DRAFTS & DEBUG TRIAGE
+
+- Draft precedence: `draft ?? serialize(props)` for every field kind
+- New field kind → update display + commit paths together, with tests
+- Debug triage order: app pipeline → React fiber state → environment (last)
+
 ## 🚨 Critical Insights (Feature Organization)
 
 ### **Architecture Classification**
@@ -113,6 +125,7 @@ Before writing ANY code, follow this exact sequence:
 - PascalCase file names → **[development-environment.md](../lessons/development-environment.md)**
 - Technical layer organization → **[architecture-patterns.md](../lessons/architecture-patterns.md)**
 - React hooks in utilities → **[implementation-checklist.md](../lessons/implementation-checklist.md)**
+- "Encountered a script tag" warning → **[react-inline-scripts.md](../lessons/react-inline-scripts.md)**
 
 ### **Green Flags** → Continue with confidence
 
