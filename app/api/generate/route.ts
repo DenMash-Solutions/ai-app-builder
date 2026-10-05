@@ -13,6 +13,12 @@ Additional rules:
 - Prefer fewer components fully written over many components left half-finished.
 - End the stream only after the last section is complete.`;
 
+const STYLING_RULES = `
+Styling rules:
+- Prefer the "className" prop with Tailwind utility classes for visual styling (colors, spacing, layout, typography).
+- Put interaction states in className: hover:, focus-visible:, active:, dark: variants (e.g. "hover:bg-blue-300").
+- Use the "style" prop only for exact values Tailwind classes cannot express, and never set the same CSS property in both.`;
+
 interface GenerateBody {
   prompt?: unknown;
   currentSpec?: unknown;
@@ -75,6 +81,7 @@ export async function POST(req: Request) {
   // to fresh generations (a patch never needs to "finish every section").
   const systemPrompt =
     playgroundCatalog.prompt({ editModes: ["patch"] }) +
+    STYLING_RULES +
     (isEdit ? "" : COMPLETENESS_RULES);
 
   const userPrompt = buildUserPrompt({

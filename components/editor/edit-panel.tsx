@@ -63,7 +63,7 @@ export function EditPanel({
     <div
       data-editor-panel
       aria-label={t("editor.panelTitle")}
-      className="absolute z-20 w-80 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 text-zinc-100 shadow-2xl"
+      className="absolute z-40 w-80 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 text-zinc-100 shadow-2xl"
       style={{ top: position.top, left: position.left }}
     >
       <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">

@@ -107,6 +107,10 @@ describe("getEditableFields", () => {
           type: "optional",
           innerType: zodDef({ type: "string" }),
         }),
+        style: zodDef({
+          type: "nullable",
+          innerType: zodDef({ type: "record" }),
+        }),
         tags: zodDef({ type: "array" }),
       }),
     );
@@ -117,6 +121,7 @@ describe("getEditableFields", () => {
       { name: "enabled", kind: PROP_FIELD_KINDS.boolean },
       { name: "level", kind: PROP_FIELD_KINDS.enum, options: ["h1", "h2"] },
       { name: "title", kind: PROP_FIELD_KINDS.string },
+      { name: "style", kind: PROP_FIELD_KINDS.record },
     ]);
   });
 

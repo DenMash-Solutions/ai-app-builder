@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { PROP_FIELD_KINDS } from "@/lib/editor";
+import {
+  PROP_FIELD_KINDS,
+  parseStyleText,
+  serializeStyleText,
+} from "@/lib/editor";
 import type { PropField } from "@/lib/editor";
 
 interface PropertyFormProps {
@@ -26,8 +30,14 @@ export function PropertyForm({ fields, values, onChange }: PropertyFormProps) {
     );
   }
 
-  const currentText = (field: PropField): string =>
-    drafts[field.name] ?? String(values[field.name] ?? "");
+  const currentText = (field: PropField): string => {
+    const draft = drafts[field.name];
+    if (draft !== undefined) return draft;
+    if (field.kind === PROP_FIELD_KINDS.record) {
+      return serializeStyleText(values[field.name]);
+    }
+    return String(values[field.name] ?? "");
+  };
 
   const commitText = (field: PropField) => {
     const draft = drafts[field.name];
@@ -41,6 +51,22 @@ export function PropertyForm({ fields, values, onChange }: PropertyFormProps) {
       const parsed = Number(raw);
       if (raw === "" || Number.isNaN(parsed)) return;
       if (parsed === values[field.name]) return;
+      onChange(field.name, parsed);
+      return;
+    }
+    if (field.kind === PROP_FIELD_KINDS.record) {
+      const parsed = parseStyleText(draft);
+      if (parsed === null) {
+        if (raw === "" && (values[field.name] ?? null) !== null) {
+          onChange(field.name, null);
+        }
+        return;
+      }
+      if (
+        JSON.stringify(parsed) === JSON.stringify(values[field.name] ?? null)
+      ) {
+        return;
+      }
       onChange(field.name, parsed);
       return;
     }
@@ -89,7 +115,8 @@ export function PropertyForm({ fields, values, onChange }: PropertyFormProps) {
             </select>
           )}
           {(field.kind === PROP_FIELD_KINDS.string ||
-            field.kind === PROP_FIELD_KINDS.number) && (
+            field.kind === PROP_FIELD_KINDS.number ||
+            field.kind === PROP_FIELD_KINDS.record) && (
             <input
               type={field.kind === PROP_FIELD_KINDS.number ? "number" : "text"}
               value={currentText(field)}

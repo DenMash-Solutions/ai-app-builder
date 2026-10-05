@@ -17,6 +17,7 @@ export const PROP_FIELD_KINDS = {
   number: "number",
   boolean: "boolean",
   enum: "enum",
+  record: "record",
 } as const;
 
 export type PropFieldKind =
@@ -64,7 +65,8 @@ function resolveFieldKind(field: unknown): {
     if (
       type === PROP_FIELD_KINDS.string ||
       type === PROP_FIELD_KINDS.number ||
-      type === PROP_FIELD_KINDS.boolean
+      type === PROP_FIELD_KINDS.boolean ||
+      type === PROP_FIELD_KINDS.record
     ) {
       return { kind: type };
     }
@@ -82,8 +84,9 @@ function resolveFieldKind(field: unknown): {
 
 /**
  * Introspects a component's Zod props schema into simple editable field
- * descriptors. Arrays, objects, and expression props are intentionally
- * omitted — they are not safely editable as scalars.
+ * descriptors. Arrays and expression props are intentionally omitted — they
+ * are not safely editable as scalars. Records (e.g. style) are editable as
+ * CSS-declaration text.
  */
 export function getEditableFields(propsSchema: unknown): PropField[] {
   const shape = getZodDef(propsSchema).shape;
