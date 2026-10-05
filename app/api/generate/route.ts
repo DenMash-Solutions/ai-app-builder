@@ -2,10 +2,9 @@ import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
 import { playgroundCatalog } from "@/lib/playground/catalog";
+import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
 
 export const maxDuration = 60;
-
-const DEFAULT_MODEL = "gemini-3.8-flash";
 
 const COMPLETENESS_RULES = `
 Additional rules:
@@ -13,6 +12,39 @@ Additional rules:
 - Never stop at a section header or an opening container — if you begin a section, finish it.
 - Prefer fewer components fully written over many components left half-finished.
 - End the stream only after the last section is complete.`;
+
+interface GenerateBody {
+  prompt?: unknown;
+  currentSpec?: unknown;
+  context?: { model?: unknown } | null;
+}
+
+function isRateLimitError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null && "statusCode" in error) {
+    if ((error as { statusCode?: number }).statusCode === 429) return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return RATE_LIMIT_PATTERN.test(message);
+}
+
+/**
+ * Quota failures must arrive as real HTTP responses (the client classifies
+ * them from the status/message) — they cannot surface mid-stream.
+ */
+function errorResponse(error: unknown, model: string): Response {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[generate] model=${model} failed: ${message}`);
+  if (isRateLimitError(error)) {
+    return Response.json(
+      {
+        error: `Rate limit reached for ${model}. Switch model and retry.`,
+        code: "rate_limit",
+      },
+      { status: 429 },
+    );
+  }
+  return Response.json({ error: message, code: "internal" }, { status: 500 });
+}
 
 export async function POST(req: Request) {
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
@@ -25,7 +57,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const { prompt, currentSpec } = await req.json();
+  const body = (await req.json()) as GenerateBody;
+  const { prompt, currentSpec, context } = body;
 
   if (typeof prompt !== "string" || prompt.trim().length === 0) {
     return Response.json(
@@ -34,6 +67,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const model = resolveModel(context?.model ?? process.env.GEMINI_MODEL);
   const spec = isNonEmptySpec(currentSpec) ? currentSpec : null;
   const isEdit = spec !== null;
 
@@ -50,7 +84,7 @@ export async function POST(req: Request) {
   });
 
   const result = streamText({
-    model: google(process.env.GEMINI_MODEL ?? DEFAULT_MODEL),
+    model: google(model),
     system: systemPrompt,
     prompt: userPrompt,
     temperature: 0.7,
@@ -62,5 +96,36 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toTextStreamResponse();
+  // Wait for the first chunk before committing to a 200 stream so upstream
+  // quota/rate-limit errors surface as classifiable HTTP responses.
+  const iterator = result.textStream[Symbol.asyncIterator]();
+  let first: IteratorResult<string>;
+  try {
+    first = await iterator.next();
+  } catch (error) {
+    return errorResponse(error, model);
+  }
+
+  const stream = new ReadableStream<string>({
+    async start(controller) {
+      try {
+        if (!first.done) controller.enqueue(first.value);
+        for (;;) {
+          const next = await iterator.next();
+          if (next.done) break;
+          controller.enqueue(next.value);
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel() {
+      void iterator.return?.();
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }

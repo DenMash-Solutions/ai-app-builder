@@ -1,5 +1,6 @@
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { LOCALE_LABELS } from "@/lib/i18n/routing";
+import { DEFAULT_MODEL_ID, findModel } from "@/lib/playground/models";
 import en from "@/lib/i18n/locale/en.json";
 import es from "@/lib/i18n/locale/es.json";
 
@@ -88,6 +89,20 @@ export const PROMPTS = {
 export const THEME = {
   toggleToDark: en.theme.toggleToDark,
   toggleToLight: en.theme.toggleToLight,
+} as const;
+
+export const MODELS = {
+  defaultShortLabel: findModel(DEFAULT_MODEL_ID).shortLabel,
+  lite: "Gemini 3.5 Flash Lite",
+  liteShortLabel: findModel("gemini-3.5-flash-lite").shortLabel,
+} as const;
+
+export const QUOTA = {
+  title: en.quota.title,
+  description: en.quota.description,
+  switchAndRetry: en.quota.switchAndRetry,
+  dismiss: en.quota.dismiss,
+  modelLabel: en.model.label,
 } as const;
 
 export const historyButtonName = (count?: number): string =>

@@ -65,5 +65,15 @@
   "theme": {
     "toggleToDark": "Switch to dark mode",
     "toggleToLight": "Switch to light mode"
+  },
+  "model": {
+    "label": "Model",
+    "requestsPerDay": "{count}/day"
+  },
+  "quota": {
+    "title": "Rate limit reached",
+    "description": "The current model hit its request limit. Switch to another model and your last request will be retried automatically.",
+    "switchAndRetry": "Switch & retry",
+    "dismiss": "Not now"
   }
 }

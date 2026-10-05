@@ -65,5 +65,15 @@
   "theme": {
     "toggleToDark": "Cambiar a modo oscuro",
     "toggleToLight": "Cambiar a modo claro"
+  },
+  "model": {
+    "label": "Modelo",
+    "requestsPerDay": "{count}/día"
+  },
+  "quota": {
+    "title": "Se alcanzó el límite de solicitudes",
+    "description": "El modelo actual alcanzó su límite de solicitudes. Cambia a otro modelo y tu última petición se reintentará automáticamente.",
+    "switchAndRetry": "Cambiar y reintentar",
+    "dismiss": "Ahora no"
   }
 }
