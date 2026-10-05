@@ -67,3 +67,16 @@ export function setTheme(next: Theme): void {
 export function toggleTheme(): void {
   setTheme(current === THEMES.dark ? THEMES.light : THEMES.dark);
 }
+
+/**
+ * Re-sync the `dark` class on <html> from storage. The pre-paint script sets
+ * it during parsing, but React's dev Strict Mode remount resets attributes it
+ * manages from JSX (including className) — call this before paint to restore.
+ */
+export function applyStoredTheme(): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle(
+    THEMES.dark,
+    readStoredTheme() === THEMES.dark,
+  );
+}
