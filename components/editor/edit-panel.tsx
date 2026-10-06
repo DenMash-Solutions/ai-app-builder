@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { Spec, UIElement } from "@json-render/core";
 import { ChevronRight, Redo2, Undo2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -11,13 +10,13 @@ import { ActionTiles } from "./action-tiles";
 import { PropertyForm } from "./property-form";
 import { StructureTab } from "./structure-tab";
 
-const PANEL_TABS = {
+export const PANEL_TABS = {
   properties: "properties",
   structure: "structure",
   actions: "actions",
 } as const;
 
-type PanelTab = (typeof PANEL_TABS)[keyof typeof PANEL_TABS];
+export type PanelTab = (typeof PANEL_TABS)[keyof typeof PANEL_TABS];
 
 const PANEL_TAB_ORDER: readonly PanelTab[] = [
   PANEL_TABS.properties,
@@ -52,6 +51,9 @@ interface EditPanelProps {
   /** Key path from spec.root to elementKey (inclusive) for the breadcrumb. */
   ancestors: string[];
   position: { top: number; left: number };
+  /** Active tab — lifted to the parent so remounts (key changes) keep it. */
+  tab: PanelTab;
+  onTabChange: (tab: PanelTab) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -74,6 +76,8 @@ export function EditPanel({
   element,
   ancestors,
   position,
+  tab,
+  onTabChange,
   canUndo,
   canRedo,
   onUndo,
@@ -90,7 +94,6 @@ export function EditPanel({
   onDuplicate,
 }: EditPanelProps) {
   const t = useTranslations();
-  const [tab, setTab] = useState<PanelTab>(PANEL_TABS.properties);
   const fields = getEditableFields(componentPropsSchema(element.type));
   const crumbs = ancestors.slice(0, -1);
 
@@ -165,7 +168,7 @@ export function EditPanel({
             type="button"
             role="tab"
             aria-selected={tab === tabKey}
-            onClick={() => setTab(tabKey)}
+            onClick={() => onTabChange(tabKey)}
             className={`${TAB_BASE_CLASS} ${
               tab === tabKey
                 ? "border-amber-400 text-amber-300"

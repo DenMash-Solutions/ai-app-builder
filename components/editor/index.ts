@@ -1,6 +1,6 @@
 export { ActionTiles } from "./action-tiles";
 export { ComponentPicker } from "./component-picker";
-export { EditPanel } from "./edit-panel";
+export { EditPanel, PANEL_TABS, type PanelTab } from "./edit-panel";
 export { HoverBadge } from "./hover-badge";
 export { PickOverlay } from "./pick-overlay";
 export { PropertyForm } from "./property-form";

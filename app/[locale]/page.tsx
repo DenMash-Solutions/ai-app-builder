@@ -20,7 +20,13 @@ import {
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { EditPanel, HoverBadge, PickOverlay } from "@/components/editor";
+import {
+  EditPanel,
+  HoverBadge,
+  PickOverlay,
+  PANEL_TABS,
+  type PanelTab,
+} from "@/components/editor";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { PromptBar, ToolRail, TopBar } from "@/components/playground";
 import { QuotaDialog } from "@/components/quota-dialog";
@@ -93,6 +99,7 @@ function Playground() {
   const [pickMode, setPickMode] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [panelTab, setPanelTab] = useState<PanelTab>(PANEL_TABS.properties);
   const [panelPos, setPanelPos] = useState<{
     top: number;
     left: number;
@@ -550,6 +557,8 @@ function Playground() {
                 element={selectedElement}
                 ancestors={ancestors}
                 position={panelPos}
+                tab={panelTab}
+                onTabChange={setPanelTab}
                 canUndo={activeEntry !== null && canUndo(activeEntry)}
                 canRedo={activeEntry !== null && canRedo(activeEntry)}
                 onUndo={handleUndo}
