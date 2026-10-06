@@ -75,6 +75,18 @@ This file serves as the central entry point for all lessons learned and problem-
 - New field kind → update display + commit paths together, with tests
 - Debug triage order: app pipeline → React fiber state → environment (last)
 
+#### **[jsx-whitespace-names.md](../lessons/jsx-whitespace-names.md)** - JSX WHITESPACE & SELECTOR NAMES
+
+- JSX strips whitespace between adjacent spans → `textContent`/accname run together
+- Always add `{" "}` between spans that e2e must match
+- A11y-tree names ≠ Playwright names — verify with real matchers
+
+#### **[mcp-verification.md](../lessons/mcp-verification.md)** - BROWSER VERIFICATION VIA MCP
+
+- Full-page screenshots can be stale compositor frames — `evaluate_script` is ground truth
+- Fixed dark islands: scope `.dark` vars per element (`ACTION_BUTTON_CLASS` pattern)
+- Element screenshots (uid) over page screenshots; verify freshness before debugging
+
 ## 🚨 Critical Insights (Feature Organization)
 
 ### **Architecture Classification**
@@ -126,6 +138,9 @@ Before writing ANY code, follow this exact sequence:
 - Technical layer organization → **[architecture-patterns.md](../lessons/architecture-patterns.md)**
 - React hooks in utilities → **[implementation-checklist.md](../lessons/implementation-checklist.md)**
 - "Encountered a script tag" warning → **[react-inline-scripts.md](../lessons/react-inline-scripts.md)**
+- Playwright finds 0 but a11y tree shows the name → **[jsx-whitespace-names.md](../lessons/jsx-whitespace-names.md)**
+- MCP screenshot contradicts a change you just made → **[mcp-verification.md](../lessons/mcp-verification.md)**
+- Fixed-dark component invisible in light theme → **[mcp-verification.md](../lessons/mcp-verification.md)**
 
 ### **Green Flags** → Continue with confidence
 

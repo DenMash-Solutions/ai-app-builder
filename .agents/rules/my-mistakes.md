@@ -244,6 +244,9 @@ When I see these → STOP and check lessons:
 - **NEW**: HMR `X is not defined` during edits → Edit import + usage in one atomic edit
 - **NEW**: Input "ignores what I type" → draft must win: `draft ?? serialize(props)` (`controlled-input-drafts.md`)
 - **NEW**: Debugging a single input for >10 min → verify app renders keystroke first, environment last
+- **NEW**: Playwright finds 0 but a11y tree shows the name → missing `{" "}` between JSX spans (`jsx-whitespace-names.md`)
+- **NEW**: MCP screenshot contradicts a change you just made → stale frame; verify with `evaluate_script` (`mcp-verification.md`)
+- **NEW**: Fixed-dark component invisible in light theme → scope `.dark` class on the island (`mcp-verification.md`)
 
 ## ⚡ Quick Recovery Commands
 
