@@ -136,6 +136,13 @@ export const QUOTA = {
   modelLabel: en.model.label,
 } as const;
 
+export const SERVICE = {
+  title: en.service.title,
+  description: en.service.description,
+  switchAndRetry: en.service.switchAndRetry,
+  dismiss: en.service.dismiss,
+} as const;
+
 export const historyButtonName = (count?: number): string =>
   count === undefined ? ACTIONS.history : `${ACTIONS.history} ${count}`;
 

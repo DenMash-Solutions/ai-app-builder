@@ -59,11 +59,19 @@ export const AVAILABLE_MODELS = [
 
 export type ModelId = (typeof AVAILABLE_MODELS)[number]["id"];
 
-export const DEFAULT_MODEL_ID: ModelId = "gemini-3.8-flash";
+export const DEFAULT_MODEL_ID: ModelId = "gemini-3.1-flash-lite";
 
 /** Matches quota/rate-limit failures from the Gemini API, by status or text. */
 export const RATE_LIMIT_PATTERN =
   /quota|rate.?limit|resource_exhausted|\b429\b/i;
+
+/**
+ * Matches unavailable-service failures by message: empty completions
+ * ("Service unavailable: … no response"), upstream 5xx, gateway 503, and
+ * browser fetch failures. Checked after RATE_LIMIT_PATTERN, which wins ties.
+ */
+export const SERVICE_UNAVAILABLE_PATTERN =
+  /service unavailable|no response|failed to fetch|networkerror|load failed|\b503\b/i;
 
 export function isAvailableModel(value: unknown): value is ModelId {
   return AVAILABLE_MODELS.some((model) => model.id === value);

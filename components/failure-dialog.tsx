@@ -20,17 +20,27 @@ import {
   subscribeModel,
 } from "@/lib/playground/model-store";
 
-interface QuotaDialogProps {
+/** Which failure opened the dialog — selects the copy, interaction is shared. */
+export type FailureKind = "quota" | "service";
+
+interface FailureDialogProps {
+  kind: FailureKind;
   onOpenChange: (open: boolean) => void;
   /** Applies the chosen model and re-sends the failed request. */
   onConfirm: (model: ModelId) => void;
 }
 
 /**
- * Rendered only while a quota failure is active, so every open starts with a
- * fresh selection seeded from the model that just failed.
+ * Rendered only while a quota or unavailable-service failure is active, so
+ * every open starts with a fresh selection seeded from the model that just
+ * failed. Both flavors offer switch-model-and-retry: quota relief and
+ * unavailable models are each dodged by picking a different model.
  */
-export function QuotaDialog({ onOpenChange, onConfirm }: QuotaDialogProps) {
+export function FailureDialog({
+  kind,
+  onOpenChange,
+  onConfirm,
+}: FailureDialogProps) {
   const t = useTranslations();
   const current = useSyncExternalStore(
     subscribeModel,
@@ -43,18 +53,25 @@ export function QuotaDialog({ onOpenChange, onConfirm }: QuotaDialogProps) {
   // still the failing model for the dialog's whole lifetime.
   const failingModel = current;
 
+  const title = kind === "quota" ? t("quota.title") : t("service.title");
+  const description =
+    kind === "quota" ? t("quota.description") : t("service.description");
+  const switchAndRetry =
+    kind === "quota" ? t("quota.switchAndRetry") : t("service.switchAndRetry");
+  const dismiss = kind === "quota" ? t("quota.dismiss") : t("service.dismiss");
+
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("quota.title")}</DialogTitle>
-          <DialogDescription>{t("quota.description")}</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <ModelOptions selected={selected} onSelect={setSelected} />
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="ghost">
-              {t("quota.dismiss")}
+              {dismiss}
             </Button>
           </DialogClose>
           <Button
@@ -62,7 +79,7 @@ export function QuotaDialog({ onOpenChange, onConfirm }: QuotaDialogProps) {
             disabled={selected === failingModel}
             onClick={() => onConfirm(selected)}
           >
-            {t("quota.switchAndRetry")}
+            {switchAndRetry}
           </Button>
         </DialogFooter>
       </DialogContent>

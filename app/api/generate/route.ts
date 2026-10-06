@@ -34,8 +34,9 @@ function isRateLimitError(error: unknown): boolean {
 }
 
 /**
- * Quota failures must arrive as real HTTP responses (the client classifies
- * them from the status/message) — they cannot surface mid-stream.
+ * Quota and unavailable-service failures must arrive as real HTTP responses
+ * (the client classifies them from the status/message) — they cannot surface
+ * mid-stream.
  */
 function errorResponse(error: unknown, model: string): Response {
   const message = error instanceof Error ? error.message : String(error);
@@ -47,6 +48,19 @@ function errorResponse(error: unknown, model: string): Response {
         code: "rate_limit",
       },
       { status: 429 },
+    );
+  }
+  const statusCode =
+    typeof error === "object" && error !== null && "statusCode" in error
+      ? (error as { statusCode?: number }).statusCode
+      : undefined;
+  if (typeof statusCode === "number" && statusCode >= 500 && statusCode < 600) {
+    return Response.json(
+      {
+        error: `Service unavailable: ${message}`,
+        code: "service_unavailable",
+      },
+      { status: 503 },
     );
   }
   return Response.json({ error: message, code: "internal" }, { status: 500 });
@@ -111,6 +125,20 @@ export async function POST(req: Request) {
     first = await iterator.next();
   } catch (error) {
     return errorResponse(error, model);
+  }
+
+  // The upstream finished before producing any text: the model returned no
+  // response (observed with unavailable model ids — a 200 here would reach
+  // the client as a silent "success" with an empty spec).
+  if (first.done) {
+    console.error(`[generate] model=${model} failed: empty completion`);
+    return Response.json(
+      {
+        error: `Service unavailable: ${model} returned no response — switch model and retry.`,
+        code: "service_unavailable",
+      },
+      { status: 503 },
+    );
   }
 
   const stream = new ReadableStream<string>({

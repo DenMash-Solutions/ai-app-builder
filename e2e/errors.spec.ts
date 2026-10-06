@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { MODELS, PROMPTS, QUOTA, ROLE, UI } from "./constants";
+import { MODELS, PROMPTS, QUOTA, ROLE, SERVICE, UI } from "./constants";
 import {
   generateCalls,
   mockGenerate,
@@ -10,6 +10,12 @@ import {
 const RATE_LIMIT_BODY = {
   error: "Rate limit reached for gemini-3.8-flash",
   code: "rate_limit",
+};
+
+const SERVICE_BODY = {
+  error:
+    "Service unavailable: gemini-3.1-flash-lite returned no response — switch model and retry.",
+  code: "service_unavailable",
 };
 
 test.describe("error handling", () => {
@@ -89,5 +95,69 @@ test.describe("error handling", () => {
     await expect(
       page.getByRole(ROLE.button, { name: MODELS.liteShortLabel }),
     ).toBeVisible();
+  });
+
+  test("service failure opens the model dialog and retries with the selected model", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { status: 503, body: SERVICE_BODY });
+    await page.goto("/");
+    await waitForMsw(page);
+
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+
+    await expect(page.getByText(SERVICE.title)).toBeVisible();
+    await expect(page.getByText(SERVICE.description)).toBeVisible();
+    await expect(
+      page.getByRole(ROLE.button, { name: SERVICE.switchAndRetry }),
+    ).toBeDisabled();
+
+    await page
+      .getByRole("menuitemradio", { name: new RegExp(MODELS.lite) })
+      .click();
+    await page.evaluate(() => {
+      (window as unknown as { __GENERATE_MOCK__?: object }).__GENERATE_MOCK__ =
+        {};
+    });
+    await page.getByRole(ROLE.button, { name: SERVICE.switchAndRetry }).click();
+
+    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    await expect(page.getByText(SERVICE.title)).not.toBeVisible();
+    expect(await generateCalls(page)).toBeGreaterThanOrEqual(2);
+
+    const history = await readHistoryStorage(page);
+    expect(history).toHaveLength(1);
+    expect(history[0].prompt).toBe(PROMPTS.signIn);
+  });
+
+  test("dismissing the service dialog reports the failure as a toast", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { status: 503, body: SERVICE_BODY });
+    await page.goto("/");
+    await waitForMsw(page);
+
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page.getByText(SERVICE.title)).toBeVisible();
+
+    await page.getByRole(ROLE.button, { name: SERVICE.dismiss }).click();
+
+    await expect(page.getByText(UI.generationFailed)).toBeVisible();
+    await expect(page.getByText(SERVICE_BODY.error)).toBeVisible();
+    await expect(page.getByText(SERVICE.title)).not.toBeVisible();
+    expect(await readHistoryStorage(page)).toHaveLength(0);
+  });
+
+  test("an empty completion opens the service dialog and creates no history entry", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { lines: [] });
+    await page.goto("/");
+    await waitForMsw(page);
+
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+
+    await expect(page.getByText(SERVICE.title)).toBeVisible();
+    expect(await readHistoryStorage(page)).toHaveLength(0);
   });
 });

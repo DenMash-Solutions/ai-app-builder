@@ -108,5 +108,12 @@
     "description": "The current model hit its request limit. Switch to another model and your last request will be retried automatically.",
     "switchAndRetry": "Switch & retry",
     "dismiss": "Not now"
+  },
+  "service": {
+    "title": "Model service unavailable",
+    "description": "The model did not respond, so it may be temporarily unavailable. Switch to another model and your last request will be retried automatically.",
+    "switchAndRetry": "Switch & retry",
+    "dismiss": "Not now",
+    "noSpec": "The model did not return a usable spec."
   }
 }

@@ -1,7 +1,11 @@
 "use client";
 
 import type { Spec } from "@json-render/core";
-import { markDevtoolsActive, setByPath } from "@json-render/core";
+import {
+  isNonEmptySpec,
+  markDevtoolsActive,
+  setByPath,
+} from "@json-render/core";
 import {
   ActionProvider,
   Renderer,
@@ -30,7 +34,7 @@ import {
 } from "@/components/editor";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { PromptBar, ToolRail, TopBar } from "@/components/playground";
-import { QuotaDialog } from "@/components/quota-dialog";
+import { FailureDialog } from "@/components/failure-dialog";
 import {
   STRUCTURE_OPS,
   chainForKey,
@@ -53,7 +57,11 @@ import type { InstanceChain, MoveDirection } from "@/lib/editor";
 import { examplePropsFor } from "@/lib/playground/catalog";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
-import { RATE_LIMIT_PATTERN, type ModelId } from "@/lib/playground/models";
+import {
+  RATE_LIMIT_PATTERN,
+  SERVICE_UNAVAILABLE_PATTERN,
+  type ModelId,
+} from "@/lib/playground/models";
 import type { HistoryEntry } from "@/lib/history";
 import {
   addEntry,
@@ -112,8 +120,10 @@ function Playground() {
     left: number;
   } | null>(null);
   const pendingOpRef = useRef<PendingOp | null>(null);
-  const [quotaOpen, setQuotaOpen] = useState(false);
-  const quotaMessageRef = useRef("");
+  const [failure, setFailure] = useState<{
+    kind: "quota" | "service";
+    message: string;
+  } | null>(null);
   const lastRequestRef = useRef<{
     prompt: string;
     context: Record<string, unknown>;
@@ -135,19 +145,36 @@ function Playground() {
       // A failed fresh generation leaves the hook's empty spec mounted, which
       // hides the empty state — restore it. Failed edits keep their spec.
       if (!lastRequestRef.current?.context.previousSpec) clear();
-      if (RATE_LIMIT_PATTERN.test(streamError.message)) {
-        quotaMessageRef.current = streamError.message;
-        setQuotaOpen(true);
+      const message = streamError.message;
+      if (RATE_LIMIT_PATTERN.test(message)) {
+        setFailure({ kind: "quota", message });
+        return;
+      }
+      if (SERVICE_UNAVAILABLE_PATTERN.test(message)) {
+        setFailure({ kind: "service", message });
         return;
       }
       toast.error(t("playground.generationFailed"), {
-        description: streamError.message,
+        description: message,
       });
     },
     onComplete: (completedSpec) => {
       const op = pendingOpRef.current;
-      pendingOpRef.current = null;
       if (!op) return;
+
+      // Defense in depth: a completion that never set the root (empty stream
+      // the server failed to classify, non-JSONL output) is a failure, not a
+      // generation — never commit it to history. pendingOpRef survives so the
+      // dialog's retry can replay the request.
+      if (
+        op.kind === PENDING_OP_KINDS.generate &&
+        !isNonEmptySpec(completedSpec)
+      ) {
+        clear();
+        setFailure({ kind: "service", message: t("service.noSpec") });
+        return;
+      }
+      pendingOpRef.current = null;
 
       if (op.kind === PENDING_OP_KINDS.generate) {
         const entry = createEntry(op.prompt, completedSpec);
@@ -167,8 +194,9 @@ function Playground() {
     },
   });
 
-  // Every request records its payload so a quota-dialog retry can replay it
-  // with the newly selected model (pendingOpRef still holds the operation).
+  // Every request records its payload so the failure dialog's retry can
+  // replay it with the newly selected model (pendingOpRef still holds the
+  // operation).
   const sendNow = (
     prompt: string,
     context: Record<string, unknown> = {},
@@ -290,21 +318,21 @@ function Playground() {
     });
   };
 
-  const handleQuotaConfirm = (model: ModelId) => {
+  const handleFailureConfirm = (model: ModelId) => {
     setModel(model);
-    setQuotaOpen(false);
+    setFailure(null);
     const last = lastRequestRef.current;
     if (last) sendNow(last.prompt, last.context);
   };
 
   // Dismissing without retrying surfaces the original failure as a toast.
-  const handleQuotaOpenChange = (open: boolean) => {
+  const handleFailureOpenChange = (open: boolean) => {
     if (!open) {
       toast.error(t("playground.generationFailed"), {
-        description: quotaMessageRef.current,
+        description: failure?.message ?? "",
       });
+      setFailure(null);
     }
-    setQuotaOpen(open);
   };
 
   const handlePropChange = (
@@ -666,10 +694,11 @@ function Playground() {
                 </div>
               </div>
 
-              {quotaOpen && (
-                <QuotaDialog
-                  onOpenChange={handleQuotaOpenChange}
-                  onConfirm={handleQuotaConfirm}
+              {failure && (
+                <FailureDialog
+                  kind={failure.kind}
+                  onOpenChange={handleFailureOpenChange}
+                  onConfirm={handleFailureConfirm}
                 />
               )}
 

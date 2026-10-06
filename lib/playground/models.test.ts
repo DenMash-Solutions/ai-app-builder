@@ -3,6 +3,7 @@ import {
   AVAILABLE_MODELS,
   DEFAULT_MODEL_ID,
   RATE_LIMIT_PATTERN,
+  SERVICE_UNAVAILABLE_PATTERN,
   findModel,
   isAvailableModel,
   resolveModel,
@@ -51,6 +52,35 @@ describe("models", () => {
     expect(RATE_LIMIT_PATTERN.test("daily quota exhausted")).toBe(true);
     expect(RATE_LIMIT_PATTERN.test("internal server error")).toBe(false);
     expect(RATE_LIMIT_PATTERN.test("boom")).toBe(false);
+  });
+
+  test("SERVICE_UNAVAILABLE_PATTERN matches unavailable-service failures", () => {
+    expect(
+      SERVICE_UNAVAILABLE_PATTERN.test(
+        "Service unavailable: gemini-3.1-flash-lite returned no response — switch model and retry.",
+      ),
+    ).toBe(true);
+    expect(
+      SERVICE_UNAVAILABLE_PATTERN.test("Service unavailable: upstream 500"),
+    ).toBe(true);
+    expect(SERVICE_UNAVAILABLE_PATTERN.test("Failed to fetch")).toBe(true);
+    expect(SERVICE_UNAVAILABLE_PATTERN.test("HTTP error: 503")).toBe(true);
+    expect(SERVICE_UNAVAILABLE_PATTERN.test("NetworkError when")).toBe(true);
+    expect(SERVICE_UNAVAILABLE_PATTERN.test("Load failed")).toBe(true);
+    expect(
+      SERVICE_UNAVAILABLE_PATTERN.test(
+        "GOOGLE_GENERATIVE_AI_API_KEY is not set",
+      ),
+    ).toBe(false);
+    expect(
+      SERVICE_UNAVAILABLE_PATTERN.test(
+        "A non-empty 'prompt' string is required",
+      ),
+    ).toBe(false);
+  });
+
+  test("default model points at the proven-working flash lite", () => {
+    expect(DEFAULT_MODEL_ID).toBe("gemini-3.1-flash-lite");
   });
 });
 
