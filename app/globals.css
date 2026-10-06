@@ -147,6 +147,19 @@
   background-size: 24px 24px;
 }
 
+/* X-ray: page.tsx tags wrappers that hold children/slots with
+   [data-jr-container] while the mode is on. Containers get a solid green
+   outline, leaves a dashed sky one; declared before the pick rules so the
+   amber selected/hover rings still win when both modes are active. */
+.jr-xray [data-jr-key][data-jr-container] > * {
+  outline: 1.5px solid rgb(52 211 153 / 0.85);
+  outline-offset: 2px;
+}
+.jr-xray [data-jr-key]:not([data-jr-container]) > * {
+  outline: 1.5px dashed rgb(56 189 248 / 0.7);
+  outline-offset: 2px;
+}
+
 /* Pick mode: json-render tags each element with a display:contents span
    ([data-jr-key]) which paints no outline itself — style its element child.
    :has() keeps the hover ring on the deepest picked element only. */

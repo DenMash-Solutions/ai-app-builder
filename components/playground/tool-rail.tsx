@@ -1,16 +1,24 @@
 "use client";
 
-import { Eraser, MousePointer2 } from "lucide-react";
+import { Eraser, Layers, MousePointer2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 
 interface ToolRailProps {
   pickMode: boolean;
+  xrayMode: boolean;
   onTogglePick: () => void;
+  onToggleXray: () => void;
   onClear: () => void;
 }
 
-export function ToolRail({ pickMode, onTogglePick, onClear }: ToolRailProps) {
+export function ToolRail({
+  pickMode,
+  xrayMode,
+  onTogglePick,
+  onToggleXray,
+  onClear,
+}: ToolRailProps) {
   const t = useTranslations();
   return (
     <div className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border bg-background/80 p-1.5 shadow-lg backdrop-blur-md">
@@ -24,6 +32,17 @@ export function ToolRail({ pickMode, onTogglePick, onClear }: ToolRailProps) {
         onClick={onTogglePick}
       >
         <MousePointer2 />
+      </Button>
+      <Button
+        type="button"
+        variant={xrayMode ? "default" : "ghost"}
+        size="icon"
+        aria-pressed={xrayMode}
+        aria-label={t("editor.xray")}
+        title={t("editor.xray")}
+        onClick={onToggleXray}
+      >
+        <Layers />
       </Button>
       <Button
         type="button"

@@ -18,6 +18,7 @@
   },
   "editor": {
     "pick": "Pick",
+    "xray": "X-ray",
     "panelTitle": "Element editor",
     "close": "Close",
     "undo": "Undo",
@@ -27,7 +28,29 @@
     "freeformPlaceholder": "Describe the change…",
     "tabs": {
       "properties": "Properties",
+      "structure": "Structure",
       "actions": "Actions"
+    },
+    "structure": {
+      "breadcrumb": "Element path",
+      "insert": "Insert",
+      "insertInto": "Insert into {key}",
+      "group": "Group",
+      "ungroup": "Ungroup",
+      "duplicate": "Duplicate",
+      "remove": "Remove",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "children": "Children",
+      "noChildren": "No child elements"
+    },
+    "picker": {
+      "title": "Insert component",
+      "groupTitle": "Choose container",
+      "description": "Pick a component to add to the layout.",
+      "search": "Search components…",
+      "containerChip": "container",
+      "noMatches": "No components match your search"
     },
     "generalActions": {
       "bolder": "Bolder",

@@ -18,6 +18,7 @@
   },
   "editor": {
     "pick": "Seleccionar",
+    "xray": "Rayos X",
     "panelTitle": "Editor de elemento",
     "close": "Cerrar",
     "undo": "Deshacer",
@@ -27,7 +28,29 @@
     "freeformPlaceholder": "Describe el cambio…",
     "tabs": {
       "properties": "Propiedades",
+      "structure": "Estructura",
       "actions": "Acciones"
+    },
+    "structure": {
+      "breadcrumb": "Ruta del elemento",
+      "insert": "Insertar",
+      "insertInto": "Insertar en {key}",
+      "group": "Agrupar",
+      "ungroup": "Desagrupar",
+      "duplicate": "Duplicar",
+      "remove": "Eliminar",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "children": "Hijos",
+      "noChildren": "Sin elementos hijos"
+    },
+    "picker": {
+      "title": "Insertar componente",
+      "groupTitle": "Elegir contenedor",
+      "description": "Elige un componente para añadirlo a la composición.",
+      "search": "Buscar componentes…",
+      "containerChip": "contenedor",
+      "noMatches": "Ningún componente coincide con tu búsqueda"
     },
     "generalActions": {
       "bolder": "Más audaz",

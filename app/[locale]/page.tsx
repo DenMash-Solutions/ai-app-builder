@@ -20,16 +20,28 @@ import {
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { EditPanel, PickOverlay } from "@/components/editor";
+import { EditPanel, HoverBadge, PickOverlay } from "@/components/editor";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { PromptBar, ToolRail, TopBar } from "@/components/playground";
 import { QuotaDialog } from "@/components/quota-dialog";
 import {
+  STRUCTURE_OPS,
+  duplicateElement,
+  findParentKey,
+  getAncestorPath,
+  insertElement,
+  moveSibling,
   promptRevisionLabel,
   propertyRevisionLabel,
+  removeElement,
   replaceProp,
   scopeInstruction,
+  structureRevisionLabel,
+  unwrapElement,
+  wrapElement,
 } from "@/lib/editor";
+import type { MoveDirection } from "@/lib/editor";
+import { examplePropsFor } from "@/lib/playground/catalog";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
 import { RATE_LIMIT_PATTERN, type ModelId } from "@/lib/playground/models";
@@ -79,6 +91,7 @@ function Playground() {
   const [restoredSpec, setRestoredSpec] = useState<Spec | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pickMode, setPickMode] = useState(false);
+  const [xrayMode, setXrayMode] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [panelPos, setPanelPos] = useState<{
     top: number;
@@ -159,6 +172,10 @@ function Playground() {
     displayedSpec && effectiveKey
       ? displayedSpec.elements[effectiveKey]
       : undefined;
+  const ancestors =
+    displayedSpec && effectiveKey
+      ? getAncestorPath(displayedSpec, effectiveKey)
+      : [];
 
   // Main input: edits the displayed result (steer), generates when empty.
   const handleSend = (prompt: string) => {
@@ -264,6 +281,96 @@ function Playground() {
     setRestoredSpec(next);
   };
 
+  // Structural edits are local deterministic ops — same commit path as prop
+  // edits (undoable revisions), with an explicit selection target so focus
+  // follows the operation (insert→new, remove→parent, move→stay).
+  const commitStructure = (
+    next: Spec | null,
+    label: string,
+    selectKey?: string | null,
+  ): void => {
+    if (!next || !activeId) return;
+    const entry = history.find((candidate) => candidate.id === activeId);
+    if (!entry) return;
+    const updated = commitRevision(entry, next, label);
+    updateEntry(updated);
+    setActiveId(updated.id);
+    setRestoredSpec(next);
+    if (selectKey !== undefined) setSelectedKey(selectKey);
+  };
+
+  const handleInsert = (parentKey: string, type: string) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    const result = insertElement(displayedSpec, {
+      parentKey,
+      type,
+      props: examplePropsFor(type),
+    });
+    commitStructure(
+      result?.spec ?? null,
+      structureRevisionLabel(STRUCTURE_OPS.insert, type),
+      result?.key,
+    );
+  };
+
+  const handleRemove = (key: string) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    commitStructure(
+      removeElement(displayedSpec, key),
+      structureRevisionLabel(STRUCTURE_OPS.remove),
+      findParentKey(displayedSpec, key),
+    );
+  };
+
+  const handleGroup = (key: string, containerType: string) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    const result = wrapElement(
+      displayedSpec,
+      key,
+      containerType,
+      examplePropsFor(containerType),
+    );
+    commitStructure(
+      result?.spec ?? null,
+      structureRevisionLabel(STRUCTURE_OPS.group, containerType),
+      result?.key,
+    );
+  };
+
+  const handleUnwrap = (key: string) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    const element = displayedSpec.elements[key];
+    const firstInner = element
+      ? [
+          ...(element.children ?? []),
+          ...Object.values(element.slots ?? {}).flat(),
+        ][0]
+      : undefined;
+    commitStructure(
+      unwrapElement(displayedSpec, key),
+      structureRevisionLabel(STRUCTURE_OPS.ungroup),
+      firstInner ?? findParentKey(displayedSpec, key),
+    );
+  };
+
+  const handleMove = (key: string, direction: MoveDirection) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    commitStructure(
+      moveSibling(displayedSpec, key, direction),
+      structureRevisionLabel(STRUCTURE_OPS.move),
+    );
+  };
+
+  const handleDuplicate = (key: string) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    const result = duplicateElement(displayedSpec, key);
+    commitStructure(
+      result?.spec ?? null,
+      structureRevisionLabel(STRUCTURE_OPS.duplicate),
+      result?.key,
+    );
+  };
+
   const applyRevision = useCallback((entry: HistoryEntry) => {
     updateEntry(entry);
     setActiveId(entry.id);
@@ -319,6 +426,31 @@ function Playground() {
     return () => window.removeEventListener("resize", updatePanelPos);
   }, [updatePanelPos]);
 
+  // X-ray: tag container wrappers (children or slots) with a data attribute
+  // the CSS in globals.css can target — keeps React out of the outline loop.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const wrappers = container.querySelectorAll<HTMLElement>("[data-jr-key]");
+    if (!xrayMode || !displayedSpec) {
+      wrappers.forEach((wrapper) =>
+        wrapper.removeAttribute("data-jr-container"),
+      );
+      return;
+    }
+    wrappers.forEach((wrapper) => {
+      const element = wrapper.dataset.jrKey
+        ? displayedSpec.elements[wrapper.dataset.jrKey]
+        : undefined;
+      const hasChildren =
+        !!element &&
+        ((element.children?.length ?? 0) > 0 ||
+          Object.values(element.slots ?? {}).flat().length > 0);
+      if (hasChildren) wrapper.setAttribute("data-jr-container", "1");
+      else wrapper.removeAttribute("data-jr-container");
+    });
+  }, [xrayMode, displayedSpec]);
+
   // Cmd+Z / Cmd+Shift+Z — scoped to the canvas, never inside form fields.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -360,7 +492,9 @@ function Playground() {
       {displayedSpec && !isStreaming && (
         <ToolRail
           pickMode={pickMode}
+          xrayMode={xrayMode}
           onTogglePick={handleTogglePick}
+          onToggleXray={() => setXrayMode((prev) => !prev)}
           onClear={handleClearCurrent}
         />
       )}
@@ -369,7 +503,7 @@ function Playground() {
         ref={containerRef}
         className={`absolute inset-0 overflow-y-auto ${
           pickMode ? "jr-pick-enabled" : ""
-        }`}
+        } ${xrayMode ? "jr-xray" : ""}`}
       >
         <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
           {!displayedSpec && !isStreaming && (
@@ -411,16 +545,25 @@ function Playground() {
             panelPos && (
               <EditPanel
                 key={effectiveKey}
+                spec={displayedSpec}
                 elementKey={effectiveKey}
                 element={selectedElement}
+                ancestors={ancestors}
                 position={panelPos}
                 canUndo={activeEntry !== null && canUndo(activeEntry)}
                 canRedo={activeEntry !== null && canRedo(activeEntry)}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 onClose={() => setSelectedKey(null)}
+                onSelectKey={setSelectedKey}
                 onPropChange={handlePropChange}
                 onAction={handleAction}
+                onInsert={handleInsert}
+                onRemove={handleRemove}
+                onGroup={handleGroup}
+                onUnwrap={handleUnwrap}
+                onMove={handleMove}
+                onDuplicate={handleDuplicate}
               />
             )}
           <PickOverlay
@@ -428,6 +571,11 @@ function Playground() {
             containerRef={containerRef}
             selectedKey={effectiveKey}
             onSelect={setSelectedKey}
+          />
+          <HoverBadge
+            enabled={pickMode && !isStreaming && displayedSpec !== null}
+            containerRef={containerRef}
+            spec={displayedSpec}
           />
         </div>
       </div>
