@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { EDITOR, PROMPTS, ROLE, UI, historyButtonName } from "./constants";
+import {
+  EDITOR,
+  PROMPTS,
+  ROLE,
+  UI,
+  dndGhostLabel,
+  historyButtonName,
+} from "./constants";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
 
 async function generateSample(page: Page): Promise<void> {
@@ -281,6 +288,122 @@ test.describe("editor", () => {
     entries = await readHistoryStorage(page);
     expect(entries[0].revisions).toHaveLength(5);
     expect(entries[0].head).toBe(4);
+  });
+
+  test("canvas drag reorders, moves across containers, and supports cancel", async ({
+    page,
+  }) => {
+    await generateSample(page);
+    const panel = await pickHeading(page);
+    await panel.getByRole(ROLE.tab, { name: EDITOR.structure }).click();
+
+    // Insert an empty Stack into card-1 so a second container exists
+    await panel.getByRole(ROLE.button, { name: EDITOR.insert }).click();
+    const picker = page.getByRole("dialog");
+    await picker.getByPlaceholder(EDITOR.pickerSearch).fill("Stack");
+    await picker
+      .getByRole("option")
+      .filter({ hasText: /^Stack\b/ })
+      .first()
+      .click();
+    await expect(page.locator('[data-jr-key="stack-1"]')).toBeAttached();
+
+    // Leave pick mode so the edit panel can't cover drag targets
+    await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
+    await expect(page.locator("[data-editor-panel]")).toHaveCount(0);
+
+    const box = async (key: string) => {
+      const bounds = await page
+        .locator(`[data-jr-key="${key}"] > *`)
+        .first()
+        .boundingBox();
+      if (!bounds) throw new Error(`no bounding box for ${key}`);
+      return bounds;
+    };
+    const center = (bounds: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) => ({
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    });
+
+    // (a) Reorder within card-1: drag text-1 onto heading-1's top edge
+    const text = center(await box("text-1"));
+    const heading = await box("heading-1");
+    await page.mouse.move(text.x, text.y);
+    await page.mouse.down();
+    await page.mouse.move(text.x + 10, text.y); // cross the 5px threshold
+    await page.mouse.move(
+      heading.x + heading.width / 2,
+      heading.y + heading.height * 0.15,
+      { steps: 6 },
+    );
+    const ghost = page.locator("[data-dnd-ghost]");
+    await expect(ghost).toHaveAttribute("aria-label", dndGhostLabel("text-1"));
+    await expect(page.locator('[data-dnd-zone="before"]')).toBeAttached();
+    await page.mouse.up();
+    await expect(ghost).toHaveCount(0);
+
+    let entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(3);
+    expect(entries[0].head).toBe(2);
+    expect(entries[0].revisions?.[2]?.label).toBe("structure:move");
+    expect(
+      entries[0].revisions?.[2]?.spec.elements["card-1"]?.children,
+    ).toEqual(["text-1", "heading-1", "stack-1"]);
+
+    // (b) Cross-container: drag text-1 into the (empty) stack-1. Layout
+    // changed in (a) — re-measure the source. The stack is only measured after
+    // arming: empty containers get a hit area mid-drag.
+    const moved = center(await box("text-1"));
+    await page.mouse.move(moved.x, moved.y);
+    await page.mouse.down();
+    await page.mouse.move(moved.x + 10, moved.y);
+    const stack = center(await box("stack-1"));
+    await page.mouse.move(stack.x, stack.y, { steps: 6 });
+    await expect(page.locator('[data-dnd-zone="inside"]')).toBeAttached();
+    await page.mouse.up();
+
+    entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(4);
+    expect(entries[0].head).toBe(3);
+    expect(
+      entries[0].revisions?.[3]?.spec.elements["card-1"]?.children,
+    ).toEqual(["heading-1", "stack-1"]);
+    expect(
+      entries[0].revisions?.[3]?.spec.elements["stack-1"]?.children,
+    ).toEqual(["text-1"]);
+    await expect(page.locator('[data-jr-key="stack-1"]')).toContainText(
+      UI.mockBody,
+    );
+
+    // (c) Escape cancels the drag without a revision
+    const headingCenter = center(await box("heading-1"));
+    await page.mouse.move(headingCenter.x, headingCenter.y);
+    await page.mouse.down();
+    await page.mouse.move(headingCenter.x + 10, headingCenter.y);
+    await expect(page.locator("[data-dnd-ghost]")).toBeAttached();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-dnd-ghost]")).toHaveCount(0);
+    await page.mouse.up();
+
+    entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(4);
+    expect(entries[0].head).toBe(3);
+
+    // (d) Undo restores the cross-container move
+    await page.keyboard.press("ControlOrMeta+z");
+    entries = await readHistoryStorage(page);
+    expect(entries[0].head).toBe(2);
+    expect(
+      entries[0].revisions?.[2]?.spec.elements["card-1"]?.children,
+    ).toEqual(["text-1", "heading-1", "stack-1"]);
+    await expect(page.locator('[data-jr-key="stack-1"]')).not.toContainText(
+      UI.mockBody,
+    );
   });
 
   test("x-ray outlines containers and pick hover shows a badge", async ({

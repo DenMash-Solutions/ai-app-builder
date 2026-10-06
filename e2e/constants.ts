@@ -47,6 +47,12 @@ export const SWITCHER_LABELS = LOCALE_LABELS;
 
 export const MOCK_ERROR_MESSAGE = "boom";
 
+export const STATE_MOCK = {
+  title: "Seeded title",
+  reveal: "Reveal",
+  itemLabels: ["Item A", "Item B", "Item C", "Item D", "Item E", "Item F"],
+} as const;
+
 export const MOCK_KEYS = {
   card: "card-1",
   heading: "heading-1",
@@ -59,6 +65,8 @@ export const COMPONENT = {
   card: "Card",
   heading: "Heading",
   text: "Text",
+  stack: "Stack",
+  button: "Button",
 } as const;
 
 export const PATCH_OP = {
@@ -69,6 +77,7 @@ export const PATCH_OP = {
 export const PATCH_PATH = {
   root: "/root",
   elements: "/elements",
+  state: "/state",
 } as const;
 
 export const EDITOR = {
@@ -95,6 +104,11 @@ export const EDITOR = {
   pickerTitle: en.editor.picker.title,
   pickerGroupTitle: en.editor.picker.groupTitle,
   pickerSearch: en.editor.picker.search,
+  instanceScope: (index: number, count: number, path: string): string =>
+    en.editor.instance.scope
+      .replace("{index}", String(index))
+      .replace("{count}", String(count))
+      .replace("{path}", path),
 } as const;
 
 export const PROMPTS = {
@@ -123,3 +137,7 @@ export const QUOTA = {
 
 export const historyButtonName = (count?: number): string =>
   count === undefined ? ACTIONS.history : `${ACTIONS.history} ${count}`;
+
+/** next-intl interpolates `{key}` — mirror it for locator assertions. */
+export const dndGhostLabel = (key: string): string =>
+  en.editor.dnd.grabbed.replace("{key}", key);
