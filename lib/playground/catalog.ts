@@ -50,3 +50,51 @@ export const playgroundCatalog = defineCatalog(schema, {
   components,
   actions: {},
 });
+
+interface CatalogDefinitionLike {
+  slots?: string[];
+  description?: string;
+  example?: Record<string, unknown>;
+}
+
+function rawDefinition(type: string): CatalogDefinitionLike | undefined {
+  const definitions = playgroundCatalog.data.components as unknown as Record<
+    string,
+    CatalogDefinitionLike | undefined
+  >;
+  return definitions[type];
+}
+
+/** True when the component accepts children (declares catalog slots). */
+export function isContainerType(type: string): boolean {
+  return (rawDefinition(type)?.slots?.length ?? 0) > 0;
+}
+
+/** Default props for a freshly inserted element of `type`. */
+export function examplePropsFor(type: string): Record<string, unknown> {
+  return { ...(rawDefinition(type)?.example ?? {}) };
+}
+
+export interface PickerItem {
+  name: string;
+  description: string;
+  container: boolean;
+}
+
+/** Catalog components for the insert/group pickers — containers first. */
+export function pickerItems(onlyContainers = false): PickerItem[] {
+  const items = Object.keys(
+    playgroundCatalog.data.components as unknown as Record<string, unknown>,
+  ).map((name) => ({
+    name,
+    description: rawDefinition(name)?.description ?? "",
+    container: isContainerType(name),
+  }));
+  return items
+    .filter((item) => !onlyContainers || item.container)
+    .sort(
+      (a, b) =>
+        Number(b.container) - Number(a.container) ||
+        a.name.localeCompare(b.name),
+    );
+}
