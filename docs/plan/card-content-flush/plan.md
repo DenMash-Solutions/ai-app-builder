@@ -17,9 +17,13 @@ wrapper.
 
 ### In scope
 
-- One static rule in `app/globals.css`: `.p-0`/`.px-0` card root →
-  `padding-inline: 0` on its direct `card-content` child
-- Live verification via MCP computed styles (p-0 cards → 0px; others keep 24px)
+- One static rule in `app/globals.css`: an explicit horizontal root padding
+  on a Card (`p-*`/`px-*`, safelist tokens 0–16) → `padding-inline: 0` on its
+  direct `card-content` child, so root and content padding never stack
+  (generalized 2026-10-06 after `p-1` review: rule originally keyed on
+  `p-0`/`px-0` only, which left `p-1` = 4px root + 24px content = 29px inset)
+- Live verification via MCP computed styles (p-1 items → content 0px;
+  cards without explicit root padding keep 24px)
 
 ### Out of scope
 
@@ -33,22 +37,29 @@ wrapper.
 
 ## Design decisions
 
-1. Scope rule to `.p-0 >`/`.px-0 > [data-slot="card-content"]` with
-   class+attr specificity — beats `.px-6` regardless of CSS order; cards
-   without `p-0` keep shadcn's default gutters. Rejected: blanket
-   `[data-slot="card-content"] { padding-inline: 0 }`, because it would
-   strip padding from every card in every generated app.
+1. Scope rule to explicit horizontal root padding only —
+   `:is([class~="p-0"]…[class~="px-16"]) > [data-slot="card-content"]`
+   (safelist tokens), class+attr specificity beats `.px-6` regardless of CSS
+   order; cards with no root `p-*`/`px-*` keep shadcn's default gutters, and
+   `py-*`/`pt-*` alone don't suppress (no horizontal intent). Rejected:
+   blanket `[data-slot="card-content"] { padding-inline: 0 }`, because it
+   would strip padding from every card in every generated app (2026-10-06).
+2. Enumerate safelist tokens rather than substring-match `[class*="p-"]` —
+   rejected: `"p-"` also matches inside `gap-4`/`shadow-…` tokens
+   (2026-10-06).
 
 ## Verification
 
 - [x] `bun run format:check && bun run lint && bunx tsc --noEmit && bun run test`
-- [x] `bun run build` → compiled CSS contains the rule
-- [x] MCP on live gallery: p-0 item's `card-content` computed
-      `padding-inline: 0px`; outer (non-p-0) card keeps `24px`
+- [x] `bun run build` → compiled CSS contains the `:is([class~="p-0"]…)` rule
+- [x] MCP on live gallery: `p-1` items → root 4px, `card-content` computed
+      `padding-inline: 0px` (screenshots: images flush, titles untruncated);
+      `gallery-root` (no root `p-*`) keeps `24px`
 
 ## Status log
 
 | Date | Event |
 | ---- | ----- |
 | 2026-10-05 | plan drafted + approved (chat preview) |
-| 2026-10-05 | implemented — chain green, build rule present, MCP computed styles verified |
+| 2026-10-05 | implemented (p-0/px-0 scope) — chain green, MCP verified |
+| 2026-10-06 | generalized to all safelisted `p-*`/`px-*` root tokens after live `p-1` review (scope updated same turn) — chain green, build rule present, MCP computed styles + screenshot verified |
