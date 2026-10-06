@@ -73,6 +73,7 @@ export const PATCH_PATH = {
 
 export const EDITOR = {
   pick: en.editor.pick,
+  xray: en.editor.xray,
   panelTitle: en.editor.panelTitle,
   close: en.editor.close,
   undo: en.editor.undo,
@@ -80,7 +81,17 @@ export const EDITOR = {
   apply: en.editor.apply,
   freeformPlaceholder: en.editor.freeformPlaceholder,
   properties: en.editor.tabs.properties,
+  structure: en.editor.tabs.structure,
   actions: en.editor.tabs.actions,
+  insert: en.editor.structure.insert,
+  group: en.editor.structure.group,
+  ungroup: en.editor.structure.ungroup,
+  remove: en.editor.structure.remove,
+  noChildren: en.editor.structure.noChildren,
+  breadcrumb: en.editor.structure.breadcrumb,
+  pickerTitle: en.editor.picker.title,
+  pickerGroupTitle: en.editor.picker.groupTitle,
+  pickerSearch: en.editor.picker.search,
 } as const;
 
 export const PROMPTS = {
