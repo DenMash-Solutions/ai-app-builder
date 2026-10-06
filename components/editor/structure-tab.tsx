@@ -165,7 +165,7 @@ export function StructureTab({
               >
                 <span className="rounded border border-zinc-700 px-1 font-mono text-[10px] text-zinc-400">
                   {child.type}
-                </span>
+                </span>{" "}
                 <span className="truncate font-mono text-[11px] text-zinc-300">
                   {childKey}
                 </span>
