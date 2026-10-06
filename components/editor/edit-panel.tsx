@@ -4,8 +4,12 @@ import type { Spec, UIElement } from "@json-render/core";
 import { ChevronRight, Redo2, Undo2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { playgroundCatalog } from "@/lib/playground/catalog";
-import { getEditableFields } from "@/lib/editor";
-import type { MoveDirection } from "@/lib/editor";
+import {
+  analyzePropBinding,
+  getEditableFields,
+  resolveInstanceScope,
+} from "@/lib/editor";
+import type { InstanceChain, MoveDirection } from "@/lib/editor";
 import { ActionTiles } from "./action-tiles";
 import { PropertyForm } from "./property-form";
 import { StructureTab } from "./structure-tab";
@@ -50,6 +54,8 @@ interface EditPanelProps {
   element: UIElement;
   /** Key path from spec.root to elementKey (inclusive) for the breadcrumb. */
   ancestors: string[];
+  /** Repeat scopes of the picked instance; null = template-level selection. */
+  instanceChain: InstanceChain | null;
   position: { top: number; left: number };
   /** Active tab — lifted to the parent so remounts (key changes) keep it. */
   tab: PanelTab;
@@ -60,7 +66,7 @@ interface EditPanelProps {
   onRedo: () => void;
   onClose: () => void;
   onSelectKey: (key: string) => void;
-  onPropChange: (prop: string, value: unknown) => void;
+  onPropChange: (prop: string, value: unknown, dataPath: string | null) => void;
   onAction: (instruction: string, label: string) => void;
   onInsert: (parentKey: string, type: string) => void;
   onRemove: (key: string) => void;
@@ -75,6 +81,7 @@ export function EditPanel({
   elementKey,
   element,
   ancestors,
+  instanceChain,
   position,
   tab,
   onTabChange,
@@ -96,6 +103,31 @@ export function EditPanel({
   const t = useTranslations();
   const fields = getEditableFields(componentPropsSchema(element.type));
   const crumbs = ancestors.slice(0, -1);
+
+  // Instance-scoped editing: every field resolves against the picked chain —
+  // bindings display (and write) the instance's state path, literals edit the
+  // shared template, expressions we cannot round-trip render read-only.
+  const state = spec.state ?? {};
+  const chain = instanceChain ?? [];
+  const scope = resolveInstanceScope(spec, state, chain);
+  const rawProps = (element.props ?? {}) as Record<string, unknown>;
+  const values: Record<string, unknown> = {};
+  const readonlyFields: string[] = [];
+  for (const field of fields) {
+    const binding = analyzePropBinding(
+      spec,
+      state,
+      chain,
+      rawProps[field.name],
+    );
+    values[field.name] = binding.displayValue;
+    if (binding.readonly) readonlyFields.push(field.name);
+  }
+
+  const handlePropChange = (prop: string, value: unknown) => {
+    const binding = analyzePropBinding(spec, state, chain, rawProps[prop]);
+    onPropChange(prop, value, binding.dataPath);
+  };
 
   return (
     <div
@@ -141,6 +173,19 @@ export function EditPanel({
         </div>
       </div>
 
+      {scope && (
+        <div
+          data-testid="instance-scope"
+          className="border-b border-zinc-800 px-3 py-1.5 font-mono text-[11px] text-emerald-300/90"
+        >
+          {t("editor.instance.scope", {
+            index: scope.itemIndex + 1,
+            count: scope.count,
+            path: scope.basePath,
+          })}
+        </div>
+      )}
+
       {crumbs.length > 0 && (
         <nav
           aria-label={t("editor.structure.breadcrumb")}
@@ -183,23 +228,31 @@ export function EditPanel({
       {tab === PANEL_TABS.properties && (
         <PropertyForm
           fields={fields}
-          values={(element.props ?? {}) as Record<string, unknown>}
-          onChange={onPropChange}
+          values={values}
+          readonlyFields={readonlyFields}
+          onChange={handlePropChange}
         />
       )}
       {tab === PANEL_TABS.structure && (
-        <StructureTab
-          spec={spec}
-          elementKey={elementKey}
-          element={element}
-          onSelectKey={onSelectKey}
-          onInsert={onInsert}
-          onRemove={onRemove}
-          onGroup={onGroup}
-          onUnwrap={onUnwrap}
-          onMove={onMove}
-          onDuplicate={onDuplicate}
-        />
+        <>
+          {scope && (
+            <p className="px-3 pt-2 text-[11px] text-zinc-500">
+              {t("editor.instance.structureNote", { count: scope.count })}
+            </p>
+          )}
+          <StructureTab
+            spec={spec}
+            elementKey={elementKey}
+            element={element}
+            onSelectKey={onSelectKey}
+            onInsert={onInsert}
+            onRemove={onRemove}
+            onGroup={onGroup}
+            onUnwrap={onUnwrap}
+            onMove={onMove}
+            onDuplicate={onDuplicate}
+          />
+        </>
       )}
       {tab === PANEL_TABS.actions && <ActionTiles onAction={onAction} />}
     </div>

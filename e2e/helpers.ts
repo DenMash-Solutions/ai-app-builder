@@ -47,11 +47,13 @@ export function generateCalls(page: Page): Promise<number> {
 
 export interface StoredElement {
   children?: string[];
+  props?: Record<string, unknown>;
 }
 
 export interface StoredSpec {
   root: string;
   elements: Record<string, StoredElement | undefined>;
+  state?: Record<string, unknown>;
 }
 
 export interface StoredEntry {

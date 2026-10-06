@@ -1,7 +1,7 @@
 "use client";
 
 import type { Spec } from "@json-render/core";
-import { markDevtoolsActive } from "@json-render/core";
+import { markDevtoolsActive, setByPath } from "@json-render/core";
 import {
   ActionProvider,
   Renderer,
@@ -21,6 +21,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
+  CanvasDnd,
   EditPanel,
   HoverBadge,
   PickOverlay,
@@ -32,10 +33,12 @@ import { PromptBar, ToolRail, TopBar } from "@/components/playground";
 import { QuotaDialog } from "@/components/quota-dialog";
 import {
   STRUCTURE_OPS,
+  chainForKey,
   duplicateElement,
   findParentKey,
   getAncestorPath,
   insertElement,
+  moveElement,
   moveSibling,
   promptRevisionLabel,
   propertyRevisionLabel,
@@ -46,7 +49,7 @@ import {
   unwrapElement,
   wrapElement,
 } from "@/lib/editor";
-import type { MoveDirection } from "@/lib/editor";
+import type { InstanceChain, MoveDirection } from "@/lib/editor";
 import { examplePropsFor } from "@/lib/playground/catalog";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
@@ -99,6 +102,9 @@ function Playground() {
   const [pickMode, setPickMode] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedChain, setSelectedChain] = useState<InstanceChain | null>(
+    null,
+  );
   const [panelTab, setPanelTab] = useState<PanelTab>(PANEL_TABS.properties);
   const [panelPos, setPanelPos] = useState<{
     top: number;
@@ -184,6 +190,29 @@ function Playground() {
       ? getAncestorPath(displayedSpec, effectiveKey)
       : [];
 
+  // The selection carries the repeat scopes captured at pick time so data
+  // edits scope to the clicked instance. Key navigation keeps the levels that
+  // still apply; structural ops clear the chain (they edit the template).
+  const clearSelection = () => {
+    setSelectedKey(null);
+    setSelectedChain(null);
+  };
+
+  const handlePick = useCallback(
+    (key: string | null, chain: InstanceChain | null) => {
+      setSelectedKey(key);
+      setSelectedChain(chain);
+    },
+    [],
+  );
+
+  const handleSelectKey = (key: string) => {
+    setSelectedKey(key);
+    setSelectedChain((chain) =>
+      displayedSpec && chain ? chainForKey(displayedSpec, chain, key) : null,
+    );
+  };
+
   // Main input: edits the displayed result (steer), generates when empty.
   const handleSend = (prompt: string) => {
     const base = displayedSpec;
@@ -214,7 +243,7 @@ function Playground() {
   const handleSelect = (entry: HistoryEntry) => {
     setRestoredSpec(entry.spec);
     setActiveId(entry.id);
-    setSelectedKey(null);
+    clearSelection();
     setHistoryOpen(false);
   };
 
@@ -236,11 +265,11 @@ function Playground() {
     clear();
     setRestoredSpec(null);
     setActiveId(null);
-    setSelectedKey(null);
+    clearSelection();
   };
 
   const handleTogglePick = () => {
-    if (pickMode) setSelectedKey(null);
+    if (pickMode) clearSelection();
     setPickMode(!pickMode);
   };
 
@@ -277,11 +306,24 @@ function Playground() {
     setQuotaOpen(open);
   };
 
-  const handlePropChange = (prop: string, value: unknown) => {
+  const handlePropChange = (
+    prop: string,
+    value: unknown,
+    dataPath: string | null,
+  ) => {
     if (!displayedSpec || !selectedKey || !activeId || isStreaming) return;
     const entry = history.find((candidate) => candidate.id === activeId);
     if (!entry) return;
-    const next = replaceProp(displayedSpec, selectedKey, prop, value);
+    let next: Spec;
+    if (dataPath !== null) {
+      // Data-bound prop: write the instance's state path — the template prop
+      // keeps its expression and other items stay untouched.
+      next = structuredClone(displayedSpec);
+      next.state = next.state ?? {};
+      setByPath(next.state, dataPath, value);
+    } else {
+      next = replaceProp(displayedSpec, selectedKey, prop, value);
+    }
     const updated = commitRevision(entry, next, propertyRevisionLabel(prop));
     updateEntry(updated);
     setActiveId(updated.id);
@@ -303,6 +345,9 @@ function Playground() {
     updateEntry(updated);
     setActiveId(updated.id);
     setRestoredSpec(next);
+    // Structure ops shift instance positions — drop the chain so the panel
+    // falls back to safe template-level editing instead of a stale index.
+    setSelectedChain(null);
     if (selectKey !== undefined) setSelectedKey(selectKey);
   };
 
@@ -364,6 +409,18 @@ function Playground() {
     if (!displayedSpec || !activeId || isStreaming) return;
     commitStructure(
       moveSibling(displayedSpec, key, direction),
+      structureRevisionLabel(STRUCTURE_OPS.move),
+    );
+  };
+
+  const handleMoveTo = (
+    key: string,
+    targetParentKey: string,
+    index: number,
+  ) => {
+    if (!displayedSpec || !activeId || isStreaming) return;
+    commitStructure(
+      moveElement(displayedSpec, { key, targetParentKey, index }),
       structureRevisionLabel(STRUCTURE_OPS.move),
     );
   };
@@ -490,141 +547,152 @@ function Playground() {
   }, [activeEntry, applyRevision, isStreaming]);
 
   return (
-    <main className="dot-grid relative h-[100dvh] w-full overflow-hidden">
-      <TopBar
-        historyCount={history.length}
-        onOpenHistory={() => setHistoryOpen(true)}
-      />
-
-      {displayedSpec && !isStreaming && (
-        <ToolRail
-          pickMode={pickMode}
-          xrayMode={xrayMode}
-          onTogglePick={handleTogglePick}
-          onToggleXray={() => setXrayMode((prev) => !prev)}
-          onClear={handleClearCurrent}
-        />
-      )}
-
-      <div
-        ref={containerRef}
-        className={`absolute inset-0 overflow-y-auto ${
-          pickMode ? "jr-pick-enabled" : ""
-        } ${xrayMode ? "jr-xray" : ""}`}
-      >
-        <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
-          {!displayedSpec && !isStreaming && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
-              <div className="w-full max-w-xl space-y-3">
-                <p className="text-balance text-muted-foreground">
-                  {t("playground.subtitle")}
-                </p>
-                <p className="text-sm text-muted-foreground/80">
-                  {t("playground.emptyState")}
-                </p>
-              </div>
-              <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
-                {EXAMPLE_PROMPT_LIST.map((example) => (
-                  <Button
-                    key={example}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="max-w-full h-auto whitespace-normal break-words py-1.5"
-                    onClick={() => handleGenerate(example)}
-                  >
-                    {example}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          <Renderer
-            spec={displayedSpec}
-            registry={registry}
-            loading={isStreaming}
-          />
-          {displayedSpec &&
-            !isStreaming &&
-            pickMode &&
-            effectiveKey &&
-            selectedElement &&
-            panelPos && (
-              <EditPanel
-                key={effectiveKey}
-                spec={displayedSpec}
-                elementKey={effectiveKey}
-                element={selectedElement}
-                ancestors={ancestors}
-                position={panelPos}
-                tab={panelTab}
-                onTabChange={setPanelTab}
-                canUndo={activeEntry !== null && canUndo(activeEntry)}
-                canRedo={activeEntry !== null && canRedo(activeEntry)}
-                onUndo={handleUndo}
-                onRedo={handleRedo}
-                onClose={() => setSelectedKey(null)}
-                onSelectKey={setSelectedKey}
-                onPropChange={handlePropChange}
-                onAction={handleAction}
-                onInsert={handleInsert}
-                onRemove={handleRemove}
-                onGroup={handleGroup}
-                onUnwrap={handleUnwrap}
-                onMove={handleMove}
-                onDuplicate={handleDuplicate}
-              />
-            )}
-          <PickOverlay
-            enabled={pickMode && !isStreaming && displayedSpec !== null}
-            containerRef={containerRef}
-            selectedKey={effectiveKey}
-            onSelect={setSelectedKey}
-          />
-          <HoverBadge
-            enabled={pickMode && !isStreaming && displayedSpec !== null}
-            containerRef={containerRef}
-            spec={displayedSpec}
-          />
-        </div>
-      </div>
-
-      {quotaOpen && (
-        <QuotaDialog
-          onOpenChange={handleQuotaOpenChange}
-          onConfirm={handleQuotaConfirm}
-        />
-      )}
-
-      <PromptBar
-        isStreaming={isStreaming}
-        hasSpec={displayedSpec !== null}
-        onSend={handleSend}
-      />
-
-      <HistoryDrawer
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        entries={history}
-        activeId={activeId}
-        onSelect={handleSelect}
-        onDelete={handleDelete}
-        onClear={handleClear}
-      />
-    </main>
-  );
-}
-
-export default function Home() {
-  return (
-    <StateProvider initialState={{}}>
+    <StateProvider initialState={displayedSpec?.state ?? {}}>
       <VisibilityProvider>
         <ActionProvider handlers={{}}>
           <ValidationProvider customFunctions={{}}>
-            <Playground />
+            <main className="dot-grid relative h-[100dvh] w-full overflow-hidden">
+              <TopBar
+                historyCount={history.length}
+                onOpenHistory={() => setHistoryOpen(true)}
+              />
+
+              {displayedSpec && !isStreaming && (
+                <ToolRail
+                  pickMode={pickMode}
+                  xrayMode={xrayMode}
+                  onTogglePick={handleTogglePick}
+                  onToggleXray={() => setXrayMode((prev) => !prev)}
+                  onClear={handleClearCurrent}
+                />
+              )}
+
+              <div
+                ref={containerRef}
+                className={`absolute inset-0 overflow-y-auto ${
+                  pickMode ? "jr-pick-enabled" : ""
+                } ${xrayMode ? "jr-xray" : ""} ${
+                  displayedSpec && !isStreaming ? "jr-dnd" : ""
+                }`}
+              >
+                <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
+                  {!displayedSpec && !isStreaming && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+                      <div className="w-full max-w-xl space-y-3">
+                        <p className="text-balance text-muted-foreground">
+                          {t("playground.subtitle")}
+                        </p>
+                        <p className="text-sm text-muted-foreground/80">
+                          {t("playground.emptyState")}
+                        </p>
+                      </div>
+                      <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
+                        {EXAMPLE_PROMPT_LIST.map((example) => (
+                          <Button
+                            key={example}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="max-w-full h-auto whitespace-normal break-words py-1.5"
+                            onClick={() => handleGenerate(example)}
+                          >
+                            {example}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <Renderer
+                    spec={displayedSpec}
+                    registry={registry}
+                    loading={isStreaming}
+                  />
+                  {/* Before PickOverlay: both attach capture listeners on the
+              container, and listener order follows render order. */}
+                  <CanvasDnd
+                    enabled={displayedSpec !== null && !isStreaming}
+                    containerRef={containerRef}
+                    spec={displayedSpec}
+                    onMoveTo={handleMoveTo}
+                  />
+                  {displayedSpec &&
+                    !isStreaming &&
+                    pickMode &&
+                    effectiveKey &&
+                    selectedElement &&
+                    panelPos && (
+                      <EditPanel
+                        key={effectiveKey}
+                        spec={displayedSpec}
+                        elementKey={effectiveKey}
+                        element={selectedElement}
+                        ancestors={ancestors}
+                        position={panelPos}
+                        tab={panelTab}
+                        onTabChange={setPanelTab}
+                        canUndo={activeEntry !== null && canUndo(activeEntry)}
+                        canRedo={activeEntry !== null && canRedo(activeEntry)}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                        onClose={clearSelection}
+                        onSelectKey={handleSelectKey}
+                        instanceChain={selectedChain}
+                        onPropChange={handlePropChange}
+                        onAction={handleAction}
+                        onInsert={handleInsert}
+                        onRemove={handleRemove}
+                        onGroup={handleGroup}
+                        onUnwrap={handleUnwrap}
+                        onMove={handleMove}
+                        onDuplicate={handleDuplicate}
+                      />
+                    )}
+                  <PickOverlay
+                    enabled={pickMode && !isStreaming && displayedSpec !== null}
+                    containerRef={containerRef}
+                    spec={displayedSpec}
+                    selectedKey={effectiveKey}
+                    selectedChain={selectedChain}
+                    onSelect={handlePick}
+                  />
+                  <HoverBadge
+                    enabled={pickMode && !isStreaming && displayedSpec !== null}
+                    containerRef={containerRef}
+                    spec={displayedSpec}
+                  />
+                </div>
+              </div>
+
+              {quotaOpen && (
+                <QuotaDialog
+                  onOpenChange={handleQuotaOpenChange}
+                  onConfirm={handleQuotaConfirm}
+                />
+              )}
+
+              <PromptBar
+                isStreaming={isStreaming}
+                hasSpec={displayedSpec !== null}
+                onSend={handleSend}
+              />
+
+              <HistoryDrawer
+                open={historyOpen}
+                onOpenChange={setHistoryOpen}
+                entries={history}
+                activeId={activeId}
+                onSelect={handleSelect}
+                onDelete={handleDelete}
+                onClear={handleClear}
+              />
+            </main>
           </ValidationProvider>
         </ActionProvider>
       </VisibilityProvider>
     </StateProvider>
   );
+}
+
+export default function Home() {
+  return <Playground />;
 }

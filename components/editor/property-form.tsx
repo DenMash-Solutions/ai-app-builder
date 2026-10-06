@@ -12,13 +12,20 @@ import type { PropField } from "@/lib/editor";
 interface PropertyFormProps {
   fields: PropField[];
   values: Record<string, unknown>;
+  /** Props whose value is an expression we cannot round-trip (e.g. $cond). */
+  readonlyFields?: readonly string[];
   onChange: (prop: string, value: unknown) => void;
 }
 
 const CONTROL_CLASS =
-  "h-7 w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100 outline-none focus:border-amber-400";
+  "h-7 w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100 outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-50";
 
-export function PropertyForm({ fields, values, onChange }: PropertyFormProps) {
+export function PropertyForm({
+  fields,
+  values,
+  readonlyFields,
+  onChange,
+}: PropertyFormProps) {
   const t = useTranslations();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
@@ -36,7 +43,13 @@ export function PropertyForm({ fields, values, onChange }: PropertyFormProps) {
     if (field.kind === PROP_FIELD_KINDS.record) {
       return serializeStyleText(values[field.name]);
     }
-    return String(values[field.name] ?? "");
+    const value = values[field.name];
+    if (value !== null && typeof value === "object") {
+      // Unresolvable expressions (binding without an instance scope, $cond
+      // previews) — show the raw JSON instead of "[object Object]".
+      return JSON.stringify(value);
+    }
+    return String(value ?? "");
   };
 
   const commitText = (field: PropField) => {
@@ -84,57 +97,66 @@ export function PropertyForm({ fields, values, onChange }: PropertyFormProps) {
 
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3">
-      {fields.map((field) => (
-        <label
-          key={field.name}
-          className="flex items-center justify-between gap-3 text-xs"
-        >
-          <span className="font-mono text-zinc-400">{field.name}</span>
-          {field.kind === PROP_FIELD_KINDS.boolean && (
-            <input
-              type="checkbox"
-              checked={values[field.name] === true}
-              onChange={(event) => onChange(field.name, event.target.checked)}
-              className="h-4 w-4 accent-amber-400"
-            />
-          )}
-          {field.kind === PROP_FIELD_KINDS.enum && (
-            <select
-              value={enumValue(field)}
-              onChange={(event) =>
-                onChange(field.name, event.target.value || null)
-              }
-              className={CONTROL_CLASS}
-            >
-              {enumValue(field) === "" && <option value="">—</option>}
-              {field.options?.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          )}
-          {(field.kind === PROP_FIELD_KINDS.string ||
-            field.kind === PROP_FIELD_KINDS.number ||
-            field.kind === PROP_FIELD_KINDS.record) && (
-            <input
-              type={field.kind === PROP_FIELD_KINDS.number ? "number" : "text"}
-              value={currentText(field)}
-              onChange={(event) =>
-                setDrafts({ ...drafts, [field.name]: event.target.value })
-              }
-              onBlur={() => commitText(field)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  commitText(field);
+      {fields.map((field) => {
+        const isReadonly = readonlyFields?.includes(field.name) ?? false;
+        return (
+          <label
+            key={field.name}
+            className="flex items-center justify-between gap-3 text-xs"
+            title={isReadonly ? t("editor.instance.readonly") : undefined}
+          >
+            <span className="font-mono text-zinc-400">{field.name}</span>
+            {field.kind === PROP_FIELD_KINDS.boolean && (
+              <input
+                type="checkbox"
+                checked={values[field.name] === true}
+                disabled={isReadonly}
+                onChange={(event) => onChange(field.name, event.target.checked)}
+                className="h-4 w-4 accent-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            )}
+            {field.kind === PROP_FIELD_KINDS.enum && (
+              <select
+                value={enumValue(field)}
+                disabled={isReadonly}
+                onChange={(event) =>
+                  onChange(field.name, event.target.value || null)
                 }
-              }}
-              className={CONTROL_CLASS}
-            />
-          )}
-        </label>
-      ))}
+                className={CONTROL_CLASS}
+              >
+                {enumValue(field) === "" && <option value="">—</option>}
+                {field.options?.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            )}
+            {(field.kind === PROP_FIELD_KINDS.string ||
+              field.kind === PROP_FIELD_KINDS.number ||
+              field.kind === PROP_FIELD_KINDS.record) && (
+              <input
+                type={
+                  field.kind === PROP_FIELD_KINDS.number ? "number" : "text"
+                }
+                value={currentText(field)}
+                disabled={isReadonly}
+                onChange={(event) =>
+                  setDrafts({ ...drafts, [field.name]: event.target.value })
+                }
+                onBlur={() => commitText(field)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitText(field);
+                  }
+                }}
+                className={CONTROL_CLASS}
+              />
+            )}
+          </label>
+        );
+      })}
     </div>
   );
 }
