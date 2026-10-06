@@ -165,8 +165,10 @@ test.describe("editor", () => {
     await expect(page.getByText(UI.mockBody)).toHaveCount(0);
     const rootPanel = page.locator("[data-editor-panel]");
     await expect(rootPanel.getByText("Card", { exact: true })).toBeVisible();
-    // Selection change remounts the panel (new key) → back to Properties tab
-    await rootPanel.getByRole(ROLE.tab, { name: EDITOR.structure }).click();
+    // Selection change remounts the panel (new key), but the active tab persists
+    await expect(
+      rootPanel.getByRole(ROLE.tab, { name: EDITOR.structure }),
+    ).toHaveAttribute("aria-selected", "true");
     await expect(
       rootPanel.getByRole(ROLE.button, { name: EDITOR.remove }),
     ).toBeDisabled();
@@ -174,6 +176,111 @@ test.describe("editor", () => {
     entries = await readHistoryStorage(page);
     expect(entries[0].revisions).toHaveLength(4);
     expect(entries[0].head).toBe(3);
+  });
+
+  test("structure tab moves, duplicates, and ungroups with disabled states", async ({
+    page,
+  }) => {
+    await generateSample(page);
+    const panel = await pickHeading(page);
+    await panel.getByRole(ROLE.tab, { name: EDITOR.structure }).click();
+
+    // Selecting the root via breadcrumb keeps the Structure tab (lifted state)
+    await panel.getByRole(ROLE.button, { name: "card-1" }).click();
+    const rootPanel = page.locator("[data-editor-panel]");
+    await expect(
+      rootPanel.getByRole(ROLE.tab, { name: EDITOR.structure }),
+    ).toHaveAttribute("aria-selected", "true");
+
+    // Boundary arrows: first child cannot move up, last child cannot move down
+    const headingRow = rootPanel
+      .getByRole("button", { name: "Heading heading-1" })
+      .locator("xpath=..");
+    const textRow = rootPanel
+      .getByRole("button", { name: "Text text-1" })
+      .locator("xpath=..");
+    await expect(
+      headingRow.getByRole("button", { name: EDITOR.moveUp }),
+    ).toBeDisabled();
+    await expect(
+      textRow.getByRole("button", { name: EDITOR.moveDown }),
+    ).toBeDisabled();
+
+    // Move the heading below the text — selection stays on the root
+    await headingRow.getByRole("button", { name: EDITOR.moveDown }).click();
+    let entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(2);
+    expect(entries[0].head).toBe(1);
+    expect(
+      entries[0].revisions?.[1]?.spec.elements["card-1"]?.children,
+    ).toEqual(["text-1", "heading-1"]);
+
+    // Duplicate the heading — the clone lands after it and becomes selected
+    await rootPanel.getByRole("button", { name: "Heading heading-1" }).click();
+    await rootPanel.getByRole(ROLE.button, { name: EDITOR.duplicate }).click();
+    await expect(page.getByText(UI.mockHeading)).toHaveCount(2);
+    await expect(rootPanel.getByText("heading-2")).toBeVisible();
+    entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(3);
+    expect(entries[0].head).toBe(2);
+    expect(
+      entries[0].revisions?.[2]?.spec.elements["card-1"]?.children,
+    ).toEqual(["text-1", "heading-1", "heading-2"]);
+
+    // Group the original heading into a Stack — selection moves to the container
+    await rootPanel.getByRole(ROLE.button, { name: "card-1" }).click();
+    await rootPanel.getByRole("button", { name: "Heading heading-1" }).click();
+    await rootPanel
+      .getByRole(ROLE.button, { name: EDITOR.group, exact: true })
+      .click();
+    const groupPicker = page.getByRole("dialog");
+    await expect(
+      groupPicker.getByText(EDITOR.pickerGroupTitle, { exact: true }),
+    ).toBeVisible();
+    await groupPicker.getByPlaceholder(EDITOR.pickerSearch).fill("Stack");
+    await groupPicker
+      .getByRole("option")
+      .filter({ hasText: /^Stack\b/ })
+      .first()
+      .click();
+    await expect(rootPanel.getByText("stack-1")).toBeVisible();
+    entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(4);
+    expect(entries[0].head).toBe(3);
+    expect(
+      entries[0].revisions?.[3]?.spec.elements["card-1"]?.children,
+    ).toEqual(["text-1", "stack-1", "heading-2"]);
+    expect(
+      entries[0].revisions?.[3]?.spec.elements["stack-1"]?.children,
+    ).toEqual(["heading-1"]);
+
+    // Ungroup dissolves the stack and splices the heading back into the root
+    await rootPanel.getByRole(ROLE.button, { name: EDITOR.ungroup }).click();
+    await expect(rootPanel.getByText("heading-1")).toBeVisible();
+    await expect(page.getByText(UI.mockHeading)).toHaveCount(2);
+    entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(5);
+    expect(entries[0].head).toBe(4);
+    expect(
+      entries[0].revisions?.[4]?.spec.elements["card-1"]?.children,
+    ).toEqual(["text-1", "heading-1", "heading-2"]);
+    expect(entries[0].revisions?.[4]?.spec.elements["stack-1"]).toBeUndefined();
+
+    // Root protection: remove, duplicate, and unwrap all disabled
+    await rootPanel.getByRole(ROLE.button, { name: "card-1" }).click();
+    await expect(
+      rootPanel.getByRole(ROLE.button, { name: EDITOR.remove }),
+    ).toBeDisabled();
+    await expect(
+      rootPanel.getByRole(ROLE.button, { name: EDITOR.duplicate }),
+    ).toBeDisabled();
+    await expect(
+      rootPanel.getByRole(ROLE.button, { name: EDITOR.ungroup }),
+    ).toBeDisabled();
+
+    entries = await readHistoryStorage(page);
+    expect(entries[0].revisions).toHaveLength(5);
+    expect(entries[0].head).toBe(4);
   });
 
   test("x-ray outlines containers and pick hover shows a badge", async ({

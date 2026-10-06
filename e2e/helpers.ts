@@ -45,12 +45,21 @@ export function generateCalls(page: Page): Promise<number> {
   );
 }
 
+export interface StoredElement {
+  children?: string[];
+}
+
+export interface StoredSpec {
+  root: string;
+  elements: Record<string, StoredElement | undefined>;
+}
+
 export interface StoredEntry {
   id: string;
   prompt: string;
   createdAt: number;
-  spec: { root: string; elements: Record<string, unknown> };
-  revisions?: { label: string; createdAt: number }[];
+  spec: StoredSpec;
+  revisions?: { label: string; createdAt: number; spec: StoredSpec }[];
   head?: number;
 }
 
