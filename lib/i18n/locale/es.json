@@ -18,6 +18,7 @@
   },
   "editor": {
     "pick": "Seleccionar",
+    "dragdrop": "Arrastrar y soltar",
     "xray": "Rayos X",
     "panelTitle": "Editor de elemento",
     "close": "Cerrar",

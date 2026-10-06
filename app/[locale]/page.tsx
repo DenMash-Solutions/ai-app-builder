@@ -100,6 +100,7 @@ function Playground() {
   const [restoredSpec, setRestoredSpec] = useState<Spec | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pickMode, setPickMode] = useState(false);
+  const [dndMode, setDndMode] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedChain, setSelectedChain] = useState<InstanceChain | null>(
@@ -560,8 +561,10 @@ function Playground() {
               {displayedSpec && !isStreaming && (
                 <ToolRail
                   pickMode={pickMode}
+                  dndMode={dndMode}
                   xrayMode={xrayMode}
                   onTogglePick={handleTogglePick}
+                  onToggleDnd={() => setDndMode((prev) => !prev)}
                   onToggleXray={() => setXrayMode((prev) => !prev)}
                   onClear={handleClearCurrent}
                 />
@@ -572,7 +575,7 @@ function Playground() {
                 className={`absolute inset-0 overflow-y-auto ${
                   pickMode ? "jr-pick-enabled" : ""
                 } ${xrayMode ? "jr-xray" : ""} ${
-                  displayedSpec && !isStreaming ? "jr-dnd" : ""
+                  dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
                 }`}
               >
                 <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
@@ -610,7 +613,7 @@ function Playground() {
                   {/* Before PickOverlay: both attach capture listeners on the
               container, and listener order follows render order. */}
                   <CanvasDnd
-                    enabled={displayedSpec !== null && !isStreaming}
+                    enabled={dndMode && displayedSpec !== null && !isStreaming}
                     containerRef={containerRef}
                     spec={displayedSpec}
                     onMoveTo={handleMoveTo}

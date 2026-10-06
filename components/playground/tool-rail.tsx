@@ -1,21 +1,25 @@
 "use client";
 
-import { Eraser, Layers, MousePointer2 } from "lucide-react";
+import { Eraser, Hand, Layers, MousePointer2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 
 interface ToolRailProps {
   pickMode: boolean;
+  dndMode: boolean;
   xrayMode: boolean;
   onTogglePick: () => void;
+  onToggleDnd: () => void;
   onToggleXray: () => void;
   onClear: () => void;
 }
 
 export function ToolRail({
   pickMode,
+  dndMode,
   xrayMode,
   onTogglePick,
+  onToggleDnd,
   onToggleXray,
   onClear,
 }: ToolRailProps) {
@@ -32,6 +36,17 @@ export function ToolRail({
         onClick={onTogglePick}
       >
         <MousePointer2 />
+      </Button>
+      <Button
+        type="button"
+        variant={dndMode ? "default" : "ghost"}
+        size="icon"
+        aria-pressed={dndMode}
+        aria-label={t("editor.dragdrop")}
+        title={t("editor.dragdrop")}
+        onClick={onToggleDnd}
+      >
+        <Hand />
       </Button>
       <Button
         type="button"

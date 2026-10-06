@@ -312,6 +312,10 @@ test.describe("editor", () => {
     await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
     await expect(page.locator("[data-editor-panel]")).toHaveCount(0);
 
+    // Drag starts disabled — opt in via the tool rail
+    await page.getByRole(ROLE.button, { name: EDITOR.dragdrop }).click();
+    await expect(page.locator(".jr-dnd")).toHaveCount(1);
+
     const box = async (key: string) => {
       const bounds = await page
         .locator(`[data-jr-key="${key}"] > *`)
@@ -404,6 +408,50 @@ test.describe("editor", () => {
     await expect(page.locator('[data-jr-key="stack-1"]')).not.toContainText(
       UI.mockBody,
     );
+  });
+
+  test("drag mode starts off and the tool rail toggle gates it", async ({
+    page,
+  }) => {
+    await generateSample(page);
+
+    const toggle = page.getByRole(ROLE.button, { name: EDITOR.dragdrop });
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".jr-dnd")).toHaveCount(0);
+
+    // A drag attempt while disabled never arms: no ghost, no revision
+    const before = await readHistoryStorage(page);
+    const text = await page
+      .locator('[data-jr-key="text-1"] > *')
+      .first()
+      .boundingBox();
+    const heading = await page
+      .locator('[data-jr-key="heading-1"] > *')
+      .first()
+      .boundingBox();
+    if (!text || !heading) throw new Error("missing drag targets");
+    await page.mouse.move(text.x + text.width / 2, text.y + text.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(text.x + 20, text.y);
+    await page.mouse.move(
+      heading.x + heading.width / 2,
+      heading.y + heading.height / 2,
+      { steps: 6 },
+    );
+    await expect(page.locator("[data-dnd-ghost]")).toHaveCount(0);
+    await page.mouse.up();
+
+    const after = await readHistoryStorage(page);
+    expect(after[0].revisions).toHaveLength(before[0].revisions?.length ?? 0);
+
+    // Toggling on arms drag mode, toggling off disarms it
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".jr-dnd")).toHaveCount(1);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".jr-dnd")).toHaveCount(0);
   });
 
   test("x-ray outlines containers and pick hover shows a badge", async ({

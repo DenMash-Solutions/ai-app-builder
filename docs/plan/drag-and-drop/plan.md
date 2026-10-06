@@ -27,6 +27,7 @@ Let users rearrange components by dragging them directly on the rendered canvas:
 - **page.tsx wiring**: `handleMoveTo(key, parentKey, index)` mirroring `handleMove`
 - **i18n**: indicator/aria labels in `en` + `es` (parity)
 - **E2E**: Playwright pointer drag (`mouse.down` → `mouse.move` → `mouse.up`) asserting (a) cross-container move reflected in `revs`/`head` storage and DOM order, (b) Esc cancels with no new revision
+- **Tool-rail mode toggle** (scope change 2026-10-06): drag is no longer always-on — it starts **OFF** and is gated by a 4th ToolRail button (`Hand` icon between Pick and X-ray, `aria-pressed`, label `editor.dragdrop`), independent of Pick/X-ray; gates both the container `jr-dnd` class and `CanvasDnd enabled` (listeners detach via the existing early return)
 
 ### Out of scope
 
@@ -52,6 +53,12 @@ Let users rearrange components by dragging them directly on the rendered canvas:
 2. **Draggable scope: any element** — 5 px threshold preserves click-to-select
 3. **Named-slot drop targets: default `children` only** — dragging out of a named slot supported; per-slot zones descoped
 
+## Decisions (resolved 2026-10-06, approved by user)
+
+4. **Default state: OFF** — matches Pick/X-ray (both start off); drag becomes explicit opt-in. Rejected: ON (preserves always-on behavior but keeps the complaint alive)
+5. **Toggle is independent of Pick mode** — same as X-ray today; pick + drag can combine. Rejected: mutually exclusive (changes pick behavior too, and the e2e deliberately combines them)
+6. **Gate in `page.tsx`, not inside `canvas-dnd.tsx`** — one `dndMode` state drives both the `.jr-dnd` container class and the `enabled` prop; the component already early-returns when `enabled` is false. Rejected: internal mode (state belongs with pick/xray, component stays stateless)
+
 ## Verification
 
 - [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e` — all green (76 unit, 18 e2e)
@@ -59,6 +66,7 @@ Let users rearrange components by dragging them directly on the rendered canvas:
 - [x] E2E drag test: reorder + cross-container + Esc-cancel + undo-after-drag (`editor.spec.ts`)
 - [x] MCP live check: real Gemini sign-in spec — cross-container drop (`email-field` → `action-stack`, label `structure:move`, revs 1→2), Escape cancel (no revision), Cmd+Z restore (DOM + storage), ghost/indicator visually confirmed via screenshot
 - [x] i18n `en`/`es` parity (`editor.dnd.grabbed`)
+- [x] Tool-rail toggle (2026-10-06): chain green (format/lint/tsc, 101 unit, build, **22 e2e** — new test "drag mode starts off and the tool rail toggle gates it": default `aria-pressed=false` + no `.jr-dnd`, disabled drag never arms (no ghost, no revision), toggle on/off flips both); MCP live: rail shows Pick → Drag & drop → X-ray → Clear, default off, toggle on → `pressed=true` + `.jr-dnd` + `cursor: grab`, toggle off → `cursor: auto`; `editor.dragdrop` en/es parity checked
 
 ## Status log
 
@@ -67,3 +75,5 @@ Let users rearrange components by dragging them directly on the rendered canvas:
 | 2026-10-05 | plan drafted (awaiting answers to open questions) |
 | 2026-10-05 | approved — canvas surface, any-element drag, children-only drops |
 | 2026-10-05 | implemented — full chain green (76 unit / 18 e2e) + MCP live drag check passed |
+| 2026-10-06 | scope change approved — drag gated by tool-rail toggle, default OFF, independent of pick (decisions 4–6) |
+| 2026-10-06 | toggle implemented — chain green (101 unit / 22 e2e) + MCP live toggle check passed |

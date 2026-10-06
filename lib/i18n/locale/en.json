@@ -18,6 +18,7 @@
   },
   "editor": {
     "pick": "Pick",
+    "dragdrop": "Drag & drop",
     "xray": "X-ray",
     "panelTitle": "Element editor",
     "close": "Close",
