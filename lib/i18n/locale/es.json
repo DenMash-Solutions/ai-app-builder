@@ -26,6 +26,11 @@
     "apply": "Aplicar",
     "noEditableProps": "Sin propiedades editables",
     "freeformPlaceholder": "Describe el cambio…",
+    "instance": {
+      "scope": "elemento {index}/{count} · {path}",
+      "structureNote": "Las ediciones de estructura se aplican a los {count} elementos (plantilla compartida)",
+      "readonly": "Solo lectura — expresiones como $cond o $template no se pueden editar directamente; usa la pestaña Acciones"
+    },
     "tabs": {
       "properties": "Propiedades",
       "structure": "Estructura",
@@ -43,6 +48,9 @@
       "moveDown": "Bajar",
       "children": "Hijos",
       "noChildren": "Sin elementos hijos"
+    },
+    "dnd": {
+      "grabbed": "Arrastrando {key}"
     },
     "picker": {
       "title": "Insertar componente",

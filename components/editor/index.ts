@@ -1,4 +1,5 @@
 export { ActionTiles } from "./action-tiles";
+export { CanvasDnd } from "./canvas-dnd";
 export { ComponentPicker } from "./component-picker";
 export { EditPanel, PANEL_TABS, type PanelTab } from "./edit-panel";
 export { HoverBadge } from "./hover-badge";

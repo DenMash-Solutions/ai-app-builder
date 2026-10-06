@@ -160,6 +160,12 @@
   outline-offset: 2px;
 }
 
+/* Drag & drop: grab affordance on canvas elements. Declared before the pick
+   rules so pick mode's crosshair still wins when both are active. */
+.jr-dnd [data-jr-key] {
+  cursor: grab;
+}
+
 /* Pick mode: json-render tags each element with a display:contents span
    ([data-jr-key]) which paints no outline itself — style its element child.
    :has() keeps the hover ring on the deepest picked element only. */
@@ -173,4 +179,18 @@
 .jr-pick-enabled [data-jr-selected="true"] > * {
   outline: 2px solid #fbbf24;
   outline-offset: 2px;
+}
+
+/* Active drag: lock the cursor, stop text selection, and give zero-height
+   (empty) containers a real hit area so the "inside" zone is reachable. */
+[data-dnd-dragging],
+[data-dnd-dragging] * {
+  cursor: grabbing !important;
+}
+[data-dnd-dragging] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-dnd-dragging] [data-jr-key] > *:empty {
+  min-height: 16px;
 }

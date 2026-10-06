@@ -1,5 +1,6 @@
 import type { Spec, UIElement } from "@json-render/core";
 import { REVISION_LABELS } from "@/lib/history";
+import { isContainerType } from "@/lib/playground/catalog";
 
 export const STRUCTURE_OPS = {
   insert: "insert",
@@ -9,6 +10,20 @@ export const STRUCTURE_OPS = {
   move: "move",
   duplicate: "duplicate",
 } as const;
+
+export const DROP_ZONES = {
+  before: "before",
+  after: "after",
+  inside: "inside",
+} as const;
+
+export type DropZone = (typeof DROP_ZONES)[keyof typeof DROP_ZONES];
+
+export interface MoveTarget {
+  key: string;
+  targetParentKey: string;
+  index: number;
+}
 
 export type StructureOp = (typeof STRUCTURE_OPS)[keyof typeof STRUCTURE_OPS];
 
@@ -281,6 +296,112 @@ export function moveSibling(
       [parentKey]: { ...parent, children },
     },
   };
+}
+
+/**
+ * Maps a hover zone (from canvas hit-testing) to a concrete move request.
+ * `index` is expressed against the target's `children` as currently rendered;
+ * `moveElement` corrects it when the source and target share a parent.
+ * Returns null for: unknown keys, non-container "inside", slot children as
+ * before/after anchors, and any target inside the dragged subtree (cycle).
+ */
+export function resolveMoveTarget(
+  spec: Spec,
+  request: { key: string; hoverKey: string; zone: DropZone },
+): MoveTarget | null {
+  const dragged = spec.elements[request.key];
+  const hover = spec.elements[request.hoverKey];
+  if (!dragged || !hover) return null;
+
+  let targetParentKey: string;
+  let index: number;
+
+  if (request.zone === DROP_ZONES.inside) {
+    if (!isContainerType(hover.type)) return null;
+    targetParentKey = request.hoverKey;
+    index = (hover.children ?? []).length;
+  } else {
+    const parentKey = findParentKey(spec, request.hoverKey);
+    if (!parentKey) return null;
+    const siblings = spec.elements[parentKey]?.children ?? [];
+    const hoverIndex = siblings.indexOf(request.hoverKey);
+    // Slot children have no sibling position in `children` — no before/after.
+    if (hoverIndex === -1) return null;
+    targetParentKey = parentKey;
+    index = request.zone === DROP_ZONES.before ? hoverIndex : hoverIndex + 1;
+  }
+
+  if (getAncestorPath(spec, targetParentKey).includes(request.key)) return null;
+  return { key: request.key, targetParentKey, index };
+}
+
+/**
+ * Moves `key` (with its subtree) from wherever it currently lives — `children`
+ * or a named slot — into `targetParentKey.children` at `index`. A same-parent
+ * `index` refers to the array before removal and is corrected internally;
+ * a no-op landing position and every guard failure return null.
+ */
+export function moveElement(spec: Spec, request: MoveTarget): Spec | null {
+  const { key, targetParentKey } = request;
+  if (key === spec.root) return null;
+  if (!spec.elements[key] || !spec.elements[targetParentKey]) return null;
+  if (getAncestorPath(spec, targetParentKey).includes(key)) return null;
+
+  const sourceParentKey = findParentKey(spec, key);
+  if (!sourceParentKey) return null;
+  const sourceParent = spec.elements[sourceParentKey];
+  if (!sourceParent) return null;
+
+  const sourceSlot = Object.entries(sourceParent.slots ?? {}).find(
+    ([, slotKeys]) => slotKeys.includes(key),
+  )?.[0];
+  const inChildren = (sourceParent.children ?? []).includes(key);
+  if (!inChildren && sourceSlot === undefined) return null;
+
+  const removalIndex = inChildren
+    ? (sourceParent.children ?? []).indexOf(key)
+    : -1;
+  let index = request.index;
+  if (
+    sourceParentKey === targetParentKey &&
+    inChildren &&
+    removalIndex < index
+  ) {
+    index -= 1;
+  }
+
+  const elements: Spec["elements"] = { ...spec.elements };
+  if (inChildren) {
+    elements[sourceParentKey] = {
+      ...sourceParent,
+      children: (sourceParent.children ?? []).filter((child) => child !== key),
+    };
+  } else {
+    const slots: NonNullable<UIElement["slots"]> = {
+      ...(sourceParent.slots ?? {}),
+    };
+    slots[sourceSlot as string] = (slots[sourceSlot as string] ?? []).filter(
+      (child) => child !== key,
+    );
+    elements[sourceParentKey] = { ...sourceParent, slots };
+  }
+
+  if (
+    sourceParentKey === targetParentKey &&
+    inChildren &&
+    index === removalIndex
+  ) {
+    return null;
+  }
+
+  // Re-read the target: source and target may be the same element.
+  const nextTarget = elements[targetParentKey];
+  if (!nextTarget) return null;
+  const children = [...(nextTarget.children ?? [])];
+  children.splice(Math.max(0, Math.min(index, children.length)), 0, key);
+  elements[targetParentKey] = { ...nextTarget, children };
+
+  return { ...spec, elements };
 }
 
 /**

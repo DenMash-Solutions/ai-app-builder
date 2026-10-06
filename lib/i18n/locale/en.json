@@ -26,6 +26,11 @@
     "apply": "Apply",
     "noEditableProps": "No editable properties",
     "freeformPlaceholder": "Describe the change…",
+    "instance": {
+      "scope": "item {index}/{count} · {path}",
+      "structureNote": "Structure edits apply to all {count, plural, one {# item} other {# items}} (shared template)",
+      "readonly": "Read-only — expressions like $cond or $template cannot be edited directly; use the Actions tab"
+    },
     "tabs": {
       "properties": "Properties",
       "structure": "Structure",
@@ -43,6 +48,9 @@
       "moveDown": "Move down",
       "children": "Children",
       "noChildren": "No child elements"
+    },
+    "dnd": {
+      "grabbed": "Dragging {key}"
     },
     "picker": {
       "title": "Insert component",

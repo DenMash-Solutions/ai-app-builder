@@ -3,14 +3,17 @@ import type { Spec } from "@json-render/core";
 import { validateSpec } from "@json-render/core";
 import { REVISION_LABELS } from "@/lib/history";
 import {
+  DROP_ZONES,
   MOVE_DIRECTIONS,
   STRUCTURE_OPS,
   duplicateElement,
   findParentKey,
   getAncestorPath,
   insertElement,
+  moveElement,
   moveSibling,
   removeElement,
+  resolveMoveTarget,
   structureRevisionLabel,
   unwrapElement,
   wrapElement,
@@ -205,6 +208,255 @@ describe("moveSibling", () => {
     expect(moveSibling(spec, "heading", MOVE_DIRECTIONS.up)).toBeNull();
     expect(moveSibling(spec, "stack-1", MOVE_DIRECTIONS.down)).toBeNull();
     expect(moveSibling(spec, "card-1", MOVE_DIRECTIONS.up)).toBeNull();
+  });
+});
+
+describe("moveElement", () => {
+  function makeSlotSpec(): Spec {
+    return {
+      root: "card-1",
+      elements: {
+        "card-1": {
+          type: "Card",
+          props: { title: "Card" },
+          children: ["heading"],
+          slots: { header: ["caption"] },
+        },
+        heading: { type: "Heading", props: { text: "Hi", level: "h1" } },
+        caption: { type: "Text", props: { text: "Cap" } },
+      },
+    };
+  }
+
+  test("moves a subtree across containers", () => {
+    const spec = makeSpec();
+    const moved = moveElement(spec, {
+      key: "text-1",
+      targetParentKey: "card-1",
+      index: 0,
+    });
+
+    expect(moved).not.toBeNull();
+    expect(moved!.elements["card-1"].children).toEqual([
+      "text-1",
+      "heading",
+      "stack-1",
+    ]);
+    expect(moved!.elements["stack-1"].children).toEqual(["button-1"]);
+    // Original spec untouched (immutable primitive)
+    expect(spec.elements["card-1"].children).toEqual(["heading", "stack-1"]);
+  });
+
+  test("same-parent reorder corrects the pre-removal index", () => {
+    const spec = makeSpec();
+    // "after stack-1" = index 2 in [heading, stack-1]; heading is removed first
+    const moved = moveElement(spec, {
+      key: "heading",
+      targetParentKey: "card-1",
+      index: 2,
+    });
+
+    expect(moved!.elements["card-1"].children).toEqual(["stack-1", "heading"]);
+  });
+
+  test("dropping at the current position is a no-op", () => {
+    const spec = makeSpec();
+    // Before stack-1 corrects to its own slot → no change, no revision
+    expect(
+      moveElement(spec, {
+        key: "heading",
+        targetParentKey: "card-1",
+        index: 1,
+      }),
+    ).toBeNull();
+    expect(
+      moveElement(spec, {
+        key: "heading",
+        targetParentKey: "card-1",
+        index: 0,
+      }),
+    ).toBeNull();
+  });
+
+  test("refuses cycles, the root, and unknown keys", () => {
+    const spec = makeSpec();
+    expect(
+      moveElement(spec, {
+        key: "stack-1",
+        targetParentKey: "stack-1",
+        index: 0,
+      }),
+    ).toBeNull();
+    expect(
+      moveElement(spec, {
+        key: "stack-1",
+        targetParentKey: "button-1",
+        index: 0,
+      }),
+    ).toBeNull();
+    expect(
+      moveElement(spec, {
+        key: "card-1",
+        targetParentKey: "stack-1",
+        index: 0,
+      }),
+    ).toBeNull();
+    expect(
+      moveElement(spec, {
+        key: "missing",
+        targetParentKey: "card-1",
+        index: 0,
+      }),
+    ).toBeNull();
+    expect(
+      moveElement(spec, {
+        key: "text-1",
+        targetParentKey: "missing",
+        index: 0,
+      }),
+    ).toBeNull();
+  });
+
+  test("clamps out-of-range indices", () => {
+    const spec = makeSpec();
+    const appended = moveElement(spec, {
+      key: "text-1",
+      targetParentKey: "card-1",
+      index: 99,
+    });
+    expect(appended!.elements["card-1"].children).toEqual([
+      "heading",
+      "stack-1",
+      "text-1",
+    ]);
+
+    const prepended = moveElement(spec, {
+      key: "heading",
+      targetParentKey: "stack-1",
+      index: -5,
+    });
+    expect(prepended!.elements["stack-1"].children).toEqual([
+      "heading",
+      "text-1",
+      "button-1",
+    ]);
+  });
+
+  test("moves out of a named slot into children", () => {
+    const spec = makeSlotSpec();
+    expect(
+      moveElement(spec, {
+        key: "caption",
+        targetParentKey: "stack-1",
+        index: 0,
+      }),
+    ).toBeNull(); // stack-1 does not exist in this spec
+
+    const intoCard = moveElement(spec, {
+      key: "caption",
+      targetParentKey: "card-1",
+      index: 1,
+    });
+    expect(intoCard!.elements["card-1"].slots).toEqual({ header: [] });
+    expect(intoCard!.elements["card-1"].children).toEqual([
+      "heading",
+      "caption",
+    ]);
+    expect(intoCard!.elements["caption"].type).toBe("Text");
+  });
+});
+
+describe("resolveMoveTarget", () => {
+  test("before/after anchor on the hovered sibling's parent", () => {
+    const spec = makeSpec();
+    expect(
+      resolveMoveTarget(spec, {
+        key: "text-1",
+        hoverKey: "stack-1",
+        zone: DROP_ZONES.before,
+      }),
+    ).toEqual({ key: "text-1", targetParentKey: "card-1", index: 1 });
+    expect(
+      resolveMoveTarget(spec, {
+        key: "text-1",
+        hoverKey: "stack-1",
+        zone: DROP_ZONES.after,
+      }),
+    ).toEqual({ key: "text-1", targetParentKey: "card-1", index: 2 });
+  });
+
+  test("inside appends into the hovered container", () => {
+    const spec = makeSpec();
+    expect(
+      resolveMoveTarget(spec, {
+        key: "text-1",
+        hoverKey: "stack-1",
+        zone: DROP_ZONES.inside,
+      }),
+    ).toEqual({ key: "text-1", targetParentKey: "stack-1", index: 2 });
+    // Leaves cannot contain
+    expect(
+      resolveMoveTarget(spec, {
+        key: "stack-1",
+        hoverKey: "heading",
+        zone: DROP_ZONES.inside,
+      }),
+    ).toBeNull();
+  });
+
+  test("slot children and the root have no before/after anchor", () => {
+    const spec: Spec = {
+      root: "card-1",
+      elements: {
+        "card-1": {
+          type: "Card",
+          props: {},
+          children: ["heading"],
+          slots: { header: ["caption"] },
+        },
+        heading: { type: "Heading", props: {} },
+        caption: { type: "Text", props: {} },
+      },
+    };
+    expect(
+      resolveMoveTarget(spec, {
+        key: "heading",
+        hoverKey: "caption",
+        zone: DROP_ZONES.before,
+      }),
+    ).toBeNull();
+    expect(
+      resolveMoveTarget(spec, {
+        key: "caption",
+        hoverKey: "card-1",
+        zone: DROP_ZONES.after,
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects cycles and unknown keys", () => {
+    const spec = makeSpec();
+    expect(
+      resolveMoveTarget(spec, {
+        key: "stack-1",
+        hoverKey: "stack-1",
+        zone: DROP_ZONES.inside,
+      }),
+    ).toBeNull();
+    expect(
+      resolveMoveTarget(spec, {
+        key: "stack-1",
+        hoverKey: "text-1",
+        zone: DROP_ZONES.before,
+      }),
+    ).toBeNull();
+    expect(
+      resolveMoveTarget(spec, {
+        key: "missing",
+        hoverKey: "stack-1",
+        zone: DROP_ZONES.inside,
+      }),
+    ).toBeNull();
   });
 });
 
