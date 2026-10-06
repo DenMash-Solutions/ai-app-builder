@@ -6,11 +6,18 @@
    so their utility classes (padding/gap/alignment) get compiled. */
 @source "../node_modules/@json-render/shadcn/dist";
 
+/* Plan docs quote class names as examples (including arbitrary URL values) —
+   never scan them as candidates. */
+@source not "../docs";
+
 /* Guarantee runtime-selected classes (AI/pick editing) always compile. */
 @source inline("{bg,text,border}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
 @source inline("{hover:,focus-visible:,active:,dark:,dark:hover:}{bg,text}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
 @source inline("{hover:,focus-visible:,active:,dark:,dark:hover:}border-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
 @source inline("w-full h-full min-h-screen max-w-{xs,sm,md,lg,xl,2xl,3xl} mx-auto my-{0,1,2,4,6,8} rounded-{sm,md,lg,xl,2xl,3xl,full} border-{0,1,2,4,8} shadow-{sm,md,lg,xl,2xl,none} text-{xs,sm,base,lg,xl,2xl,3xl} font-{medium,semibold,bold} leading-{tight,normal,relaxed} gap-{1,2,3,4,5,6,8} p{,x,y,t,b,l,r}-{0,1,2,3,4,5,6,8,10,12,16} m{,x,y,t,b,l,r}-{0,1,2,3,4,5,6,8,10,12,16} space-y-{1,2,3,4,5,6,8} space-x-{1,2,3,4,5,6,8} opacity-{0,25,50,75,90,100} transition-{colors,all,none} duration-{150,200,300,500} scale-{90,95,100,105,110} translate-y-{-2,-1,0,1,2} cursor-{pointer,default} select-{none,auto} text-{left,center,right} whitespace-{nowrap,normal} overflow-{hidden,auto} truncate flex items-center justify-{between,center,start,end} grid-cols-{1,2,3,4,5,6} col-span-{1,2,3,4} hidden block relative absolute z-{10,20,50}");
+@source inline("h-{40,48,56,64,72,80,96} min-h-{40,64,80} object-{cover,contain,fill,none,scale-down} top-0 bottom-0 left-0 right-0 w-fit");
+@source inline("text-white/{50,60,70,80,90} text-black/{40,50,60,70} bg-white/{10,20,30,40,50,60,70,80,90} bg-black/{30,40,50,60,70,80}");
+@source inline("backdrop-blur-{xs,sm,md,lg} bg-gradient-to-{t,b,l,r} from-{black,white}/{50,60,70,80,90} via-transparent to-transparent");
 
 @custom-variant dark (&:is(.dark *));
 
