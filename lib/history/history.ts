@@ -11,6 +11,7 @@ export const REVISION_LABELS = {
   property: "property",
   action: "action",
   freeform: "freeform",
+  structure: "structure",
 } as const;
 
 export interface SpecRevision {
