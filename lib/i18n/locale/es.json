@@ -114,6 +114,7 @@
     "description": "El modelo no respondió, puede estar temporalmente no disponible. Cambia a otro modelo y tu última petición se reintentará automáticamente.",
     "switchAndRetry": "Cambiar y reintentar",
     "dismiss": "Ahora no",
-    "noSpec": "El modelo no devolvió una especificación válida."
+    "noSpec": "El modelo no devolvió una especificación válida.",
+    "noChanges": "El modelo no devolvió cambios utilizables en la especificación."
   }
 }

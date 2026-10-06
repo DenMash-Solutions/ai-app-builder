@@ -78,6 +78,7 @@ import {
   undoRevision,
   updateEntry,
 } from "@/lib/history";
+import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
@@ -128,6 +129,9 @@ function Playground() {
     prompt: string;
     context: Record<string, unknown>;
   } | null>(null);
+  // Pristine pre-steer spec for the no-op guard — the stream mutates
+  // context.previousSpec in place (see the onComplete comment).
+  const steerBaselineRef = useRef<Spec | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Element keys ([data-jr-key]) only render while devtools are marked
@@ -172,6 +176,23 @@ function Playground() {
       ) {
         clear();
         setFailure({ kind: "service", message: t("service.noSpec") });
+        return;
+      }
+
+      // A steer that completes with the spec unchanged (truncated or
+      // empty stream) would commit a no-op revision — treat it as a model
+      // failure so the dialog offers switch-and-retry. pendingOpRef stays
+      // intact so the retry replays the request. The baseline lives in its
+      // own ref: useUIStream shallow-copies context.previousSpec into its
+      // working spec, so in-place patch application mutates that object —
+      // it cannot be trusted as the pre-steer snapshot.
+      const baseline = steerBaselineRef.current;
+      if (
+        op.kind === PENDING_OP_KINDS.edit &&
+        isNonEmptySpec(baseline) &&
+        specsEqual(completedSpec, baseline)
+      ) {
+        setFailure({ kind: "service", message: t("service.noChanges") });
         return;
       }
       pendingOpRef.current = null;
@@ -252,6 +273,7 @@ function Playground() {
         label: promptRevisionLabel(prompt),
       };
       setRestoredSpec(null);
+      steerBaselineRef.current = structuredClone(base);
       sendNow(prompt, { previousSpec: structuredClone(base) });
       return;
     }
@@ -265,6 +287,7 @@ function Playground() {
       prompt,
     };
     setRestoredSpec(null);
+    steerBaselineRef.current = null;
     setActiveId(null);
     sendNow(prompt);
   };
@@ -313,6 +336,7 @@ function Playground() {
       label,
     };
     setRestoredSpec(null);
+    steerBaselineRef.current = structuredClone(base);
     sendNow(scopeInstruction(selectedKey, element.type, instruction), {
       previousSpec: structuredClone(base),
     });

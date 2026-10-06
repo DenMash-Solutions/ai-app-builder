@@ -36,6 +36,7 @@ export const ES_UI = {
 export const ACTIONS = {
   history: en.playground.history,
   generate: en.playground.generate,
+  steer: en.playground.steer,
   clear: en.playground.clear,
   openMenu: en.playground.openMenu,
   clearAll: en.historyDrawer.clearAll,
@@ -141,6 +142,7 @@ export const SERVICE = {
   description: en.service.description,
   switchAndRetry: en.service.switchAndRetry,
   dismiss: en.service.dismiss,
+  noChanges: en.service.noChanges,
 } as const;
 
 export const historyButtonName = (count?: number): string =>

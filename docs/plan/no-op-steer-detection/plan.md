@@ -1,6 +1,6 @@
 # No-Op Steer Detection — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-06
 
 ## Goal
@@ -24,16 +24,16 @@ A steer whose response yields no usable change currently commits an **identical 
 
 ## Design decisions
 
-1. Compare against `lastRequestRef` baseline rather than entry `revisions[head]` — rejected: reading the entry's head spec (requires history lookup + can drift), because the baseline is exactly what was sent as `currentSpec`
+1. Compare against a dedicated `steerBaselineRef` deep clone captured at steer time — rejected: `lastRequestRef.context.previousSpec`, because `useUIStream` shallow-copies it into its working spec (`{ ...previousSpec, elements: { ...previousSpec.elements } }`) and in-place patch application mutates the shared element objects, so by `onComplete` the baseline already holds the *after* spec (false no-op detections — discovered during implementation 2026-10-06); also rejected: reading the entry's head spec (requires history lookup + can drift)
 2. Reuse `kind: "service"` dialog rather than a toast — rejected: toast-only, because retry with a different model is the valuable recovery for flaky streams, and `noSpec` already established this pattern
 3. Structural deep-equal instead of `JSON.stringify` — rejected: stringify (key order after `applyPatch` spread can differ), because it risks false "changed" results
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`
-- [ ] New unit tests: `specsEqual` — equal-but-reordered keys, differing nested props, array order, missing vs undefined state
-- [ ] New e2e: truncated-steer → dialog + no new revision + dismiss → toast (assertions above)
-- [ ] Live MCP check: reproduce the 62-byte steer → dialog appears, history entry keeps its revision count
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`
+- [x] New unit tests: `specsEqual` — equal-but-reordered keys, differing nested props, array order, missing vs undefined state
+- [x] New e2e: truncated-steer → dialog + no new revision + dismiss → toast (assertions above)
+- [x] Live MCP check: reproduce the 62-byte steer → dialog appears, history entry keeps its revision count
 
 ## Status log
 
@@ -41,3 +41,4 @@ A steer whose response yields no usable change currently commits an **identical 
 | ---- | ----- |
 | 2026-10-06 | plan drafted |
 | 2026-10-06 | approved |
+| 2026-10-06 | implemented — chain green: format/lint/tsc, 108 unit, build, 27 e2e; live 62-byte truncation → noChanges toast + revCount unchanged. Baseline moved to steerBaselineRef (hook shallow-copy mutation discovered) |

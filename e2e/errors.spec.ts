@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { MODELS, PROMPTS, QUOTA, ROLE, SERVICE, UI } from "./constants";
+import {
+  ACTIONS,
+  MOCK_KEYS,
+  MODELS,
+  PROMPTS,
+  QUOTA,
+  ROLE,
+  SERVICE,
+  UI,
+} from "./constants";
 import {
   generateCalls,
   mockGenerate,
@@ -159,5 +168,41 @@ test.describe("error handling", () => {
 
     await expect(page.getByText(SERVICE.title)).toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(0);
+  });
+
+  test("a steer with no usable changes opens the service dialog and adds no revision", async ({
+    page,
+  }) => {
+    await mockGenerate(page);
+    await page.goto("/");
+    await waitForMsw(page);
+
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+
+    // The edit stream carries one truncated JSONL line — the fragment is
+    // dropped, so the completion equals the request baseline spec.
+    const truncatedLine = `{"op":"replace","path":"/elements/${MOCK_KEYS.heading}/props/text","value":"Cut`;
+    await page.evaluate((line) => {
+      (window as unknown as { __GENERATE_MOCK__?: object }).__GENERATE_MOCK__ =
+        { editLines: [line] };
+    }, truncatedLine);
+
+    await page
+      .getByPlaceholder(UI.promptPlaceholder)
+      .fill(PROMPTS.customBilling);
+    await page.getByRole(ROLE.button, { name: ACTIONS.steer }).click();
+
+    await expect(page.getByText(SERVICE.title)).toBeVisible();
+
+    const history = await readHistoryStorage(page);
+    expect(history).toHaveLength(1);
+    expect(history[0].head).toBe(0);
+    expect(history[0].revisions).toHaveLength(1);
+
+    await page.getByRole(ROLE.button, { name: SERVICE.dismiss }).click();
+    await expect(page.getByText(UI.generationFailed)).toBeVisible();
+    await expect(page.getByText(SERVICE.noChanges)).toBeVisible();
+    expect((await readHistoryStorage(page))[0].revisions).toHaveLength(1);
   });
 });
