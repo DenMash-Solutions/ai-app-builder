@@ -194,3 +194,12 @@
 [data-dnd-dragging] [data-jr-key] > *:empty {
   min-height: 16px;
 }
+
+/* Spec-level p-0/px-0 on a Card must also flush json-render's internal
+   CardContent (hard-coded px-6, unreachable from the root className).
+   class+attr specificity beats .px-6, so declaration order is irrelevant;
+   cards without p-0 keep the default gutters. */
+.p-0 > [data-slot="card-content"],
+.px-0 > [data-slot="card-content"] {
+  padding-inline: 0;
+}
