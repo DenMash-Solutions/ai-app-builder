@@ -3,6 +3,7 @@ import { streamText } from "ai";
 import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
 import { playgroundCatalog } from "@/lib/playground/catalog";
 import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
+import { validatePatchText } from "@/lib/playground/patch-text";
 
 export const maxDuration = 60;
 
@@ -117,6 +118,103 @@ export async function POST(req: Request) {
     },
   });
 
+  // The upstream finished before producing any text: the model returned no
+  // response (observed with unavailable model ids — a 200 here would reach
+  // the client as a silent "success" with an empty spec).
+  const emptyCompletion = (): Response => {
+    console.error(`[generate] model=${model} failed: empty completion`);
+    return Response.json(
+      {
+        error: `Service unavailable: ${model} returned no response — switch model and retry.`,
+        code: "service_unavailable",
+      },
+      { status: 503 },
+    );
+  };
+
+  // Edit mode buffers the whole response and validates JSONL completeness
+  // before replying: the client applies ops line by line, so a partial 200
+  // would commit a half-applied patch (observed: lite streams dying mid-
+  // JSONL with finishReason=stop). One retry absorbs the ~1-in-4 flake;
+  // still-invalid streams arrive as a classified 503 the service dialog
+  // already understands. Generate mode keeps true streaming below.
+  if (isEdit) {
+    type CollectResult =
+      | { kind: "text"; text: string }
+      | { kind: "error"; error: unknown }
+      | { kind: "empty" };
+
+    const collect = async (
+      stream: AsyncIterable<string>,
+    ): Promise<CollectResult> => {
+      const iterator = stream[Symbol.asyncIterator]();
+      let first: IteratorResult<string>;
+      try {
+        first = await iterator.next();
+      } catch (error) {
+        return { kind: "error", error };
+      }
+      if (first.done) return { kind: "empty" };
+      let text = first.value;
+      try {
+        for (;;) {
+          const next = await iterator.next();
+          if (next.done) break;
+          text += next.value;
+        }
+      } catch (error) {
+        return { kind: "error", error };
+      }
+      return { kind: "text", text };
+    };
+
+    let collected = await collect(result.textStream);
+    if (collected.kind === "error")
+      return errorResponse(collected.error, model);
+    if (collected.kind === "empty") return emptyCompletion();
+
+    let validation = validatePatchText(collected.text);
+    if (!validation.ok) {
+      console.warn(
+        `[edit] incomplete patch (${validation.reason}) — retrying once`,
+      );
+      const retryResult = streamText({
+        model: google(model),
+        system: systemPrompt,
+        prompt: userPrompt,
+        temperature: 0.7,
+        onFinish: ({ finishReason, usage, text }) => {
+          console.log(
+            `[edit-retry] finish=${finishReason} in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"}`,
+          );
+          console.log(`[edit-retry] tail=${JSON.stringify(text.slice(-300))}`);
+        },
+      });
+      collected = await collect(retryResult.textStream);
+      if (collected.kind === "error")
+        return errorResponse(collected.error, model);
+      if (collected.kind === "empty") return emptyCompletion();
+      validation = validatePatchText(collected.text);
+      if (!validation.ok) {
+        console.error(
+          `[edit] model=${model} failed after retry: ${validation.reason}`,
+        );
+        return Response.json(
+          {
+            error: `Service unavailable: ${model} returned an incomplete patch — switch model and retry.`,
+            code: "service_unavailable",
+          },
+          { status: 503 },
+        );
+      }
+    }
+
+    console.log(`[edit] patch ok patches=${validation.patchCount}`);
+    return new Response(collected.text, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+
   // Wait for the first chunk before committing to a 200 stream so upstream
   // quota/rate-limit errors surface as classifiable HTTP responses.
   const iterator = result.textStream[Symbol.asyncIterator]();
@@ -127,18 +225,8 @@ export async function POST(req: Request) {
     return errorResponse(error, model);
   }
 
-  // The upstream finished before producing any text: the model returned no
-  // response (observed with unavailable model ids — a 200 here would reach
-  // the client as a silent "success" with an empty spec).
   if (first.done) {
-    console.error(`[generate] model=${model} failed: empty completion`);
-    return Response.json(
-      {
-        error: `Service unavailable: ${model} returned no response — switch model and retry.`,
-        code: "service_unavailable",
-      },
-      { status: 503 },
-    );
+    return emptyCompletion();
   }
 
   const stream = new ReadableStream<string>({

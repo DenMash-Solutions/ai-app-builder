@@ -1,6 +1,6 @@
 # Atomic Patch Stream — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-06
 
 ## Goal
@@ -36,10 +36,10 @@ Edit-mode (`steer`) responses currently stream raw model text straight to the cl
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`
-- [ ] Unit: all `validatePatchText` cases above green
-- [ ] Live: replay the saved steer request (`curl -sN -X POST localhost:3000/api/generate --data-binary @…`) ×5 — every attempt returns either complete JSONL (all lines parse, ≥1 op) or a clean 503 JSON; **never** a partial 200
-- [ ] Live: UI steer on the gallery still applies patches end-to-end (no regression to normal edits)
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`
+- [x] Unit: all `validatePatchText` cases above green
+- [x] Live: replay the saved steer request (`curl -sN -X POST localhost:3000/api/generate --data-binary @…`) ×5 — every attempt returns either complete JSONL (all lines parse, ≥1 op) or a clean 503 JSON; **never** a partial 200
+- [x] Live: UI steer on the gallery still applies patches end-to-end (no regression to normal edits)
 
 ## Status log
 
@@ -47,3 +47,4 @@ Edit-mode (`steer`) responses currently stream raw model text straight to the cl
 | ---- | ----- |
 | 2026-10-06 | plan drafted |
 | 2026-10-06 | approved |
+| 2026-10-06 | implemented — chain green: format/lint/tsc, 118 unit, build, 27 e2e; curl ×5 (4× valid 6-op patches, 1× classified 503, never partial 200); UI steer applied end-to-end (rev 3→4) |
