@@ -116,6 +116,12 @@
 **Lesson Reference**: `controlled-input-drafts.md`
 **Prevention**: Controlled inputs with drafts always resolve `draft ?? serialize(props)` for every field kind; new field kind → update `currentText` AND `commitText` together + test; triage order: app pipeline → React fiber state → environment (last)
 
+### 20. Feature Plan Not Persisted to `docs/plan/` (NEW)
+
+**Problem**: Structure-editing feature's initial plan (including drag-and-drop scope) lived only in conversation → descoped silently, zero trace in the repo (no `docs/`, no git-history hit for "drag"); scope decisions unrecoverable after session ended
+**Lesson Reference**: `feature-plan.md`
+**Prevention**: Every feature plan written to `docs/plan/{kebab-feature}/plan.md` BEFORE code, committed with the feature; scope changes update the plan file in the same turn; chat-only plans don't count
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -247,6 +253,7 @@ When I see these → STOP and check lessons:
 - **NEW**: Playwright finds 0 but a11y tree shows the name → missing `{" "}` between JSX spans (`jsx-whitespace-names.md`)
 - **NEW**: MCP screenshot contradicts a change you just made → stale frame; verify with `evaluate_script` (`mcp-verification.md`)
 - **NEW**: Fixed-dark component invisible in light theme → scope `.dark` class on the island (`mcp-verification.md`)
+- **NEW**: Writing a feature plan only in chat → must persist to `docs/plan/{feature}/plan.md` (`feature-plan.md`)
 
 ## ⚡ Quick Recovery Commands
 

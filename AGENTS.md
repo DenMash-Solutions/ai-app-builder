@@ -37,6 +37,7 @@ Before finishing any change: `bun run lint && bunx tsc --noEmit && bun run test`
 - Config at root: `next.config.ts`, `tsconfig.json`, `eslint.config.mjs` (flat config), `postcss.config.mjs`
 - `CLAUDE.md` contains `@AGENTS.md` (reference alias)
 - `components/`, `lib/` — shared UI and utilities; create as needed and colocate feature code
+- `docs/plan/` — per-feature implementation plans (mandated by `.agents/rules/feature-plan.md`)
 
 ## Rules and lessons
 
