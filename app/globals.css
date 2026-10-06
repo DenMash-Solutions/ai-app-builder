@@ -195,36 +195,12 @@
   min-height: 16px;
 }
 
-/* Spec-level horizontal padding on a Card root (p-* or px-*, safelist
-   tokens) means the spec owns the card's padding budget — suppress
-   json-render's hard-coded CardContent px-6 so gutters never stack
-   (root 4px + content 24px). py-* or pt-* alone express no horizontal
-   intent and don't trigger this. [class~=…] token match (0,2,0) beats
-   .px-6 (0,1,0) regardless of order. */
-:is(
-    [class~="p-0"],
-    [class~="p-1"],
-    [class~="p-2"],
-    [class~="p-3"],
-    [class~="p-4"],
-    [class~="p-5"],
-    [class~="p-6"],
-    [class~="p-8"],
-    [class~="p-10"],
-    [class~="p-12"],
-    [class~="p-16"],
-    [class~="px-0"],
-    [class~="px-1"],
-    [class~="px-2"],
-    [class~="px-3"],
-    [class~="px-4"],
-    [class~="px-5"],
-    [class~="px-6"],
-    [class~="px-8"],
-    [class~="px-10"],
-    [class~="px-12"],
-    [class~="px-16"]
-  )
+/* Spec-owned root padding (any p- or px- token, space-delimited) absorbs
+   the card budget — json-render's hard-coded CardContent px-6 must not
+   stack on top of it (root 4px + content 24px). py-/pt- tokens, hover:
+   and sm: variants don't match (no plain horizontal intent). :is() keeps
+   (0,2,0) specificity, beating .px-6 regardless of declaration order. */
+:is([class^="p-"], [class*=" p-"], [class^="px-"], [class*=" px-"])
   > [data-slot="card-content"] {
   padding-inline: 0;
 }

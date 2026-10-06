@@ -38,15 +38,20 @@ wrapper.
 ## Design decisions
 
 1. Scope rule to explicit horizontal root padding only —
-   `:is([class~="p-0"]…[class~="px-16"]) > [data-slot="card-content"]`
-   (safelist tokens), class+attr specificity beats `.px-6` regardless of CSS
-   order; cards with no root `p-*`/`px-*` keep shadcn's default gutters, and
-   `py-*`/`pt-*` alone don't suppress (no horizontal intent). Rejected:
-   blanket `[data-slot="card-content"] { padding-inline: 0 }`, because it
-   would strip padding from every card in every generated app (2026-10-06).
-2. Enumerate safelist tokens rather than substring-match `[class*="p-"]` —
-   rejected: `"p-"` also matches inside `gap-4`/`shadow-…` tokens
-   (2026-10-06).
+   `:is([class^="p-"], [class*=" p-"], [class^="px-"], [class*=" px-"]) >
+   [data-slot="card-content"]` — space-delimited token-prefix match covering
+   every safelined `p-*`/`px-*` value in one line (class+attr specificity
+   beats `.px-6` regardless of CSS order); cards with no root `p-*`/`px-*`
+   keep shadcn's default gutters, and `py-*`/`pt-*` alone don't suppress (no
+   horizontal intent). Rejected: blanket
+   `[data-slot="card-content"] { padding-inline: 0 }`, because it would strip
+   padding from every card in every generated app (2026-10-06).
+2. Token-prefix match rather than enumerating the 22 safelist values —
+   rejected: verbose, and dropped values like `p-0.5`; rejected
+   `[class*="p-"]` substring — also matches inside `gap-4`
+   (2026-10-06). Registry-level `Card` override (clone `CardContent` with
+   `px-0` from JS) considered instead — rejected: touches the render
+   pipeline for a styling concern (2026-10-06).
 
 ## Verification
 
