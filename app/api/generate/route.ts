@@ -4,6 +4,7 @@ import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
 import { playgroundCatalog } from "@/lib/playground/catalog";
 import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
 import { validatePatchText } from "@/lib/playground/patch-text";
+import { STYLING_RULES } from "@/lib/playground/styling-rules";
 
 export const maxDuration = 60;
 
@@ -13,12 +14,6 @@ Additional rules:
 - Never stop at a section header or an opening container — if you begin a section, finish it.
 - Prefer fewer components fully written over many components left half-finished.
 - End the stream only after the last section is complete.`;
-
-const STYLING_RULES = `
-Styling rules:
-- Prefer the "className" prop with Tailwind utility classes for visual styling (colors, spacing, layout, typography).
-- Put interaction states in className: hover:, focus-visible:, active:, dark: variants (e.g. "hover:bg-blue-300").
-- Use the "style" prop only for exact values Tailwind classes cannot express, and never set the same CSS property in both.`;
 
 interface GenerateBody {
   prompt?: unknown;

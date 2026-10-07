@@ -118,4 +118,227 @@ test.describe("runtime class coverage", () => {
 
     expect(failures).toEqual([]);
   });
+
+  test("semantic tokens and dark: variants compile and apply", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const failures = await page.evaluate(() => {
+      const results: string[] = [];
+      const style = (el: Element): Record<string, string> =>
+        getComputedStyle(el) as unknown as Record<string, string>;
+      const root = document.documentElement;
+      const hadDark = root.classList.contains("dark");
+      root.classList.remove("dark");
+
+      const probe = (className: string, parent?: Element): HTMLElement => {
+        const el = document.createElement("div");
+        el.className = className;
+        (parent ?? document.body).appendChild(el);
+        return el;
+      };
+      const cleanups: HTMLElement[] = [];
+      const tracked = (className: string, parent?: Element): HTMLElement => {
+        const el = probe(className, parent);
+        cleanups.push(el);
+        return el;
+      };
+      const expectDiffers = (
+        label: string,
+        className: string,
+        property: string,
+        baselineClass: string,
+      ): void => {
+        const withClass = tracked(className);
+        const baseline = tracked(baselineClass);
+        const actual = style(withClass)[property];
+        const base = style(baseline)[property];
+        if (actual === base) {
+          results.push(
+            `${label}: ${property} = "${actual}", same as baseline "${base}"`,
+          );
+        }
+      };
+      const expectValue = (
+        label: string,
+        el: HTMLElement,
+        property: string,
+        expected: string,
+      ): void => {
+        const actual = style(el)[property];
+        if (actual !== expected) {
+          results.push(
+            `${label}: ${property} = "${actual}", want "${expected}"`,
+          );
+        }
+      };
+
+      try {
+        // Semantic theme utilities: model picks that were not present in any
+        // scanned source file must still compile via @source inline.
+        expectDiffers(
+          "border-primary",
+          "border border-primary",
+          "borderColor",
+          "border",
+        );
+        expectDiffers(
+          "bg-destructive",
+          "bg-destructive",
+          "backgroundColor",
+          "",
+        );
+        expectDiffers("text-accent", "text-accent", "color", "");
+        expectDiffers("bg-input", "bg-input", "backgroundColor", "");
+
+        // dark: palette variants compile and gate on a .dark ancestor.
+        // blue-500 is oklch in Tailwind v4 and serializes as lab(...) in
+        // Chrome — assert applied-vs-transparent instead of an exact string.
+        const darkWrap = document.createElement("div");
+        darkWrap.className = "dark";
+        document.body.appendChild(darkWrap);
+        const inDark = tracked("dark:bg-blue-500", darkWrap);
+        const outDark = tracked("dark:bg-blue-500");
+        const inValue = style(inDark)["backgroundColor"];
+        if (inValue === "rgba(0, 0, 0, 0)" || inValue === "transparent") {
+          results.push(
+            `dark:bg-blue-500 inside .dark: backgroundColor = "${inValue}", want a color`,
+          );
+        }
+        expectValue(
+          "dark:bg-blue-500 outside .dark",
+          outDark,
+          "backgroundColor",
+          "rgba(0, 0, 0, 0)",
+        );
+        cleanups.push(darkWrap);
+
+        return results;
+      } finally {
+        for (const el of cleanups) el.remove();
+        if (hadDark) root.classList.add("dark");
+      }
+    });
+
+    expect(failures).toEqual([]);
+  });
+
+  test("responsive, slash-opacity and typography utilities compile and apply", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const failures = await page.evaluate(() => {
+      const results: string[] = [];
+      const style = (el: Element): Record<string, string> =>
+        getComputedStyle(el) as unknown as Record<string, string>;
+      const probe = (className: string, parent?: Element): HTMLElement => {
+        const el = document.createElement("div");
+        el.className = className;
+        (parent ?? document.body).appendChild(el);
+        return el;
+      };
+
+      // Responsive: the default Playwright viewport (1280px) matches sm/md/lg,
+      // so a compiled lg:grid-cols-4 must split a fixed-width probe into tracks.
+      const grid = probe("grid lg:grid-cols-4");
+      grid.style.width = "800px";
+      const tracks = style(grid)
+        ["gridTemplateColumns"].split(" ")
+        .filter(Boolean);
+      if (tracks.length !== 4) {
+        results.push(`lg:grid-cols-4: ${tracks.length} tracks, want 4`);
+      }
+      grid.remove();
+
+      const mdText = probe("md:text-5xl");
+      const mdSize = style(mdText)["fontSize"];
+      mdText.remove();
+      if (mdSize !== "48px") {
+        results.push(`md:text-5xl: fontSize = "${mdSize}", want "48px"`);
+      }
+
+      // Slash-opacity palette forms (subtle surfaces + dark: pairings).
+      const opaque = probe("bg-stone-100/50");
+      const opaqueValue = style(opaque)["backgroundColor"];
+      opaque.remove();
+      if (opaqueValue === "rgba(0, 0, 0, 0)") {
+        results.push(`bg-stone-100/50: backgroundColor is transparent`);
+      }
+
+      const darkWrap = probe("dark");
+      const inDark = probe("dark:bg-stone-900/90", darkWrap);
+      const outDark = probe("dark:bg-stone-900/90");
+      const inValue = style(inDark)["backgroundColor"];
+      const outValue = style(outDark)["backgroundColor"];
+      inDark.remove();
+      outDark.remove();
+      darkWrap.remove();
+      if (inValue === "rgba(0, 0, 0, 0)") {
+        results.push(`dark:bg-stone-900/90 inside .dark: transparent`);
+      }
+      if (outValue !== "rgba(0, 0, 0, 0)") {
+        results.push(
+          `dark:bg-stone-900/90 outside .dark: "${outValue}", want transparent`,
+        );
+      }
+
+      // Typography / misc observed in real model output.
+      const serif = probe("font-serif");
+      const serifFamily = style(serif)["fontFamily"];
+      serif.remove();
+      if (!serifFamily.includes("serif")) {
+        results.push(`font-serif: fontFamily = "${serifFamily}", want serif`);
+      }
+
+      const italicEl = probe("italic");
+      const italicValue = style(italicEl)["fontStyle"];
+      italicEl.remove();
+      if (italicValue !== "italic") {
+        results.push(`italic: fontStyle = "${italicValue}", want italic`);
+      }
+
+      const opacityEl = probe("opacity-85");
+      const opacityValue = style(opacityEl)["opacity"];
+      opacityEl.remove();
+      if (opacityValue !== "0.85") {
+        results.push(`opacity-85: opacity = "${opacityValue}", want 0.85`);
+      }
+
+      const aspectEl = probe("aspect-[3/4]");
+      const aspectValue = style(aspectEl)["aspectRatio"];
+      aspectEl.remove();
+      if (aspectValue !== "0.75" && aspectValue !== "3 / 4") {
+        results.push(`aspect-[3/4]: aspectRatio = "${aspectValue}", want 0.75`);
+      }
+
+      const itemsEl = probe("items-stretch");
+      const itemsValue = style(itemsEl)["alignItems"];
+      itemsEl.remove();
+      if (itemsValue !== "stretch") {
+        results.push(
+          `items-stretch: alignItems = "${itemsValue}", want stretch`,
+        );
+      }
+
+      const trackEl = probe("tracking-[0.25em]");
+      const trackBase = probe("");
+      const trackValue = style(trackEl)["letterSpacing"];
+      const trackBaseline = style(trackBase)["letterSpacing"];
+      trackEl.remove();
+      trackBase.remove();
+      if (trackValue === trackBaseline) {
+        results.push(
+          `tracking-[0.25em]: letterSpacing = "${trackValue}", same as baseline`,
+        );
+      }
+
+      return results;
+    });
+
+    expect(failures).toEqual([]);
+  });
 });
