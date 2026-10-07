@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { getEditableFields, PROP_FIELD_KINDS } from "../editor";
+import {
+  getEditableFields,
+  PROP_FIELD_KINDS,
+  PROP_FIELD_VARIANTS,
+} from "../editor";
 import { playgroundCatalog } from "./catalog";
 
 interface DefinitionLike {
@@ -35,6 +39,7 @@ describe("playgroundCatalog style props", () => {
       expect(fields, name).toContainEqual({
         name: "className",
         kind: PROP_FIELD_KINDS.string,
+        variant: PROP_FIELD_VARIANTS.className,
       });
     }
   });

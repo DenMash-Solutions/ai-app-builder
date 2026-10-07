@@ -46,3 +46,44 @@ export function serializeStyleText(style: unknown): string {
     .map(([key, value]) => `${key}: ${value}`)
     .join("; ");
 }
+
+export interface StyleRow {
+  key: string;
+  value: string;
+}
+
+/**
+ * Converts a style record into editable key/value rows in insertion order.
+ * Non-object input (null, expressions) or non-scalar entries → [].
+ * Values are stringified for display ("10" → "10").
+ */
+export function styleRecordToRows(style: unknown): StyleRow[] {
+  if (typeof style !== "object" || style === null || Array.isArray(style)) {
+    return [];
+  }
+  return Object.entries(style as StyleRecord)
+    .filter(
+      ([, value]) => typeof value === "string" || typeof value === "number",
+    )
+    .map(([key, value]) => ({ key, value: String(value) }));
+}
+
+/**
+ * Builds a style record from editable rows: keys camelCased (custom
+ * `--properties` untouched), pure-number values promoted to number, rows
+ * with an empty key or value dropped, duplicate keys last-wins (object
+ * semantics). No valid rows → null (same empty semantics as
+ * parseStyleText).
+ */
+export function rowsToStyleRecord(
+  rows: readonly StyleRow[],
+): StyleRecord | null {
+  const style: StyleRecord = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    const value = row.value.trim();
+    if (key === "" || value === "") continue;
+    style[toCamelCase(key)] = PURE_NUMBER.test(value) ? Number(value) : value;
+  }
+  return Object.keys(style).length > 0 ? style : null;
+}

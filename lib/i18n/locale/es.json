@@ -27,6 +27,15 @@
     "apply": "Aplicar",
     "noEditableProps": "Sin propiedades editables",
     "freeformPlaceholder": "Describe el cambio…",
+    "list": {
+      "addClass": "Añadir clase",
+      "addStyleProp": "Añadir propiedad de estilo",
+      "remove": "Eliminar {name}",
+      "newRow": "fila nueva",
+      "styleKeyPlaceholder": "Propiedad",
+      "styleValuePlaceholder": "Valor",
+      "noMatches": "Sin coincidencias"
+    },
     "instance": {
       "scope": "elemento {index}/{count} · {path}",
       "structureNote": "Las ediciones de estructura se aplican a los {count} elementos (plantilla compartida)",

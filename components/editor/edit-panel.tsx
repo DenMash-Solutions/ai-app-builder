@@ -9,6 +9,7 @@ import { playgroundCatalog } from "@/lib/playground/catalog";
 import {
   analyzePropBinding,
   getEditableFields,
+  getClassSuggestions,
   resolveInstanceScope,
 } from "@/lib/editor";
 import type { InstanceChain, MoveDirection } from "@/lib/editor";
@@ -269,7 +270,8 @@ export function EditPanel({
       aria-label={t("editor.panelTitle")}
       data-state={closing ? "closed" : "open"}
       className={cn(
-        "relative z-40 flex shrink-0 flex-col overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl",
+        // Fixed-dark island: scope token vars so light theme never inverts it
+        "dark relative z-40 flex shrink-0 flex-col overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl",
         isDesktop
           ? "h-full w-[448px] border-l"
           : "max-h-[80vh] w-full rounded-t-xl border-t",
@@ -376,6 +378,7 @@ export function EditPanel({
             fields={fields}
             values={values}
             readonlyFields={readonlyFields}
+            classSuggestions={getClassSuggestions(spec)}
             onChange={handlePropChange}
           />
         )}

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.87",
+    "@base-ui/react": "^1.8.0",
     "@json-render/core": "^0.21.0",
     "@json-render/react": "^0.21.0",
     "@json-render/shadcn": "^0.21.0",

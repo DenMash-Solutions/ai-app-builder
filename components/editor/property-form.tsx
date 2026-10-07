@@ -2,28 +2,81 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { ChevronRight } from "lucide-react";
 import {
   PROP_FIELD_KINDS,
+  PROP_FIELD_VARIANTS,
   parseStyleText,
   serializeStyleText,
 } from "@/lib/editor";
 import type { PropField } from "@/lib/editor";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ClassTokenList } from "./class-token-list";
+import { StylePropList } from "./style-prop-list";
 
 interface PropertyFormProps {
   fields: PropField[];
   values: Record<string, unknown>;
   /** Props whose value is an expression we cannot round-trip (e.g. $cond). */
   readonlyFields?: readonly string[];
+  /** Class tokens offered as suggestions for the className field. */
+  classSuggestions?: readonly string[];
   onChange: (prop: string, value: unknown) => void;
 }
 
-const CONTROL_CLASS =
-  "h-7 w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100 outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-50";
+const INPUT_CLASS = "h-7 w-full rounded-md text-xs";
+
+/** Structured list editors — null means the value shape needs the text fallback. */
+const LIST_KINDS = {
+  classNameTokens: "classNameTokens",
+  stylePairs: "stylePairs",
+} as const;
+
+type ListKind = (typeof LIST_KINDS)[keyof typeof LIST_KINDS];
+
+function getListKind(field: PropField, value: unknown): ListKind | null {
+  if (field.variant === PROP_FIELD_VARIANTS.className) {
+    return value === null || value === undefined || typeof value === "string"
+      ? LIST_KINDS.classNameTokens
+      : null;
+  }
+  if (field.variant === PROP_FIELD_VARIANTS.style) {
+    return value === null ||
+      value === undefined ||
+      (typeof value === "object" && !Array.isArray(value))
+      ? LIST_KINDS.stylePairs
+      : null;
+  }
+  return null;
+}
+
+/** Collapsed trigger summary — the current value, truncated by CSS. */
+function listSummary(kind: ListKind, value: unknown): string {
+  if (kind === LIST_KINDS.classNameTokens) {
+    return typeof value === "string" ? value : "";
+  }
+  return serializeStyleText(value);
+}
 
 export function PropertyForm({
   fields,
   values,
   readonlyFields,
+  classSuggestions = [],
   onChange,
 }: PropertyFormProps) {
   const t = useTranslations();
@@ -99,43 +152,96 @@ export function PropertyForm({
     <div className="flex flex-col gap-2.5 px-3 py-3">
       {fields.map((field) => {
         const isReadonly = readonlyFields?.includes(field.name) ?? false;
+        const listKind = getListKind(field, values[field.name]);
+        if (listKind !== null) {
+          const summary = listSummary(listKind, values[field.name]);
+          return (
+            <Collapsible key={field.name} className="flex flex-col gap-1.5">
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  title={isReadonly ? t("editor.instance.readonly") : undefined}
+                  className="group h-7 w-full justify-start gap-1.5 px-1 font-mono text-xs text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                >
+                  <ChevronRight
+                    className="h-3 w-3 shrink-0 transition-transform group-data-[state=open]:rotate-90"
+                    aria-hidden="true"
+                  />
+                  <span>{field.name}</span>
+                  {summary !== "" && (
+                    <span className="min-w-0 flex-1 truncate text-right font-sans text-[11px] font-normal text-zinc-600">
+                      {summary}
+                    </span>
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="flex flex-col gap-1.5 pl-4">
+                {listKind === LIST_KINDS.classNameTokens ? (
+                  <ClassTokenList
+                    value={(values[field.name] ?? null) as string | null}
+                    suggestions={classSuggestions}
+                    disabled={isReadonly}
+                    label={field.name}
+                    onChange={(next) => onChange(field.name, next)}
+                  />
+                ) : (
+                  <StylePropList
+                    value={
+                      (values[field.name] ?? null) as Record<
+                        string,
+                        string | number
+                      > | null
+                    }
+                    disabled={isReadonly}
+                    label={field.name}
+                    onChange={(next) => onChange(field.name, next)}
+                  />
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        }
         return (
           <label
             key={field.name}
-            className="flex items-center justify-between gap-3 text-xs"
+            className="flex flex-col gap-1.5 text-xs"
             title={isReadonly ? t("editor.instance.readonly") : undefined}
           >
             <span className="font-mono text-zinc-400">{field.name}</span>
             {field.kind === PROP_FIELD_KINDS.boolean && (
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={values[field.name] === true}
                 disabled={isReadonly}
-                onChange={(event) => onChange(field.name, event.target.checked)}
-                className="h-4 w-4 accent-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                onCheckedChange={(checked) =>
+                  onChange(field.name, checked === true)
+                }
+                className="self-start"
               />
             )}
             {field.kind === PROP_FIELD_KINDS.enum && (
-              <select
-                value={enumValue(field)}
+              <Select
+                value={enumValue(field) || undefined}
+                onValueChange={(next) => onChange(field.name, next || null)}
                 disabled={isReadonly}
-                onChange={(event) =>
-                  onChange(field.name, event.target.value || null)
-                }
-                className={CONTROL_CLASS}
               >
-                {enumValue(field) === "" && <option value="">—</option>}
-                {field.options?.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className={INPUT_CLASS}>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent className="dark">
+                  {field.options?.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {(field.kind === PROP_FIELD_KINDS.string ||
               field.kind === PROP_FIELD_KINDS.number ||
               field.kind === PROP_FIELD_KINDS.record) && (
-              <input
+              <Input
                 type={
                   field.kind === PROP_FIELD_KINDS.number ? "number" : "text"
                 }
@@ -151,7 +257,7 @@ export function PropertyForm({
                     commitText(field);
                   }
                 }}
-                className={CONTROL_CLASS}
+                className={INPUT_CLASS}
               />
             )}
           </label>

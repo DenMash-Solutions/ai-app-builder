@@ -4,6 +4,7 @@ import { REVISION_LABELS } from "@/lib/history";
 import {
   EDIT_ACTION_KEYS,
   PROP_FIELD_KINDS,
+  PROP_FIELD_VARIANTS,
   actionRevisionLabel,
   freeformRevisionLabel,
   getEditableFields,
@@ -111,6 +112,11 @@ describe("getEditableFields", () => {
           type: "nullable",
           innerType: zodDef({ type: "record" }),
         }),
+        className: zodDef({
+          type: "nullable",
+          innerType: zodDef({ type: "string" }),
+        }),
+        alt: zodDef({ type: "string" }),
         tags: zodDef({ type: "array" }),
       }),
     );
@@ -121,7 +127,17 @@ describe("getEditableFields", () => {
       { name: "enabled", kind: PROP_FIELD_KINDS.boolean },
       { name: "level", kind: PROP_FIELD_KINDS.enum, options: ["h1", "h2"] },
       { name: "title", kind: PROP_FIELD_KINDS.string },
-      { name: "style", kind: PROP_FIELD_KINDS.record },
+      {
+        name: "style",
+        kind: PROP_FIELD_KINDS.record,
+        variant: PROP_FIELD_VARIANTS.style,
+      },
+      {
+        name: "className",
+        kind: PROP_FIELD_KINDS.string,
+        variant: PROP_FIELD_VARIANTS.className,
+      },
+      { name: "alt", kind: PROP_FIELD_KINDS.string },
     ]);
   });
 

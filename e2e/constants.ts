@@ -9,6 +9,8 @@ export const ROLE = {
   heading: "heading",
   link: "link",
   tab: "tab",
+  combobox: "combobox",
+  option: "option",
 } as const;
 
 export const UI = {
@@ -91,6 +93,15 @@ export const EDITOR = {
   redo: en.editor.redo,
   apply: en.editor.apply,
   freeformPlaceholder: en.editor.freeformPlaceholder,
+  addClass: en.editor.list.addClass,
+  addStyleProp: en.editor.list.addStyleProp,
+  removeRow: (name: string): string =>
+    en.editor.list.remove.replace("{name}", name),
+  styleKeyPlaceholder: en.editor.list.styleKeyPlaceholder,
+  styleValuePlaceholder: en.editor.list.styleValuePlaceholder,
+  /** Collapsed-by-default section triggers (contain name + value summary). */
+  classNameTrigger: "className",
+  styleTrigger: /^style/,
   properties: en.editor.tabs.properties,
   structure: en.editor.tabs.structure,
   actions: en.editor.tabs.actions,

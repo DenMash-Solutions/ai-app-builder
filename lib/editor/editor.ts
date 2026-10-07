@@ -23,10 +23,20 @@ export const PROP_FIELD_KINDS = {
 export type PropFieldKind =
   (typeof PROP_FIELD_KINDS)[keyof typeof PROP_FIELD_KINDS];
 
+/** Fields edited as structured lists instead of a single text input. */
+export const PROP_FIELD_VARIANTS = {
+  className: "classNameTokens",
+  style: "stylePairs",
+} as const;
+
+export type PropFieldVariant =
+  (typeof PROP_FIELD_VARIANTS)[keyof typeof PROP_FIELD_VARIANTS];
+
 export interface PropField {
   name: string;
   kind: PropFieldKind;
   options?: string[];
+  variant?: PropFieldVariant;
 }
 
 interface ZodDef {
@@ -85,8 +95,8 @@ function resolveFieldKind(field: unknown): {
 /**
  * Introspects a component's Zod props schema into simple editable field
  * descriptors. Arrays and expression props are intentionally omitted — they
- * are not safely editable as scalars. Records (e.g. style) are editable as
- * CSS-declaration text.
+ * are not safely editable as scalars. className/style carry a list-editing
+ * variant; other records stay editable as CSS-declaration text.
  */
 export function getEditableFields(propsSchema: unknown): PropField[] {
   const shape = getZodDef(propsSchema).shape;
@@ -94,7 +104,10 @@ export function getEditableFields(propsSchema: unknown): PropField[] {
   const fields: PropField[] = [];
   for (const [name, field] of Object.entries(shape)) {
     const resolved = resolveFieldKind(field);
-    if (resolved) fields.push({ name, ...resolved });
+    if (!resolved) continue;
+    const variant =
+      PROP_FIELD_VARIANTS[name as keyof typeof PROP_FIELD_VARIANTS];
+    fields.push({ name, ...resolved, ...(variant ? { variant } : {}) });
   }
   return fields;
 }

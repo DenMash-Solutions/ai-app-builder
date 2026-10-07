@@ -27,6 +27,15 @@
     "apply": "Apply",
     "noEditableProps": "No editable properties",
     "freeformPlaceholder": "Describe the change…",
+    "list": {
+      "addClass": "Add class",
+      "addStyleProp": "Add style property",
+      "remove": "Remove {name}",
+      "newRow": "new row",
+      "styleKeyPlaceholder": "Property",
+      "styleValuePlaceholder": "Value",
+      "noMatches": "No matches"
+    },
     "instance": {
       "scope": "item {index}/{count} · {path}",
       "structureNote": "Structure edits apply to all {count, plural, one {# item} other {# items}} (shared template)",

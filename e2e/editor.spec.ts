@@ -35,8 +35,10 @@ test.describe("editor", () => {
     await generateSample(page);
     const panel = await pickHeading(page);
 
-    // Level change is a local patch — no API call
-    await panel.getByLabel("level").selectOption("h2");
+    // Level change is a local patch — no API call (shadcn/Radix Select;
+    // the popup is portaled to <body>, so locate it from the page)
+    await panel.getByRole(ROLE.combobox, { name: "level" }).click();
+    await page.getByRole(ROLE.option, { name: "h2" }).click();
     await expect(
       page.locator("h2").filter({ hasText: UI.mockHeading }),
     ).toBeVisible();
@@ -58,6 +60,50 @@ test.describe("editor", () => {
     entries = await readHistoryStorage(page);
     expect(entries[0].head).toBe(1);
     expect(entries[0].revisions).toHaveLength(2);
+  });
+
+  test("className and style are edited as structured add/edit/remove lists", async ({
+    page,
+  }) => {
+    await generateSample(page);
+    const panel = await pickHeading(page);
+    const heading = page.locator("h1").filter({ hasText: UI.mockHeading });
+
+    // Sections are Collapsibles, collapsed by default — expand className first
+    await panel
+      .getByRole(ROLE.button, { name: EDITOR.classNameTrigger })
+      .click();
+    await panel.getByRole(ROLE.button, { name: EDITOR.addClass }).click();
+    const classInput = panel.getByLabel("className");
+    await expect(classInput).toHaveCount(1);
+    await classInput.fill("font-normal");
+    await classInput.press("Enter");
+    await expect(heading).toHaveCSS("font-weight", "400");
+    await expect(classInput).toHaveValue("font-normal");
+
+    // remove the token — heading returns to its default weight
+    await panel
+      .getByRole(ROLE.button, { name: EDITOR.removeRow("font-normal") })
+      .click();
+    await expect(panel.getByLabel("className")).toHaveCount(0);
+    await expect(heading).toHaveCSS("font-weight", "700");
+
+    // expand the style section and add a key/value row
+    await panel.getByRole(ROLE.button, { name: EDITOR.styleTrigger }).click();
+    await panel.getByRole(ROLE.button, { name: EDITOR.addStyleProp }).click();
+    await panel.getByPlaceholder(EDITOR.styleKeyPlaceholder).fill("opacity");
+    await panel.getByPlaceholder(EDITOR.styleValuePlaceholder).fill("0.5");
+    await panel.getByPlaceholder(EDITOR.styleValuePlaceholder).press("Enter");
+    await expect(heading).toHaveCSS("opacity", "0.5");
+
+    // remove the declaration — opacity returns to 1
+    await panel
+      .getByRole(ROLE.button, { name: EDITOR.removeRow("opacity") })
+      .click();
+    await expect(heading).toHaveCSS("opacity", "1");
+    await expect(
+      panel.getByRole(ROLE.button, { name: EDITOR.addStyleProp }),
+    ).toBeVisible();
   });
 
   test("freeform action streams a patch and revisions survive a reload", async ({

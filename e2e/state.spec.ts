@@ -109,6 +109,10 @@ test.describe("instance-scoped editing", () => {
       EDITOR.instanceScope(2, count, "/items/1"),
     );
 
+    // className lives in a Collapsible, collapsed by default
+    await panel
+      .getByRole(ROLE.button, { name: EDITOR.classNameTrigger })
+      .click();
     await panel.getByLabel("className").fill("font-bold");
     await panel.getByLabel("className").press("Enter");
 
