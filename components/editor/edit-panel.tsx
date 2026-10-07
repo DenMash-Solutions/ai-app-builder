@@ -1,8 +1,16 @@
 "use client";
 
 import type { Spec, UIElement } from "@json-render/core";
+import { cn } from "cn";
 import { ChevronRight, Redo2, Undo2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type AnimationEvent,
+  type TouchEvent,
+} from "react";
 import { playgroundCatalog } from "@/lib/playground/catalog";
 import {
   analyzePropBinding,
@@ -48,6 +56,23 @@ function componentPropsSchema(type: string): unknown {
   return components[type]?.props;
 }
 
+/** Live ≥640px check — the drawer docks right on desktop, bottom sheet on mobile. */
+const useIsDesktopDrawer = (): boolean => {
+  const [isDesktop, setIsDesktop] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 640px)").matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 640px)");
+    const update = () => setIsDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return isDesktop;
+};
+
 interface EditPanelProps {
   spec: Spec;
   elementKey: string;
@@ -56,10 +81,13 @@ interface EditPanelProps {
   ancestors: string[];
   /** Repeat scopes of the picked instance; null = template-level selection. */
   instanceChain: InstanceChain | null;
-  position: { top: number; left: number };
   /** Active tab — lifted to the parent so remounts (key changes) keep it. */
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
+  /** True while the slide-out animation plays — the parent keeps the panel
+   * mounted (with stashed props) until `onExited` fires. */
+  closing: boolean;
+  onExited: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -82,9 +110,10 @@ export function EditPanel({
   element,
   ancestors,
   instanceChain,
-  position,
   tab,
   onTabChange,
+  closing,
+  onExited,
   canUndo,
   canRedo,
   onUndo,
@@ -101,6 +130,7 @@ export function EditPanel({
   onDuplicate,
 }: EditPanelProps) {
   const t = useTranslations();
+  const isDesktop = useIsDesktopDrawer();
   const fields = getEditableFields(componentPropsSchema(element.type));
   const crumbs = ancestors.slice(0, -1);
 
@@ -129,14 +159,92 @@ export function EditPanel({
     onPropChange(prop, value, binding.dataPath);
   };
 
+  // Escape closes the panel — unless a nested layer (component picker) already
+  // handled the key (Radix marks it defaultPrevented while closing).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  // Exit animation completion: `animationend` on the panel itself is the
+  // primary signal; a timeout fallback covers environments where the
+  // animation never runs (e.g. hidden tab). Refs are synced in an effect so
+  // both signals stay correct across parent re-renders during the exit.
+  const onExitedRef = useRef(onExited);
+  const exitedRef = useRef(false);
+  useEffect(() => {
+    onExitedRef.current = onExited;
+  });
+  useEffect(() => {
+    if (!closing) {
+      exitedRef.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (exitedRef.current) return;
+      exitedRef.current = true;
+      onExitedRef.current();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [closing]);
+  const handleAnimationEnd = (event: AnimationEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || !closing || exitedRef.current) {
+      return;
+    }
+    exitedRef.current = true;
+    onExited();
+  };
+
+  // Mobile bottom sheet: swipe down to dismiss (only from a scroll position of
+  // the panel body at its top, so list scrolling never closes the panel).
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const handleTouchStart = (event: TouchEvent) => {
+    if (isDesktop) return;
+    const body = bodyRef.current;
+    if (body && body.contains(event.target as Node) && body.scrollTop > 0) {
+      return;
+    }
+    touchStartYRef.current = event.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (event: TouchEvent) => {
+    const startY = touchStartYRef.current;
+    touchStartYRef.current = null;
+    if (startY === null) return;
+    if (event.changedTouches[0].clientY - startY > 80) onClose();
+  };
+
   return (
     <div
       data-editor-panel
+      role="dialog"
       aria-label={t("editor.panelTitle")}
-      className="absolute z-40 w-80 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 text-zinc-100 shadow-2xl"
-      style={{ top: position.top, left: position.left }}
+      data-state={closing ? "closed" : "open"}
+      className={cn(
+        "relative z-40 flex shrink-0 flex-col overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl duration-200",
+        closing ? "animate-out" : "animate-in",
+        isDesktop
+          ? "h-full w-[448px] border-l"
+          : "max-h-[80vh] w-full rounded-t-xl border-t",
+        isDesktop
+          ? closing
+            ? "slide-out-to-right"
+            : "slide-in-from-right"
+          : closing
+            ? "slide-out-to-bottom"
+            : "slide-in-from-bottom",
+      )}
+      onAnimationEnd={handleAnimationEnd}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 px-3 py-2">
         <span className="rounded-md border border-amber-400/60 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[11px] text-amber-300">
           {element.type}
         </span>
@@ -176,7 +284,7 @@ export function EditPanel({
       {scope && (
         <div
           data-testid="instance-scope"
-          className="border-b border-zinc-800 px-3 py-1.5 font-mono text-[11px] text-emerald-300/90"
+          className="shrink-0 border-b border-zinc-800 px-3 py-1.5 font-mono text-[11px] text-emerald-300/90"
         >
           {t("editor.instance.scope", {
             index: scope.itemIndex + 1,
@@ -189,7 +297,7 @@ export function EditPanel({
       {crumbs.length > 0 && (
         <nav
           aria-label={t("editor.structure.breadcrumb")}
-          className="flex items-center gap-0.5 overflow-x-auto border-b border-zinc-800 px-3 py-1"
+          className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-zinc-800 px-3 py-1"
         >
           {crumbs.map((key) => (
             <span key={key} className="flex items-center gap-0.5">
@@ -206,7 +314,10 @@ export function EditPanel({
         </nav>
       )}
 
-      <div className="flex border-b border-zinc-800 px-1" role="tablist">
+      <div
+        className="flex shrink-0 border-b border-zinc-800 px-1"
+        role="tablist"
+      >
         {PANEL_TAB_ORDER.map((tabKey) => (
           <button
             key={tabKey}
@@ -225,36 +336,42 @@ export function EditPanel({
         ))}
       </div>
 
-      {tab === PANEL_TABS.properties && (
-        <PropertyForm
-          fields={fields}
-          values={values}
-          readonlyFields={readonlyFields}
-          onChange={handlePropChange}
-        />
-      )}
-      {tab === PANEL_TABS.structure && (
-        <>
-          {scope && (
-            <p className="px-3 pt-2 text-[11px] text-zinc-500">
-              {t("editor.instance.structureNote", { count: scope.count })}
-            </p>
-          )}
-          <StructureTab
-            spec={spec}
-            elementKey={elementKey}
-            element={element}
-            onSelectKey={onSelectKey}
-            onInsert={onInsert}
-            onRemove={onRemove}
-            onGroup={onGroup}
-            onUnwrap={onUnwrap}
-            onMove={onMove}
-            onDuplicate={onDuplicate}
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto">
+        {tab === PANEL_TABS.properties && (
+          <PropertyForm
+            key={elementKey}
+            fields={fields}
+            values={values}
+            readonlyFields={readonlyFields}
+            onChange={handlePropChange}
           />
-        </>
-      )}
-      {tab === PANEL_TABS.actions && <ActionTiles onAction={onAction} />}
+        )}
+        {tab === PANEL_TABS.structure && (
+          <>
+            {scope && (
+              <p className="px-3 pt-2 text-[11px] text-zinc-500">
+                {t("editor.instance.structureNote", { count: scope.count })}
+              </p>
+            )}
+            <StructureTab
+              key={elementKey}
+              spec={spec}
+              elementKey={elementKey}
+              element={element}
+              onSelectKey={onSelectKey}
+              onInsert={onInsert}
+              onRemove={onRemove}
+              onGroup={onGroup}
+              onUnwrap={onUnwrap}
+              onMove={onMove}
+              onDuplicate={onDuplicate}
+            />
+          </>
+        )}
+        {tab === PANEL_TABS.actions && (
+          <ActionTiles key={elementKey} onAction={onAction} />
+        )}
+      </div>
     </div>
   );
 }

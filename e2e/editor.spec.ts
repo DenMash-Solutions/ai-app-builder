@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import {
   EDITOR,
+  MOCK_KEYS,
   PROMPTS,
   ROLE,
   UI,
@@ -115,7 +116,7 @@ test.describe("editor", () => {
 
     // Heading is a leaf — Insert targets its parent (card-1), appends text-1
     await panel.getByRole(ROLE.button, { name: EDITOR.insert }).click();
-    const picker = page.getByRole("dialog");
+    const picker = page.locator("[data-component-picker]");
     await expect(
       picker.getByText(EDITOR.pickerTitle, { exact: true }),
     ).toBeVisible();
@@ -149,7 +150,7 @@ test.describe("editor", () => {
     await groupPanel
       .getByRole(ROLE.button, { name: EDITOR.group, exact: true })
       .click();
-    const groupPicker = page.getByRole("dialog");
+    const groupPicker = page.locator("[data-component-picker]");
     await expect(
       groupPicker.getByText(EDITOR.pickerGroupTitle, { exact: true }),
     ).toBeVisible();
@@ -240,7 +241,7 @@ test.describe("editor", () => {
     await rootPanel
       .getByRole(ROLE.button, { name: EDITOR.group, exact: true })
       .click();
-    const groupPicker = page.getByRole("dialog");
+    const groupPicker = page.locator("[data-component-picker]");
     await expect(
       groupPicker.getByText(EDITOR.pickerGroupTitle, { exact: true }),
     ).toBeVisible();
@@ -299,7 +300,7 @@ test.describe("editor", () => {
 
     // Insert an empty Stack into card-1 so a second container exists
     await panel.getByRole(ROLE.button, { name: EDITOR.insert }).click();
-    const picker = page.getByRole("dialog");
+    const picker = page.locator("[data-component-picker]");
     await picker.getByPlaceholder(EDITOR.pickerSearch).fill("Stack");
     await picker
       .getByRole("option")
@@ -475,5 +476,52 @@ test.describe("editor", () => {
     const badge = page.locator("[data-editor-badge]");
     await expect(badge).toBeVisible();
     await expect(badge).toContainText("heading-1");
+  });
+
+  test("edit panel docks right on desktop, bottom on mobile, and stays open across re-pick", async ({
+    page,
+  }) => {
+    await generateSample(page);
+    const panel = await pickHeading(page);
+    const desktop = page.viewportSize();
+    if (!desktop) throw new Error("missing viewport size");
+
+    // Desktop: docked flush to the right edge, full viewport height
+    await expect
+      .poll(async () => {
+        const box = await panel.boundingBox();
+        return box ? Math.round(box.x + box.width) : -1;
+      })
+      .toBe(desktop.width);
+    const desktopBox = await panel.boundingBox();
+    if (!desktopBox) throw new Error("panel has no bounding box");
+    expect(Math.round(desktopBox.height)).toBe(desktop.height);
+
+    // Re-pick while open: the drawer stays, content swaps to the new element
+    await page.getByText(UI.mockBody).click();
+    await expect(page.locator("[data-editor-panel]")).toHaveCount(1);
+    await expect(
+      panel.getByText(MOCK_KEYS.text, { exact: true }).first(),
+    ).toBeVisible();
+
+    // Escape closes the drawer; pick mode stays armed for re-pick
+    await panel.getByRole(ROLE.tab, { name: EDITOR.structure }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[data-editor-panel]")).toHaveCount(0);
+
+    // Narrow viewport: the same panel remounts as a bottom sheet
+    await page.setViewportSize({ width: 375, height: 700 });
+    await page.getByText(UI.mockHeading).click();
+    const mobilePanel = page.locator("[data-editor-panel]");
+    await expect(mobilePanel).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await mobilePanel.boundingBox();
+        return box ? Math.round(box.y + box.height) : -1;
+      })
+      .toBe(700);
+    const mobileBox = await mobilePanel.boundingBox();
+    if (!mobileBox) throw new Error("panel has no bounding box");
+    expect(Math.round(mobileBox.width)).toBe(375);
   });
 });

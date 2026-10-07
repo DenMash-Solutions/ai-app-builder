@@ -83,8 +83,6 @@ import { registry } from "@/lib/playground/registry";
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
 
-const PANEL_WIDTH = 320;
-
 const PENDING_OP_KINDS = {
   generate: "generate",
   edit: "edit",
@@ -116,10 +114,6 @@ function Playground() {
     null,
   );
   const [panelTab, setPanelTab] = useState<PanelTab>(PANEL_TABS.properties);
-  const [panelPos, setPanelPos] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
   const pendingOpRef = useRef<PendingOp | null>(null);
   const [failure, setFailure] = useState<{
     kind: "quota" | "service";
@@ -240,23 +234,53 @@ function Playground() {
       ? getAncestorPath(displayedSpec, effectiveKey)
       : [];
 
+  // Edit drawer lifecycle: the close is *delayed*, not the unmount — while
+  // `panelClosing` is true the selection stays alive, so the panel keeps
+  // rendering from live props and can play its slide-out animation; only when
+  // its `onExited` fires does the real close (`clearSelection`) run. The
+  // visibility condition widens with `(pickMode || panelClosing)` so even
+  // toggling Pick off animates the panel out instead of popping it.
+  const [panelClosing, setPanelClosing] = useState(false);
+  const panelTarget =
+    displayedSpec &&
+    !isStreaming &&
+    effectiveKey &&
+    selectedElement &&
+    (pickMode || panelClosing)
+      ? {
+          spec: displayedSpec,
+          elementKey: effectiveKey,
+          element: selectedElement,
+        }
+      : null;
+  const beginPanelClose = () => {
+    if (panelTarget) setPanelClosing(true);
+  };
+  // A stream/clear/spec swap can drop `panelTarget` mid-exit (the panel
+  // unmounts before `onExited`); reset the flag so the next open is not stuck
+  // in the closing state.
+  if (!panelTarget && panelClosing) setPanelClosing(false);
+
   // The selection carries the repeat scopes captured at pick time so data
   // edits scope to the clicked instance. Key navigation keeps the levels that
   // still apply; structural ops clear the chain (they edit the template).
   const clearSelection = () => {
     setSelectedKey(null);
     setSelectedChain(null);
+    setPanelClosing(false);
   };
 
   const handlePick = useCallback(
     (key: string | null, chain: InstanceChain | null) => {
       setSelectedKey(key);
       setSelectedChain(chain);
+      setPanelClosing(false);
     },
     [],
   );
 
   const handleSelectKey = (key: string) => {
+    setPanelClosing(false);
     setSelectedKey(key);
     setSelectedChain((chain) =>
       displayedSpec && chain ? chainForKey(displayedSpec, chain, key) : null,
@@ -321,7 +345,7 @@ function Playground() {
   };
 
   const handleTogglePick = () => {
-    if (pickMode) clearSelection();
+    if (pickMode) beginPanelClose();
     setPickMode(!pickMode);
   };
 
@@ -506,43 +530,6 @@ function Playground() {
     }
   };
 
-  const updatePanelPos = useCallback(() => {
-    const container = containerRef.current;
-    if (!container || !effectiveKey) {
-      setPanelPos(null);
-      return;
-    }
-    const tagged = container.querySelector<HTMLElement>(
-      `[data-jr-key="${effectiveKey}"]`,
-    );
-    // The tag itself is display:contents (no box) — measure its element child.
-    const element = tagged?.firstElementChild ?? tagged;
-    if (!element) {
-      setPanelPos(null);
-      return;
-    }
-    const containerRect = container.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-    const scrollTop = container.scrollTop;
-    const left = Math.min(
-      Math.max(elementRect.left - containerRect.left + container.scrollLeft, 8),
-      Math.max(container.scrollWidth - PANEL_WIDTH - 8, 8),
-    );
-    setPanelPos({
-      top: elementRect.bottom - containerRect.top + scrollTop + 8,
-      left,
-    });
-  }, [effectiveKey]);
-
-  useEffect(() => {
-    updatePanelPos();
-  }, [updatePanelPos, displayedSpec]);
-
-  useEffect(() => {
-    window.addEventListener("resize", updatePanelPos);
-    return () => window.removeEventListener("resize", updatePanelPos);
-  }, [updatePanelPos]);
-
   // X-ray: tag container wrappers (children or slots) with a data attribute
   // the CSS in globals.css can target — keeps React out of the outline loop.
   useEffect(() => {
@@ -604,133 +591,140 @@ function Playground() {
       <VisibilityProvider>
         <ActionProvider handlers={{}}>
           <ValidationProvider customFunctions={{}}>
-            <main className="dot-grid relative h-[100dvh] w-full overflow-hidden">
-              <TopBar
-                historyCount={history.length}
-                onOpenHistory={() => setHistoryOpen(true)}
-              />
-
-              {displayedSpec && !isStreaming && (
-                <ToolRail
-                  pickMode={pickMode}
-                  dndMode={dndMode}
-                  xrayMode={xrayMode}
-                  onTogglePick={handleTogglePick}
-                  onToggleDnd={() => setDndMode((prev) => !prev)}
-                  onToggleXray={() => setXrayMode((prev) => !prev)}
-                  onClear={handleClearCurrent}
+            <main className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden sm:flex-row">
+              {/* Stage: holds all chrome and the canvas; shrinks when the
+                  edit panel docks (right on desktop, bottom on mobile) so the
+                  rail, prompt bar, and top bar are never covered. */}
+              <div className="relative min-h-0 min-w-0 flex-1">
+                <TopBar
+                  historyCount={history.length}
+                  onOpenHistory={() => setHistoryOpen(true)}
                 />
-              )}
 
-              <div
-                ref={containerRef}
-                className={`absolute inset-0 overflow-y-auto ${
-                  pickMode ? "jr-pick-enabled" : ""
-                } ${xrayMode ? "jr-xray" : ""} ${
-                  dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
-                }`}
-              >
-                <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
-                  {!displayedSpec && !isStreaming && (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
-                      <div className="w-full max-w-xl space-y-3">
-                        <p className="text-balance text-muted-foreground">
-                          {t("playground.subtitle")}
-                        </p>
-                        <p className="text-sm text-muted-foreground/80">
-                          {t("playground.emptyState")}
-                        </p>
-                      </div>
-                      <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
-                        {EXAMPLE_PROMPT_LIST.map((example) => (
-                          <Button
-                            key={example}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="max-w-full h-auto whitespace-normal break-words py-1.5"
-                            onClick={() => handleGenerate(example)}
-                          >
-                            {example}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <Renderer
-                    spec={displayedSpec}
-                    registry={registry}
-                    loading={isStreaming}
+                {displayedSpec && !isStreaming && (
+                  <ToolRail
+                    pickMode={pickMode}
+                    dndMode={dndMode}
+                    xrayMode={xrayMode}
+                    onTogglePick={handleTogglePick}
+                    onToggleDnd={() => setDndMode((prev) => !prev)}
+                    onToggleXray={() => setXrayMode((prev) => !prev)}
+                    onClear={handleClearCurrent}
                   />
-                  {/* Before PickOverlay: both attach capture listeners on the
-              container, and listener order follows render order. */}
-                  <CanvasDnd
-                    enabled={dndMode && displayedSpec !== null && !isStreaming}
-                    containerRef={containerRef}
-                    spec={displayedSpec}
-                    onMoveTo={handleMoveTo}
-                  />
-                  {displayedSpec &&
-                    !isStreaming &&
-                    pickMode &&
-                    effectiveKey &&
-                    selectedElement &&
-                    panelPos && (
-                      <EditPanel
-                        key={effectiveKey}
-                        spec={displayedSpec}
-                        elementKey={effectiveKey}
-                        element={selectedElement}
-                        ancestors={ancestors}
-                        position={panelPos}
-                        tab={panelTab}
-                        onTabChange={setPanelTab}
-                        canUndo={activeEntry !== null && canUndo(activeEntry)}
-                        canRedo={activeEntry !== null && canRedo(activeEntry)}
-                        onUndo={handleUndo}
-                        onRedo={handleRedo}
-                        onClose={clearSelection}
-                        onSelectKey={handleSelectKey}
-                        instanceChain={selectedChain}
-                        onPropChange={handlePropChange}
-                        onAction={handleAction}
-                        onInsert={handleInsert}
-                        onRemove={handleRemove}
-                        onGroup={handleGroup}
-                        onUnwrap={handleUnwrap}
-                        onMove={handleMove}
-                        onDuplicate={handleDuplicate}
-                      />
+                )}
+
+                <div
+                  ref={containerRef}
+                  className={`absolute inset-0 overflow-y-auto ${
+                    pickMode ? "jr-pick-enabled" : ""
+                  } ${xrayMode ? "jr-xray" : ""} ${
+                    dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
+                  }`}
+                >
+                  <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
+                    {!displayedSpec && !isStreaming && (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+                        <div className="w-full max-w-xl space-y-3">
+                          <p className="text-balance text-muted-foreground">
+                            {t("playground.subtitle")}
+                          </p>
+                          <p className="text-sm text-muted-foreground/80">
+                            {t("playground.emptyState")}
+                          </p>
+                        </div>
+                        <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
+                          {EXAMPLE_PROMPT_LIST.map((example) => (
+                            <Button
+                              key={example}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="max-w-full h-auto whitespace-normal break-words py-1.5"
+                              onClick={() => handleGenerate(example)}
+                            >
+                              {example}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  <PickOverlay
-                    enabled={pickMode && !isStreaming && displayedSpec !== null}
-                    containerRef={containerRef}
-                    spec={displayedSpec}
-                    selectedKey={effectiveKey}
-                    selectedChain={selectedChain}
-                    onSelect={handlePick}
-                  />
-                  <HoverBadge
-                    enabled={pickMode && !isStreaming && displayedSpec !== null}
-                    containerRef={containerRef}
-                    spec={displayedSpec}
-                  />
+                    <Renderer
+                      spec={displayedSpec}
+                      registry={registry}
+                      loading={isStreaming}
+                    />
+                    {/* Before PickOverlay: both attach capture listeners on the
+              container, and listener order follows render order. */}
+                    <CanvasDnd
+                      enabled={
+                        dndMode && displayedSpec !== null && !isStreaming
+                      }
+                      containerRef={containerRef}
+                      spec={displayedSpec}
+                      onMoveTo={handleMoveTo}
+                    />
+                    <PickOverlay
+                      enabled={
+                        pickMode && !isStreaming && displayedSpec !== null
+                      }
+                      containerRef={containerRef}
+                      spec={displayedSpec}
+                      selectedKey={effectiveKey}
+                      selectedChain={selectedChain}
+                      onSelect={handlePick}
+                    />
+                    <HoverBadge
+                      enabled={
+                        pickMode && !isStreaming && displayedSpec !== null
+                      }
+                      containerRef={containerRef}
+                      spec={displayedSpec}
+                    />
+                  </div>
                 </div>
+
+                {failure && (
+                  <FailureDialog
+                    kind={failure.kind}
+                    onOpenChange={handleFailureOpenChange}
+                    onConfirm={handleFailureConfirm}
+                  />
+                )}
+
+                <PromptBar
+                  isStreaming={isStreaming}
+                  hasSpec={displayedSpec !== null}
+                  onSend={handleSend}
+                />
               </div>
 
-              {failure && (
-                <FailureDialog
-                  kind={failure.kind}
-                  onOpenChange={handleFailureOpenChange}
-                  onConfirm={handleFailureConfirm}
+              {panelTarget && (
+                <EditPanel
+                  closing={panelClosing}
+                  onExited={clearSelection}
+                  spec={panelTarget.spec}
+                  elementKey={panelTarget.elementKey}
+                  element={panelTarget.element}
+                  ancestors={ancestors}
+                  tab={panelTab}
+                  onTabChange={setPanelTab}
+                  canUndo={activeEntry !== null && canUndo(activeEntry)}
+                  canRedo={activeEntry !== null && canRedo(activeEntry)}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  onClose={beginPanelClose}
+                  onSelectKey={handleSelectKey}
+                  instanceChain={selectedChain}
+                  onPropChange={handlePropChange}
+                  onAction={handleAction}
+                  onInsert={handleInsert}
+                  onRemove={handleRemove}
+                  onGroup={handleGroup}
+                  onUnwrap={handleUnwrap}
+                  onMove={handleMove}
+                  onDuplicate={handleDuplicate}
                 />
               )}
-
-              <PromptBar
-                isStreaming={isStreaming}
-                hasSpec={displayedSpec !== null}
-                onSend={handleSend}
-              />
 
               <HistoryDrawer
                 open={historyOpen}
