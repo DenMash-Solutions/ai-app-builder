@@ -236,7 +236,7 @@ function Playground() {
 
   // Edit drawer lifecycle: the close is *delayed*, not the unmount — while
   // `panelClosing` is true the selection stays alive, so the panel keeps
-  // rendering from live props and can play its slide-out animation; only when
+  // rendering from live props and can play its exit animation; only when
   // its `onExited` fires does the real close (`clearSelection`) run. The
   // visibility condition widens with `(pickMode || panelClosing)` so even
   // toggling Pick off animates the panel out instead of popping it.

@@ -4,13 +4,7 @@ import type { Spec, UIElement } from "@json-render/core";
 import { cn } from "cn";
 import { ChevronRight, Redo2, Undo2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type AnimationEvent,
-  type TouchEvent,
-} from "react";
+import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { playgroundCatalog } from "@/lib/playground/catalog";
 import {
   analyzePropBinding,
@@ -84,8 +78,8 @@ interface EditPanelProps {
   /** Active tab — lifted to the parent so remounts (key changes) keep it. */
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
-  /** True while the slide-out animation plays — the parent keeps the panel
-   * mounted (with stashed props) until `onExited` fires. */
+  /** True while the exit animation plays — the parent keeps the panel
+   * mounted (with live props) until `onExited` fires. */
   closing: boolean;
   onExited: () => void;
   canUndo: boolean;
@@ -170,15 +164,69 @@ export function EditPanel({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // Exit animation completion: `animationend` on the panel itself is the
-  // primary signal; a timeout fallback covers environments where the
-  // animation never runs (e.g. hidden tab). Refs are synced in an effect so
-  // both signals stay correct across parent re-renders during the exit.
+  // Enter/exit both resize the panel's own layout box with WAAPI (width on
+  // desktop, height on mobile) instead of transforms: the box moves on the
+  // flex line, so the stage resizes frame-by-frame in sync — no blank strip,
+  // no snap-back when a transform releases, no layout jump when React
+  // mounts/unmounts the panel. The exit cleanup records the in-flight size so
+  // a reopen mid-exit grows back from where it was. Exit completion is
+  // `animation.finished`; the timeout below stays as fallback where WAAPI
+  // never runs (e.g. hidden tab). Refs are synced in an effect so both
+  // signals stay correct across parent re-renders during the exit.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const collapsedRef = useRef<number | null>(null);
   const onExitedRef = useRef(onExited);
   const exitedRef = useRef(false);
   useEffect(() => {
     onExitedRef.current = onExited;
   });
+  useEffect(() => {
+    if (closing) return;
+    const el = panelRef.current;
+    if (!el || typeof el.animate !== "function") return;
+    const frames = isDesktop
+      ? [
+          { width: `${collapsedRef.current ?? 0}px` },
+          { width: `${el.offsetWidth}px` },
+        ]
+      : [
+          { height: `${collapsedRef.current ?? 0}px` },
+          { height: `${el.offsetHeight}px` },
+        ];
+    const animation = el.animate(frames, {
+      duration: 200,
+      easing: "cubic-bezier(0, 0, 0.2, 1)",
+    });
+    return () => animation.cancel();
+  }, [closing, isDesktop]);
+  useEffect(() => {
+    if (!closing) return;
+    const el = panelRef.current;
+    if (!el || typeof el.animate !== "function") return;
+    const frames = isDesktop
+      ? [{ width: `${el.offsetWidth}px` }, { width: "0px" }]
+      : [{ height: `${el.offsetHeight}px` }, { height: "0px" }];
+    const animation = el.animate(frames, {
+      duration: 200,
+      easing: "cubic-bezier(0.4, 0, 1, 1)",
+      fill: "forwards",
+    });
+    let aborted = false;
+    animation.finished
+      .then(() => {
+        if (aborted || exitedRef.current) return;
+        exitedRef.current = true;
+        onExitedRef.current();
+      })
+      .catch(() => {
+        // canceled on reopen or unmount
+      });
+    return () => {
+      aborted = true;
+      collapsedRef.current = isDesktop ? el.offsetWidth : el.offsetHeight;
+      animation.cancel();
+    };
+  }, [closing, isDesktop]);
   useEffect(() => {
     if (!closing) {
       exitedRef.current = false;
@@ -191,13 +239,6 @@ export function EditPanel({
     }, 300);
     return () => window.clearTimeout(timer);
   }, [closing]);
-  const handleAnimationEnd = (event: AnimationEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget || !closing || exitedRef.current) {
-      return;
-    }
-    exitedRef.current = true;
-    onExited();
-  };
 
   // Mobile bottom sheet: swipe down to dismiss (only from a scroll position of
   // the panel body at its top, so list scrolling never closes the panel).
@@ -222,25 +263,17 @@ export function EditPanel({
 
   return (
     <div
+      ref={panelRef}
       data-editor-panel
       role="dialog"
       aria-label={t("editor.panelTitle")}
       data-state={closing ? "closed" : "open"}
       className={cn(
-        "relative z-40 flex shrink-0 flex-col overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl duration-200",
-        closing ? "animate-out" : "animate-in",
+        "relative z-40 flex shrink-0 flex-col overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl",
         isDesktop
           ? "h-full w-[448px] border-l"
           : "max-h-[80vh] w-full rounded-t-xl border-t",
-        isDesktop
-          ? closing
-            ? "slide-out-to-right"
-            : "slide-in-from-right"
-          : closing
-            ? "slide-out-to-bottom"
-            : "slide-in-from-bottom",
       )}
-      onAnimationEnd={handleAnimationEnd}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
