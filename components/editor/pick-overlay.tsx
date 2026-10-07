@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import type { Spec } from "@json-render/core";
 import type { InstanceChain } from "@/lib/editor";
@@ -69,5 +69,53 @@ export function PickOverlay({
     )?.setAttribute("data-jr-selected", "true");
   }, [enabled, spec, selectedKey, selectedChain, containerRef]);
 
-  return null;
+  // Gradient-flow selection ring: a gradient cannot ride on `outline`, and the
+  // border+background trick would change the picked element's layout and
+  // overwrite its background — so the ring is a dedicated overlay div in the
+  // scroll container (scrolls with content). A rAF loop follows the element's
+  // rect + border-radius through scroll, spec edits, and the panel's
+  // open/close layout shift; zero-size rects (or a gone element) hide it.
+  const ringRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const ring = ringRef.current;
+    const container = containerRef.current;
+    if (!enabled || !selectedKey || !spec || !ring || !container) return;
+    let raf = 0;
+    const update = () => {
+      const target = findWrapperForChain(
+        container,
+        spec,
+        selectedKey,
+        selectedChain ?? [],
+      )?.firstElementChild;
+      const rect = target?.getBoundingClientRect();
+      if (!target || !rect || rect.width === 0 || rect.height === 0) {
+        ring.style.display = "none";
+      } else {
+        const containerRect = container.getBoundingClientRect();
+        ring.style.display = "block";
+        ring.style.left = `${rect.left - containerRect.left + container.scrollLeft}px`;
+        ring.style.top = `${rect.top - containerRect.top + container.scrollTop}px`;
+        ring.style.width = `${rect.width}px`;
+        ring.style.height = `${rect.height}px`;
+        ring.style.borderRadius = getComputedStyle(target).borderRadius;
+      }
+      raf = requestAnimationFrame(update);
+    };
+    raf = requestAnimationFrame(update);
+    return () => {
+      cancelAnimationFrame(raf);
+      ring.style.display = "none";
+    };
+  }, [enabled, selectedKey, selectedChain, spec, containerRef]);
+
+  if (!enabled || !selectedKey || !spec) return null;
+  return (
+    <div
+      ref={ringRef}
+      data-editor-selection-ring
+      aria-hidden="true"
+      className="jr-selection-ring"
+    />
+  );
 }

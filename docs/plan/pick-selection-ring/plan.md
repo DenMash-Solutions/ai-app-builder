@@ -1,0 +1,66 @@
+# Pick Selection Ring — Implementation Plan
+
+**Status:** implemented
+**Date:** 2026-10-06
+
+## Goal
+
+Picking the card image in the editor showed no selection border: the ring (`outline 2px solid #fbbf24`, `outline-offset: 2px` on the `[data-jr-selected] > *` child) computed correctly but fell entirely outside the card's image frame (`overflow-hidden` + 1px border with the img filling the padding box exactly), so the ancestor clipped it from view. The hover ring has identical geometry and is invisible on the same elements. Fix by drawing both pick rings **inside** the element edge so no ancestor overflow can clip them.
+
+## Scope
+
+### In scope
+
+- `app/globals.css` pick rules: hover ring → `outline-offset: -2px` (inset), keeping width/color/dash styles
+- comment update documenting why the rings are inset
+- ~~selected-ring animation: rainbow hue cycle on the outline rule~~ — **superseded 2026-10-06** by the overlay ring below (outline cannot carry a gradient)
+- **gradient-flow selection ring (added 2026-10-06, user request — reference: btn-rainbow-border example)**: `PickOverlay` renders a dedicated `.jr-selection-ring` overlay div in the canvas scroll container; rainbow gradient (`#ff3d6e → #ff9f1c → #ffe14d → #3ddc84 → #2ec5ff → #7c5cff → #ff3d6e`, starts/ends same color); band cut with `mask-composite: exclude` (border-box fill minus padding-box fill) so the canvas shows through the center; rAF tracker copies the element's rect + `border-radius`
+- **animation (amended 2026-10-06)**: ~~horizontal flow via `background-position` on a 14em tile~~ → **continuous spin** (user picked Option B, duration user-set to 5s): registered `@property --jr-ring-angle` (`<angle>`, initial `90deg`) animated `90deg → 450deg` (one full turn, 5s linear, loop closes because 450 ≡ 90); single gradient covers the ring — no tiling, no seams; `prefers-reduced-motion` → `animation: none` leaves the static 90deg gradient
+
+### Out of scope
+
+- ~~JS overlay highlight layer (rect tracking) — rejected: ~60–80 lines + drift risk~~ — **re-scoped 2026-10-06**: approved when the user requested the gradient-flow aesthetic (an `outline` cannot carry a gradient), confirmed by user via question tool
+- Applying the reference example's border+background trick directly to the picked element — rejected: the 2px border changes arbitrary element layout (boxes grow, images/cards shift) and the `background` layers overwrite the element's own backgrounds (2026-10-06)
+- Pseudo-element (`::after`) gradient ring on the element — rejected: absolute positioning needs a reliable containing block (cannot select on computed `position`; forcing `position: relative` would break absolutely-positioned elements) and the pseudo may collide with generated UI decorations (2026-10-06)
+- Soft halo glow / blurred underlay (example's `::before`) — user chose ring-only, declined glow (2026-10-06)
+- Static 135° diagonal bands (Option A) — user picked continuous spin instead; would also need a `repeating-linear-gradient` with period `14em × sin(135°) ≈ 9.9em` to keep tile edges seam-free (descoped 2026-10-06)
+- Conic-gradient perimeter chase (Option C) — user picked continuous spin (descoped 2026-10-06)
+- Changing xray / drag affordance styles — not reported (descoped 2026-10-06)
+- Per-element ring positioning via CSS — superseded: the overlay tracker copies the computed `border-radius` per frame (2026-10-06)
+- Marching-ants animation — rejected: dash phase is not animatable in CSS (`outline`/`border`), gradient/pseudo techniques would overwrite generated UI backgrounds or `::after` decorations (descoped 2026-10-06)
+- Inner glow (`box-shadow: inset` pulse) — rejected in favor of breathing ring: glow bleeds into text content of small elements (descoped 2026-10-06)
+- One-shot flash — rejected: weak for re-identifying the element later (e.g. among repeat instances) (descoped 2026-10-06)
+- Animating the hover ring — not requested; hover must stay static amber to distinguish it from selection (descoped 2026-10-06)
+- Rainbow via `filter: hue-rotate` — rejected: the filter would recolor the element's own content, not just the ring (descoped 2026-10-06)
+- Alpha dimming in the breathing cycle — replaced by the rainbow update: the 35% trough had poor contrast on warm-toned elements (user report); hue cycling now runs at full opacity (descoped 2026-10-06)
+
+## Design decisions
+
+1. **Inset rings for hover + selected** (`outline-offset: -2px`, line occupies `[edge-2, edge]`) — rejected: overlay layer, because it needs live rect tracking (canvas scroll, viewport resize, panel-grow animation) and only fixes selection unless hover is ported too; rejected: keeping outside offset for unclipped elements with a clipping detector, because CSS cannot detect ancestor `overflow`; rejected: `box-shadow: 0 0 0` outside rings, because shadows are clipped by ancestor overflow exactly like outlines
+2. **Breathing-ring animation via outline properties** (user-chosen 2026-10-06): `outline-color`/`outline-width`/`outline-offset` are animatable, so the keyframes stay on the same selected rule with no extra DOM — rejected: pseudo-element (`::after`) gradient rings, because generated UI elements may own their `::after` decorations; rejected: animating `outline-style`, because style changes are discrete; the pulse keeps a solid base ring at all times so the element never becomes invisible mid-cycle
+3. ~~Rainbow hue cycle at full opacity, 2s loop~~ — **superseded 2026-10-06** by decision 4: hue-cycling flat outline was replaced by the gradient-flow overlay once the user supplied a border-gradient reference
+4. **Gradient-flow ring as a dedicated overlay layer** (user-approved 2026-10-06 via question tool): `.jr-selection-ring` div rendered by `PickOverlay` inside the canvas scroll container (`position: absolute` against the `overflow-y-auto` container → scrolls with content for free); a `requestAnimationFrame` loop (only while a selection exists) reads `getBoundingClientRect` + computed `border-radius` and writes inline `left/top/width/height/borderRadius`, so scroll, spec edits, and the panel's 200ms open/close layout shift are followed automatically; zero-size rects hide the ring; `z-index: 10` sits above canvas content (badges `z-10`/auto, DOM-later wins ties) and under the `z-20` editor chrome; `pointer-events: none` never blocks clicks; `display: none` default → first rAF tick reveals at the correct rect (no wrong-position flash) — rejected: direct application of the example's `border: 2px transparent` + `background: … padding-box / … border-box` technique, because it grows the element's box and overwrites its background; rejected: pseudo-element ring, because a stable containing block cannot be guaranteed without mutating `position` on arbitrary elements; rejected: keeping the hue-cycling outline alongside, because a flat outline next to a gradient ring would double-draw the selection
+5. **Band cut via `mask-composite: exclude`, not the example's two-layer background** (corrected 2026-10-06 after MCP screenshot showed the rainbow filling the whole element): a transparent `padding-box` layer over a `border-box` rainbow punches no hole — transparent pixels let the lower layer show through; the reference example only works because its inner layer is *opaque* (button face color), which an overlay cannot afford (the canvas must show through). `mask-image: linear-gradient(#fff 0 0)` ×2 with `mask-clip: padding-box, border-box` + `mask-composite: exclude` paints only the 2px border band, and `mask-clip` follows the rounded border-box so the copied `border-radius` curves the band corners — rejected: `border-image` gradient, because it ignores `border-radius` (square corner spill past the rounded card corners); rejected: four no-repeat edge strips, because the gradient would break discontinuously at the corners; rejected: SVG stroked rect, because animating a flowing gradient stroke needs extra SVG plumbing
+6. **Continuous spin via registered `@property --jr-ring-angle`** (user-chosen 2026-10-06, Option B; duration set to 5s by user): `syntax: "<angle>"`, initial `90deg`, animated `90deg → 450deg` (5s linear infinite) with `background: linear-gradient(var(--jr-ring-angle), …)` — animating a *registered* custom property re-renders the gradient every frame, the single gradient covers the ring (`background-size` tiling removed → nothing to seam), and one full turn closes the loop exactly; reduced-motion falls back to the static initial 90deg — rejected: static 135° diagonal + horizontal flow (Option A), because an angled gradient doesn't match at its `14em` tile edges without a period-matched `repeating-linear-gradient` (`14em × sin 135°`), and the user preferred rotation over a fixed diagonal; rejected: conic chase (Option C), because the user picked the spin
+
+## Verification
+
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e` — all green (118 unit, 28/28 e2e)
+- [x] MCP: pick card image → solid inset ring visible in screenshot; hover image → computed `dashed 2px offset=-2px` under `:hover`; H1 selection → inset ring visible in fresh screenshot (note: several stale compositor frames encountered mid-verification — confirmed via `evaluate_script` per `mcp-verification` lesson, repaint forced before final captures)
+- [x] Breathing animation: `jr-pick-selected-breathe` `running` on the selected image; computed outline cycles across samples (alpha 0.7 → 0.35 → 0.663, width 2 → 2.5px, offset −2 → −2.5px, never outside the element edge); fresh screenshot shows the ring on the selected card image mid-pulse — *(superseded by rainbow update below)*
+- [x] Rainbow hue cycle: chain green (118 unit, 28/28 e2e); 6 computed-style samples over ~1.9s span green → teal → blue → magenta → red → yellow at **full opacity** — *(superseded 2026-10-06 by the overlay gradient-flow ring below; `jr-pick-selected-breathe` keyframes removed)*
+- [x] Overlay ring: chain green (118 unit, 28/28 e2e); MCP — ring div `display: block` with rect delta `l/t/w/h = 0/0/0/0` against the selected `<img>` (256×235.3) in three layout states (panel open, canvas scrolled `scrollTop 60`, panel reopened after close — canvas 832px), `border-radius` copied (4px = 4px), `offsetParent` = the `jr-pick-enabled` scroll container (scroll follow instant, before any rAF tick), `jr-selection-ring-flow running` with `background-position` wrapping at the 224px tile (148.7 → 19.9 → 21.2 samples — *(superseded by the spin below; flow keyframes removed)*), `z-index: 10` / `pointer-events: none`, `mask-composite: exclude` band — fresh screenshot shows the 2px rainbow band around the selected image with the photo visible through the middle; closing the panel clears the selection and the ring unmounts (cleanup sets `display: none`)
+- [x] Continuous spin: chain green (118 unit, 28/28 e2e); MCP — `jr-selection-ring-spin running`, `animationDuration: 5s`, `--jr-ring-angle` advances `439.819deg → 123.019deg` across the loop seam in 600ms (unwrapped +43.2° = 72°/s = exactly 360°/5s; restart at 90deg after 450deg confirms the seam closes), `background-image` resolves to `linear-gradient(…deg, …)`, `mask-clip: padding-box, border-box` intact, ring still frames the selected image (verified while the user re-selected a broken `<img>` — rect tracking unaffected); fresh screenshot shows the band with colors running down the side edges (rotated gradient), reduced-motion → static 90deg (initial-value + `animation: none`)
+
+## Status log
+
+| Date | Event |
+| ---- | ----- |
+| 2026-10-06 | plan drafted (user-approved approach: inset rings) |
+| 2026-10-06 | implemented — chain green (118 unit, 28/28 e2e) + MCP screenshots: image/heading rings visible, hover rule applied |
+| 2026-10-06 | scope added (user request): breathing-ring animation on the selected rule (outline color/width/offset pulse, reduced-motion static); user picked option A over glow/flash |
+| 2026-10-06 | scope amended (user request): rainbow hue cycle at full opacity (7 hsl stops, 2s) replaces amber alpha-dim breathing — contrast complaint on warm-toned elements |
+| 2026-10-06 | scope amended (user request): overlay gradient-flow ring replaces the outline hue cycle — user supplied btn-rainbow-border example; overlay approach re-scoped from Out of Scope and approved via question tool |
+| 2026-10-06 | implemented — overlay ring tracking verified (delta 0 across panel/scroll states, flow wraps at tile, mask band cut after two-layer-background interior-rainbow bug found in MCP screenshot); chain green (118 unit, 28/28 e2e) |
+| 2026-10-06 | fixed: ring flow froze after the mask rewrite — keyframe still had two `background-position` values (valid only for the old two-layer background) and was invalid for the single layer, so the property never animated; one-position keyframe (`14em 0`), flow re-verified (61.9 → 99.2 → 137.2px over 1s), chain green |
+| 2026-10-06 | scope amended (user request): rotate the gradient — user picked Option B (continuous spin) over static diagonal/conic; `@property --jr-ring-angle` spin replaces the background-position flow; chain green, spin verified; duration then set to 5s by user (rate re-verified 72°/s) |

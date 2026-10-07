@@ -175,17 +175,74 @@
 
 /* Pick mode: json-render tags each element with a display:contents span
    ([data-jr-key]) which paints no outline itself — style its element child.
-   :has() keeps the hover ring on the deepest picked element only. */
+   :has() keeps the hover ring on the deepest picked element only. Hover rings
+   are inset (negative outline-offset) so elements inside overflow-hidden
+   frames (e.g. card image slots) are not clipped out of view. The selected
+   ring is NOT an outline: gradients can't ride on outline, and the
+   border+background trick would change the element's layout and overwrite its
+   background — it's the .jr-selection-ring overlay below. */
 .jr-pick-enabled [data-jr-key] {
   cursor: crosshair;
 }
 .jr-pick-enabled [data-jr-key]:hover:not(:has([data-jr-key]:hover)) > * {
   outline: 2px dashed #fbbf24;
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
-.jr-pick-enabled [data-jr-selected="true"] > * {
-  outline: 2px solid #fbbf24;
-  outline-offset: 2px;
+/* Selection ring: rainbow gradient spinning around the picked element — a
+   registered @property angle animates 90deg → 450deg (one full turn, linear,
+   3s), so the gradient itself rotates instead of scrolling a background tile
+   (no tiling → no seams, and the loop closes because 450deg ≡ 90deg).
+   Gradient covers the whole ring (default size), mask cuts the band below.
+   Rendered by PickOverlay as an absolutely-positioned overlay in the scroll
+   container (z-10 — under the z-20 editor chrome, above canvas content);
+   pointer-events: none never blocks clicks. Hidden by default
+   (display: none) until the tracker measures the element's rect. */
+@property --jr-ring-angle {
+  syntax: "<angle>";
+  initial-value: 90deg;
+  inherits: false;
+}
+.jr-selection-ring {
+  position: absolute;
+  z-index: 10;
+  display: none;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  pointer-events: none;
+  background: linear-gradient(
+    var(--jr-ring-angle),
+    #ff3d6e,
+    #ff9f1c,
+    #ffe14d,
+    #3ddc84,
+    #2ec5ff,
+    #7c5cff,
+    #ff3d6e
+  );
+  /* Band cut: a transparent padding-box layer over a border-box rainbow
+     cannot punch a hole (transparent pixels let the rainbow fill the middle —
+     that layer only works in the reference example because its inner layer is
+     opaque). Instead the mask is border-box fill minus padding-box fill
+     (exclude), so only the 2px border band paints and the canvas shows
+     through the center; mask-clip follows the rounded border-box, so the
+     copied border-radius curves the band corners. */
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: padding-box, border-box;
+  mask-composite: exclude;
+  animation: jr-selection-ring-spin 5s linear infinite;
+}
+@keyframes jr-selection-ring-spin {
+  from {
+    --jr-ring-angle: 90deg;
+  }
+  to {
+    --jr-ring-angle: 450deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jr-selection-ring {
+    animation: none;
+  }
 }
 
 /* Active drag: lock the cursor, stop text selection, and give zero-height
