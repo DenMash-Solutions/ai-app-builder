@@ -99,6 +99,8 @@ export const EDITOR = {
   close: en.editor.close,
   undo: en.editor.undo,
   redo: en.editor.redo,
+  expandSheet: en.editor.sheet.expand,
+  collapseSheet: en.editor.sheet.collapse,
   apply: en.editor.apply,
   freeformPlaceholder: en.editor.freeformPlaceholder,
   addClass: en.editor.list.addClass,

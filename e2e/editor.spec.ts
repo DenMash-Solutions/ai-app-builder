@@ -10,7 +10,12 @@ import {
   entryRowName,
   historyButtonName,
 } from "./constants";
-import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
+import {
+  mockGenerate,
+  readHistoryStorage,
+  swipeVertical,
+  waitForMsw,
+} from "./helpers";
 
 async function generateSample(page: Page): Promise<void> {
   await mockGenerate(page);
@@ -570,5 +575,82 @@ test.describe("editor", () => {
     const mobileBox = await mobilePanel.boundingBox();
     if (!mobileBox) throw new Error("panel has no bounding box");
     expect(Math.round(mobileBox.width)).toBe(375);
+  });
+
+  test("drawer treats ≥md (768px) as desktop — sheet below, docked at or above", async ({
+    page,
+  }) => {
+    await generateSample(page);
+
+    // 700px is ≥ the old sm threshold but < md: must still be a bottom sheet
+    await page.setViewportSize({ width: 700, height: 800 });
+    const panel = await pickHeading(page);
+    await expect
+      .poll(async () => {
+        const box = await panel.boundingBox();
+        return box ? Math.round(box.width) : -1;
+      })
+      .toBe(700);
+    const flexDirection = () =>
+      page.evaluate(() => {
+        const main = document.querySelector("main");
+        return main ? getComputedStyle(main).flexDirection : null;
+      });
+    expect(await flexDirection()).toBe("column");
+
+    // 800px ≥ md: live resize docks the same panel to the right edge
+    await page.setViewportSize({ width: 800, height: 800 });
+    await expect
+      .poll(async () => {
+        const box = await panel.boundingBox();
+        return box ? Math.round(box.width) : -1;
+      })
+      .toBe(448);
+    expect(await flexDirection()).toBe("row");
+    // The sheet expand affordance is mobile-only
+    await expect(
+      page.getByRole(ROLE.button, { name: EDITOR.expandSheet }),
+    ).toHaveCount(0);
+  });
+
+  test("mobile sheet swipes up to full screen and down to collapse, then dismiss", async ({
+    page,
+  }) => {
+    await generateSample(page);
+    await page.setViewportSize({ width: 375, height: 700 });
+    const panel = await pickHeading(page);
+    const height = async (): Promise<number> => {
+      const box = await panel.boundingBox();
+      return box ? Math.round(box.height) : -1;
+    };
+
+    // Default sheet: content-hugging (capped at 80dvh, not a fixed fill) —
+    // wait out the 200ms enter animation, then capture the settled height
+    await expect
+      .poll(async () => {
+        const a = await height();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const b = await height();
+        return a === b && a > 0;
+      })
+      .toBe(true);
+    const baseline = await height();
+    expect(baseline).toBeLessThan(560);
+
+    // Expand button (mobile-only affordance): grows to full screen, collapses back
+    await page.getByRole(ROLE.button, { name: EDITOR.expandSheet }).click();
+    await expect.poll(height).toBe(700);
+    await page.getByRole(ROLE.button, { name: EDITOR.collapseSheet }).click();
+    await expect.poll(height).toBe(baseline);
+
+    // Swipe up: grows to full screen; swipe down: collapses back
+    await swipeVertical(page, "[data-editor-panel]", 650, 150);
+    await expect.poll(height).toBe(700);
+    await swipeVertical(page, "[data-editor-panel]", 150, 650);
+    await expect.poll(height).toBe(baseline);
+
+    // Swipe down again: dismisses the sheet
+    await swipeVertical(page, "[data-editor-panel]", 300, 650);
+    await expect(page.locator("[data-editor-panel]")).toHaveCount(0);
   });
 });

@@ -36,6 +36,10 @@
     "close": "Cerrar",
     "undo": "Deshacer",
     "redo": "Rehacer",
+    "sheet": {
+      "expand": "Expandir a pantalla completa",
+      "collapse": "Contraer hoja"
+    },
     "apply": "Aplicar",
     "noEditableProps": "Sin propiedades editables",
     "freeformPlaceholder": "Describe el cambio…",

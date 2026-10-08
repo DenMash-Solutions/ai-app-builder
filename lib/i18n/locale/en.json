@@ -36,6 +36,10 @@
     "close": "Close",
     "undo": "Undo",
     "redo": "Redo",
+    "sheet": {
+      "expand": "Expand to full screen",
+      "collapse": "Collapse sheet"
+    },
     "apply": "Apply",
     "noEditableProps": "No editable properties",
     "freeformPlaceholder": "Describe the change…",

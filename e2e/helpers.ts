@@ -71,3 +71,40 @@ export async function readHistoryStorage(page: Page): Promise<StoredEntry[]> {
     return raw ? (JSON.parse(raw) as StoredEntry[]) : [];
   }, STORAGE_KEY);
 }
+
+/**
+ * Dispatches a vertical swipe (touchstart + touchend) on the first element
+ * matching `selector` — the editor sheet's swipe-to-dismiss/expand gestures.
+ */
+export async function swipeVertical(
+  page: Page,
+  selector: string,
+  fromY: number,
+  toY: number,
+): Promise<void> {
+  await page.evaluate(
+    ({ selector, fromY, toY }) => {
+      const el = document.querySelector(selector);
+      if (!el) throw new Error(`swipe target not found: ${selector}`);
+      const touch = (clientY: number): Touch =>
+        new Touch({ identifier: 1, target: el, clientX: 80, clientY });
+      el.dispatchEvent(
+        new TouchEvent("touchstart", {
+          touches: [touch(fromY)],
+          changedTouches: [touch(fromY)],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      el.dispatchEvent(
+        new TouchEvent("touchend", {
+          touches: [],
+          changedTouches: [touch(toY)],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    },
+    { selector, fromY, toY },
+  );
+}

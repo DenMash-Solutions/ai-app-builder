@@ -613,7 +613,7 @@ function Playground() {
       <VisibilityProvider>
         <ActionProvider handlers={{}}>
           <ValidationProvider customFunctions={{}}>
-            <main className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden sm:flex-row">
+            <main className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row">
               {/* Stage: holds all chrome and the canvas; shrinks when the
                   edit panel docks (right on desktop, bottom on mobile) so the
                   rail, prompt bar, and top bar are never covered. */}

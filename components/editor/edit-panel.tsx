@@ -2,7 +2,14 @@
 
 import type { Spec, UIElement } from "@json-render/core";
 import { cn } from "cn";
-import { ChevronRight, Redo2, Undo2, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Redo2,
+  Undo2,
+  X,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { playgroundCatalog } from "@/lib/playground/catalog";
@@ -50,23 +57,8 @@ function componentPropsSchema(type: string): unknown {
   >;
   return components[type]?.props;
 }
-
-/** Live ≥640px check — the drawer docks right on desktop, bottom sheet on mobile. */
-const useIsDesktopDrawer = (): boolean => {
-  const [isDesktop, setIsDesktop] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 640px)").matches,
-  );
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 640px)");
-    const update = () => setIsDesktop(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return isDesktop;
-};
+/** Live ≥768px check — the drawer docks right on desktop, bottom sheet on mobile. */
+const DESKTOP_QUERY = "(min-width: 768px)";
 
 interface EditPanelProps {
   spec: Spec;
@@ -125,7 +117,24 @@ export function EditPanel({
   onDuplicate,
 }: EditPanelProps) {
   const t = useTranslations();
-  const isDesktop = useIsDesktopDrawer();
+  const [isDesktop, setIsDesktop] = useState(
+    () =>
+      typeof window !== "undefined" && window.matchMedia(DESKTOP_QUERY).matches,
+  );
+  // Mobile sheet only: swipe-up grows to full screen, swipe-down collapses.
+  // Reset lives in the matchMedia subscription callback (never in the effect
+  // body — react-hooks/set-state-in-effect).
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(DESKTOP_QUERY);
+    const update = () => {
+      setIsDesktop(query.matches);
+      if (query.matches) setExpanded(false);
+    };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const fields = getEditableFields(componentPropsSchema(element.type));
   const crumbs = ancestors.slice(0, -1);
 
@@ -178,6 +187,14 @@ export function EditPanel({
   const collapsedRef = useRef<number | null>(null);
   const onExitedRef = useRef(onExited);
   const exitedRef = useRef(false);
+  // Captures the sheet's height before a user-initiated expand/collapse so
+  // the WAAPI effect below can animate from the old size to the new one.
+  const sheetHeightRef = useRef<number | null>(null);
+  const setSheetExpanded = (next: boolean): void => {
+    const el = panelRef.current;
+    sheetHeightRef.current = el ? el.offsetHeight : null;
+    setExpanded(next);
+  };
   useEffect(() => {
     onExitedRef.current = onExited;
   });
@@ -241,8 +258,43 @@ export function EditPanel({
     return () => window.clearTimeout(timer);
   }, [closing]);
 
-  // Mobile bottom sheet: swipe down to dismiss (only from a scroll position of
-  // the panel body at its top, so list scrolling never closes the panel).
+  // Expand/collapse animates the sheet's height with WAAPI (same layout-driven
+  // approach as enter/exit): the class switch is instant, so keyframes
+  // interpolate from the captured pre-toggle height to the new offsetHeight.
+  // Inline max-height is neutralized during the animation so the 80dvh cap
+  // cannot clamp the full-screen start frame on the way down.
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el || isDesktop) return;
+    const from = sheetHeightRef.current;
+    sheetHeightRef.current = null;
+    if (from === null) return;
+    const to = el.offsetHeight;
+    if (from === to || typeof el.animate !== "function") return;
+    el.style.maxHeight = "none";
+    const animation = el.animate(
+      [{ height: `${from}px` }, { height: `${to}px` }],
+      { duration: 250, easing: "cubic-bezier(0, 0, 0.2, 1)" },
+    );
+    let aborted = false;
+    animation.finished
+      .then(() => {
+        if (!aborted) el.style.maxHeight = "";
+      })
+      .catch(() => {
+        // canceled on re-toggle or unmount
+      });
+    return () => {
+      aborted = true;
+      animation.cancel();
+      el.style.maxHeight = "";
+    };
+  }, [expanded, isDesktop]);
+
+  // Mobile bottom sheet: swipe down to collapse (full screen → default) or
+  // dismiss (default → closed), swipe up to grow to full screen — only from a
+  // scroll position of the panel body at its top, so list scrolling never
+  // moves or closes the panel.
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
 
@@ -259,7 +311,13 @@ export function EditPanel({
     const startY = touchStartYRef.current;
     touchStartYRef.current = null;
     if (startY === null) return;
-    if (event.changedTouches[0].clientY - startY > 80) onClose();
+    const delta = event.changedTouches[0].clientY - startY;
+    if (delta > 80) {
+      if (expanded) setSheetExpanded(false);
+      else onClose();
+    } else if (delta < -80) {
+      setSheetExpanded(true);
+    }
   };
 
   return (
@@ -274,7 +332,9 @@ export function EditPanel({
         "dark relative z-40 flex shrink-0 flex-col overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl",
         isDesktop
           ? "h-full w-[448px] border-l"
-          : "max-h-[80vh] w-full rounded-t-xl border-t",
+          : expanded
+            ? "h-[100dvh] w-full border-t"
+            : "max-h-[80dvh] w-full rounded-t-xl border-t",
       )}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -305,6 +365,22 @@ export function EditPanel({
           >
             <Redo2 className="h-3.5 w-3.5" />
           </button>
+          {!isDesktop && (
+            <button
+              type="button"
+              aria-label={
+                expanded ? t("editor.sheet.collapse") : t("editor.sheet.expand")
+              }
+              onClick={() => setSheetExpanded(!expanded)}
+              className={HEADER_BUTTON_CLASS}
+            >
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronUp className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             aria-label={t("editor.close")}
