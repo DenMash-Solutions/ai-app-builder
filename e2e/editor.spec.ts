@@ -16,6 +16,7 @@ import {
   swipeVertical,
   waitForMsw,
 } from "./helpers";
+import { CAROUSEL_UI_LINES } from "./msw/fixture";
 
 async function generateSample(page: Page): Promise<void> {
   await mockGenerate(page);
@@ -528,6 +529,60 @@ test.describe("editor", () => {
     const badge = page.locator("[data-editor-badge]");
     await expect(badge).toBeVisible();
     await expect(badge).toContainText("heading-1");
+  });
+
+  test("selection ring on an element past the canvas edge adds no horizontal overflow", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { lines: CAROUSEL_UI_LINES });
+    await page.goto("/");
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page.setViewportSize({ width: 724, height: 900 });
+
+    const heading = page.getByText("Carousel Heading 3");
+    await expect(heading).toBeVisible();
+    const canvas = page.locator("main .overflow-y-auto").first();
+
+    // Sanity: the row scrolls internally, but getBoundingClientRect is
+    // unclipped geometry — card 3's heading must stick out past the column
+    const pastColumn = await heading.evaluate((el) => {
+      const scroller = el.closest<HTMLElement>(".overflow-y-auto");
+      if (!scroller) throw new Error("no canvas scroll container");
+      return Math.round(
+        el.getBoundingClientRect().right -
+          scroller.getBoundingClientRect().right,
+      );
+    });
+    expect(pastColumn).toBeGreaterThan(0);
+
+    await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
+    // dispatchEvent picks without Playwright's scroll-into-view, keeping the
+    // partially-out-of-column state the ring must tolerate
+    await heading.dispatchEvent("click");
+
+    const ring = page.locator("[data-editor-selection-ring]");
+    await expect(ring).toBeVisible();
+    // The ring frames the target (rAF tracker wrote the heading's rect)
+    await expect
+      .poll(async () => {
+        const ringBox = await ring.boundingBox();
+        const headingBox = await heading.boundingBox();
+        if (!ringBox || !headingBox) return -1;
+        return Math.abs(ringBox.x - headingBox.x);
+      })
+      .toBeLessThanOrEqual(2);
+
+    // Invariant: a decorative overlay never adds scrollable overflow to the
+    // canvas scroll container (regression: the ring used to live inside the
+    // scroller in scroll coordinates, inflating scrollWidth by 106px)
+    const metrics = await canvas.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      scrollLeft: el.scrollLeft,
+    }));
+    expect(metrics.scrollWidth).toBe(metrics.clientWidth);
+    expect(metrics.scrollLeft).toBe(0);
   });
 
   test("edit panel docks right on desktop, bottom on mobile, and stays open across re-pick", async ({

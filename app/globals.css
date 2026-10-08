@@ -106,10 +106,12 @@
    3s), so the gradient itself rotates instead of scrolling a background tile
    (no tiling → no seams, and the loop closes because 450deg ≡ 90deg).
    Gradient covers the whole ring (default size), mask cuts the band below.
-   Rendered by PickOverlay as an absolutely-positioned overlay in the scroll
-   container (z-10 — under the z-20 editor chrome, above canvas content);
-   pointer-events: none never blocks clicks. Hidden by default
-   (display: none) until the tracker measures the element's rect. */
+   Rendered by PickOverlay inside a clipping overlay (absolute inset-0
+   overflow-hidden on the stage, sibling of the scroll container — never in
+   the scroller, whose scrollable overflow it would inflate; z-10 — under
+   the z-20 editor chrome, above canvas content); pointer-events: none never
+   blocks clicks. Hidden by default (display: none) until the tracker
+   measures the element's rect. */
 @property --jr-ring-angle {
   syntax: "<angle>";
   initial-value: 90deg;

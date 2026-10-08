@@ -66,6 +66,67 @@ export const MOCK_EDIT_LINES: string[] = [
 ];
 
 /**
+ * Horizontal carousel whose row is wider than a narrow canvas column: the
+ * fixup (`fixupScrollLayout`) pins width + kills wrap at render time, so the
+ * row scrolls internally. Picking a card past the column edge exercises the
+ * selection-ring overflow regression (the ring must not inflate the canvas
+ * scroll container's scrollWidth).
+ */
+export const CAROUSEL_UI_LINES: string[] = [
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "carousel-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "sm" },
+      children: ["carousel-row"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-row"),
+    value: {
+      type: COMPONENT.stack,
+      props: {
+        direction: "horizontal",
+        gap: "sm",
+        className: "overflow-x-auto pb-4",
+      },
+      children: [
+        "carousel-card-1",
+        "carousel-card-2",
+        "carousel-card-3",
+        "carousel-card-4",
+      ],
+    },
+  }),
+  ...["1", "2", "3", "4"].flatMap((index) => [
+    line({
+      op: PATCH_OP.add,
+      path: elementPath(`carousel-card-${index}`),
+      value: {
+        type: COMPONENT.card,
+        props: {
+          title: `Card ${index}`,
+          className: "min-w-[280px] max-w-[280px] shrink-0",
+        },
+        children: [`carousel-heading-${index}`],
+      },
+    }),
+    line({
+      op: PATCH_OP.add,
+      path: elementPath(`carousel-heading-${index}`),
+      value: {
+        type: COMPONENT.heading,
+        props: { text: `Carousel Heading ${index}`, level: "h3" },
+        children: [],
+      },
+    }),
+  ]),
+];
+
+/**
  * Spec whose usefulness depends entirely on `state`: a `repeat` over
  * `/items`, a `$state` text gated by `visible`, and a button that flips
  * the gate through the built-in setState action. Renders an empty list

@@ -16,12 +16,13 @@ interface PickOverlayProps {
 }
 
 /**
- * Imperative pointer handling for pick mode. Returns no DOM of its own:
- * clicks on the rendered canvas are intercepted (so generated UI actions
- * never fire while picking), and the selection is marked via a
- * `data-jr-selected` attribute that the `.jr-pick-enabled` CSS styles.
- * Picking inside a `repeat` captures the instance chain so the mark and the
- * editor scope follow the clicked instance, not the first one rendered.
+ * Imperative pointer handling for pick mode: clicks on the rendered canvas
+ * are intercepted (so generated UI actions never fire while picking), the
+ * selection is marked via a `data-jr-selected` attribute that the
+ * `.jr-pick-enabled` CSS styles, and the gradient selection ring is drawn
+ * in a clipping overlay. Picking inside a `repeat` captures the instance
+ * chain so the mark and the editor scope follow the clicked instance, not
+ * the first one rendered.
  */
 export function PickOverlay({
   enabled,
@@ -71,15 +72,24 @@ export function PickOverlay({
 
   // Gradient-flow selection ring: a gradient cannot ride on `outline`, and the
   // border+background trick would change the picked element's layout and
-  // overwrite its background — so the ring is a dedicated overlay div in the
-  // scroll container (scrolls with content). A rAF loop follows the element's
-  // rect + border-radius through scroll, spec edits, and the panel's
-  // open/close layout shift; zero-size rects (or a gone element) hide it.
+  // overwrite its background — so the ring is a dedicated overlay div. It must
+  // NOT live inside the scroll container: an absolutely-positioned decoration
+  // there participates in that container's scrollable overflow, and a selected
+  // element inside an inner scroller (e.g. the carousel row) sticks out past
+  // the canvas column in unclipped geometry — inflating scrollWidth and
+  // creating a phantom horizontal scrollbar. Instead the ring renders in a
+  // clipping overlay (`absolute inset-0 overflow-hidden` on the stage, same
+  // box as the scroll container) positioned as its sibling. A rAF loop follows
+  // the element's viewport rect + border-radius through scroll, spec edits,
+  // and the panel's open/close layout shift; zero-size rects (or a gone
+  // element) hide it.
   const ringRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const ring = ringRef.current;
     const container = containerRef.current;
     if (!enabled || !selectedKey || !spec || !ring || !container) return;
+    const overlay = ring.parentElement;
+    if (!overlay) return;
     let raf = 0;
     const update = () => {
       const target = findWrapperForChain(
@@ -92,10 +102,10 @@ export function PickOverlay({
       if (!target || !rect || rect.width === 0 || rect.height === 0) {
         ring.style.display = "none";
       } else {
-        const containerRect = container.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
         ring.style.display = "block";
-        ring.style.left = `${rect.left - containerRect.left + container.scrollLeft}px`;
-        ring.style.top = `${rect.top - containerRect.top + container.scrollTop}px`;
+        ring.style.left = `${rect.left - overlayRect.left}px`;
+        ring.style.top = `${rect.top - overlayRect.top}px`;
         ring.style.width = `${rect.width}px`;
         ring.style.height = `${rect.height}px`;
         ring.style.borderRadius = getComputedStyle(target).borderRadius;
@@ -112,10 +122,14 @@ export function PickOverlay({
   if (!enabled || !selectedKey || !spec) return null;
   return (
     <div
-      ref={ringRef}
-      data-editor-selection-ring
       aria-hidden="true"
-      className="jr-selection-ring"
-    />
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+    >
+      <div
+        ref={ringRef}
+        data-editor-selection-ring
+        className="jr-selection-ring"
+      />
+    </div>
   );
 }

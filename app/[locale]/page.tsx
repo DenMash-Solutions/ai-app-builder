@@ -685,16 +685,6 @@ function Playground() {
                       spec={displayedSpec}
                       onMoveTo={handleMoveTo}
                     />
-                    <PickOverlay
-                      enabled={
-                        pickMode && !isStreaming && displayedSpec !== null
-                      }
-                      containerRef={containerRef}
-                      spec={displayedSpec}
-                      selectedKey={effectiveKey}
-                      selectedChain={selectedChain}
-                      onSelect={handlePick}
-                    />
                     <HoverBadge
                       enabled={
                         pickMode && !isStreaming && displayedSpec !== null
@@ -704,6 +694,23 @@ function Playground() {
                     />
                   </div>
                 </div>
+
+                {/* Mounted after the scroll container, not inside it: the ring
+              overlay is absolutely positioned and must not join the scroller's
+              scrollable overflow (a selected element inside the carousel row
+              sticks out past the canvas column in unclipped geometry and used
+              to inflate scrollWidth — a phantom horizontal scrollbar). The
+              overlay is inset-0 on the stage with overflow-hidden, clipping
+              the ring to the canvas box; its rAF tracker follows the target's
+              viewport rect, so scroll tracking is unchanged. */}
+                <PickOverlay
+                  enabled={pickMode && !isStreaming && displayedSpec !== null}
+                  containerRef={containerRef}
+                  spec={displayedSpec}
+                  selectedKey={effectiveKey}
+                  selectedChain={selectedChain}
+                  onSelect={handlePick}
+                />
 
                 {failure && (
                   <FailureDialog
