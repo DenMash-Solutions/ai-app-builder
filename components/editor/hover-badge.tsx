@@ -36,21 +36,22 @@ export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
       return;
     }
 
-    const resolveKey = (target: EventTarget | null): string | null => {
+    const resolveWrapper = (target: EventTarget | null): HTMLElement | null => {
       if (!(target instanceof Element)) return null;
-      const wrapper = target.closest<HTMLElement>("[data-jr-key]");
-      return wrapper?.dataset.jrKey ?? null;
+      return target.closest<HTMLElement>("[data-jr-key]");
     };
 
-    const measure = (key: string): BadgeState | null => {
+    // Measure the WRAPPER that was hovered, never a key lookup — repeated
+    // instances share keys and querySelector returns the first one, which
+    // pinned the badge to the first instance no matter where the cursor was.
+    const measure = (wrapper: HTMLElement): BadgeState | null => {
+      const key = wrapper.dataset.jrKey;
+      if (!key) return null;
       const element = spec.elements[key];
       if (!element) return null;
-      const wrapper = container.querySelector<HTMLElement>(
-        `[data-jr-key="${key}"]`,
-      );
       const rect = (
-        wrapper?.firstElementChild ?? wrapper
-      )?.getBoundingClientRect();
+        wrapper.firstElementChild ?? wrapper
+      ).getBoundingClientRect();
       if (!rect || rect.width === 0) return null;
       return {
         key,
@@ -65,13 +66,12 @@ export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
     };
 
     const handleMouseOver = (event: MouseEvent) => {
-      const key = resolveKey(event.target);
-      setBadge(key ? measure(key) : null);
+      const wrapper = resolveWrapper(event.target);
+      setBadge(wrapper ? measure(wrapper) : null);
     };
 
     const handleMouseOut = (event: MouseEvent) => {
-      const nextKey = resolveKey(event.relatedTarget);
-      if (nextKey === null) setBadge(null);
+      if (!resolveWrapper(event.relatedTarget)) setBadge(null);
     };
 
     container.addEventListener("mouseover", handleMouseOver);
