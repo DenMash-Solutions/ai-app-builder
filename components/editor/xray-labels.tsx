@@ -124,8 +124,9 @@ function isContainer(spec: Spec, key: string): boolean {
  * or boxless leaves keep chips — those are the components that were
  * invisible before. Family colors (Stack/Card/Text/…) make structure
  * readable before any text is. Hovering an element focuses its subtree
- * (chips expand, everything else fades) — events come from the canvas; the
- * overlay stays pointer-events-none. Containment comes from the DOM wrapper
+ * (dim/family lights by key; the amber outline and expanded chip follow the
+ * exact hovered instance — repeats share keys) — events come from the
+ * canvas; the overlay stays pointer-events-none. Containment comes from the DOM wrapper
  * tree (display:contents nesting), which matches the rendered hierarchy even
  * when the model-generated spec omits child links. Permanent chips are
  * placed by a greedy hierarchy-aware lane pass (ancestors reserve first; a
@@ -141,6 +142,9 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
   const [labels, setLabels] = useState<LabelBox[]>([]);
   const [parentMap, setParentMap] = useState<Record<string, string>>({});
   const [hoverKey, setHoverKey] = useState<string | null>(null);
+  // Exact hovered instance — repeat instances share keys, so the hover
+  // outline/expand must follow the wrapper, not the key.
+  const [hoverWrapper, setHoverWrapper] = useState<HTMLElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -364,6 +368,12 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
       setHoverKey(
         wrapper instanceof HTMLElement ? (wrapper.dataset.jrKey ?? null) : null,
       );
+      setHoverWrapper(wrapper instanceof HTMLElement ? wrapper : null);
+    };
+
+    const handleMouseLeave = () => {
+      setHoverKey(null);
+      setHoverWrapper(null);
     };
 
     const content = container.firstElementChild;
@@ -372,6 +382,7 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
     if (content) observer.observe(content);
     container.addEventListener("scroll", schedule, { passive: true });
     container.addEventListener("mouseover", handleMouseOver);
+    container.addEventListener("mouseleave", handleMouseLeave);
     schedule();
 
     return () => {
@@ -379,14 +390,16 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
       observer.disconnect();
       container.removeEventListener("scroll", schedule);
       container.removeEventListener("mouseover", handleMouseOver);
+      container.removeEventListener("mouseleave", handleMouseLeave);
       setHoverKey(null);
+      setHoverWrapper(null);
     };
   }, [enabled, spec, containerRef]);
 
-  // Hover focus (spec-tree based, so render never touches the DOM): the
-  // hovered key, its ancestors, and its descendants stay lit; the rest fades.
-  // Repeat instances share keys, so all instances of the hovered key focus —
-  // acceptable at x-ray's scanning granularity.
+  // Hover focus (key-based, so render never touches the DOM): the hovered
+  // key, its ancestors, and its descendants stay lit; the rest fades. Repeat
+  // instances share keys, so the whole family stays lit while scanning — the
+  // hover outline and expanded chip are separately instance-scoped below.
   const focusSet = useMemo(() => {
     if (!hoverKey) return null;
     const set = new Set<string>();
@@ -418,7 +431,7 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
         ? labels.map((label, index) => {
             const focused = focusSet === null || focusSet.has(label.key);
             const showChip =
-              label.container || label.quiet || label.key === hoverKey;
+              label.container || label.quiet || label.wrapper === hoverWrapper;
             return (
               <div
                 key={`${index}-${label.key}`}
@@ -449,7 +462,7 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
                     <span className={label.family.label}> · {label.type}</span>
                   </div>
                 ) : null}
-                {label.key === hoverKey && !label.boxless ? (
+                {label.wrapper === hoverWrapper && !label.boxless ? (
                   <div
                     className="absolute rounded-[2px] border-2 border-amber-400/90"
                     style={{
