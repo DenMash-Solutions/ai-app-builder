@@ -1,4 +1,15 @@
 import { expect, test } from "@playwright/test";
+import {
+  COMPONENT,
+  EDITOR,
+  MOCK_KEYS,
+  PATCH_OP,
+  PATCH_PATH,
+  PROMPTS,
+  ROLE,
+  UI,
+} from "./constants";
+import { mockGenerate, waitForMsw } from "./helpers";
 
 /**
  * Spec classNames only exist at runtime (model output, edit history) —
@@ -518,5 +529,71 @@ test.describe("runtime class coverage", () => {
       data: { candidates: "p-4" },
     });
     expect(response.status()).toBe(400);
+  });
+
+  test("layered injection keeps the chrome row layout with the drawer open", async ({
+    page,
+  }) => {
+    // Regression: a spec carrying `flex-col` used to inject an UNLAYERED
+    // .flex-col rule that beat the layered .sm:flex-row on <main> — flex
+    // direction flipped to column, the full-height drawer squeezed the
+    // canvas column to 0px, and overflow-y-auto clipped all spec content.
+    const layerLines = [
+      JSON.stringify({
+        op: PATCH_OP.add,
+        path: PATCH_PATH.root,
+        value: MOCK_KEYS.card,
+      }),
+      JSON.stringify({
+        op: PATCH_OP.add,
+        path: `${PATCH_PATH.elements}/${MOCK_KEYS.card}`,
+        value: {
+          type: COMPONENT.card,
+          props: {
+            title: "Layer probe",
+            className: "flex flex-col gap-2 p-4",
+          },
+          children: [MOCK_KEYS.heading],
+        },
+      }),
+      JSON.stringify({
+        op: PATCH_OP.add,
+        path: `${PATCH_PATH.elements}/${MOCK_KEYS.heading}`,
+        value: {
+          type: COMPONENT.heading,
+          props: { text: UI.mockHeading, level: "h1" },
+          children: [],
+        },
+      }),
+    ];
+    await mockGenerate(page, { lines: layerLines });
+    await page.goto("/");
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+
+    // Injected utilities must live in the `components` cascade layer (below
+    // the static build's `utilities`) so collisions like flex-col lose.
+    await page.waitForFunction(
+      () =>
+        document
+          .getElementById("runtime-tailwind-css")
+          ?.textContent?.includes("@layer components") === true,
+    );
+
+    await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
+    await page.getByText(UI.mockHeading).click();
+    await expect(page.locator("[data-editor-panel]")).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      const scroller = document.querySelector("main .overflow-y-auto");
+      return {
+        direction: main ? getComputedStyle(main).flexDirection : null,
+        scrollerHeight: scroller ? scroller.getBoundingClientRect().height : 0,
+      };
+    });
+    expect(layout.direction).toBe("row");
+    expect(layout.scrollerHeight).toBeGreaterThan(0);
   });
 });

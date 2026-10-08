@@ -43,6 +43,9 @@ async function requestMissingClasses(spec: Spec): Promise<void> {
       throw new Error("Unexpected /api/tailwind payload");
     }
     if (data.css !== "") {
+      // Compiled utilities land in the `components` cascade layer (see
+      // compile.ts) so they lose class-name collisions with the static
+      // build's `utilities` layer — position-independent, no wrapping here.
       ensureStyleElement().appendChild(document.createTextNode(data.css));
     }
     reportMissing(
