@@ -68,9 +68,12 @@
 }
 
 /* X-ray: page.tsx tags wrappers that hold children/slots with
-   [data-jr-container] while the mode is on. Containers get a solid green
-   outline, leaves a dashed sky one; declared before the pick rules so the
-   amber selected/hover rings still win when both modes are active. */
+   [data-jr-container] while the mode is on. Containers get a solid outline,
+   leaves a dashed one; declared before the pick rules so the amber
+   selected/hover rings still win when both modes are active. Outline colors
+   are per component family (data-jr-type, tagged alongside the container
+   marker) — keep in sync with TYPE_FAMILIES in xray-labels.tsx. Equal
+   specificity with the base rules below-in-source, so type colors win. */
 .jr-xray [data-jr-key][data-jr-container] > * {
   outline: 1.5px solid rgb(52 211 153 / 0.85);
   outline-offset: 2px;
@@ -78,6 +81,25 @@
 .jr-xray [data-jr-key]:not([data-jr-container]) > * {
   outline: 1.5px dashed rgb(56 189 248 / 0.7);
   outline-offset: 2px;
+}
+.jr-xray [data-jr-key][data-jr-type="Stack"] > * {
+  outline-color: rgb(52 211 153 / 0.9);
+}
+.jr-xray [data-jr-key][data-jr-type="Card"] > * {
+  outline-color: rgb(167 139 250 / 0.9);
+}
+.jr-xray [data-jr-key][data-jr-type="Text"] > *,
+.jr-xray [data-jr-key][data-jr-type="Heading"] > * {
+  outline-color: rgb(56 189 248 / 0.85);
+}
+.jr-xray [data-jr-key][data-jr-type="Badge"] > * {
+  outline-color: rgb(251 191 36 / 0.9);
+}
+.jr-xray [data-jr-key][data-jr-type="Image"] > * {
+  outline-color: rgb(244 114 182 / 0.9);
+}
+.jr-xray [data-jr-key][data-jr-type="Button"] > * {
+  outline-color: rgb(251 113 133 / 0.9);
 }
 
 /* Drag & drop: grab affordance on canvas elements. Declared before the pick

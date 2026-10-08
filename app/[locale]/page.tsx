@@ -29,6 +29,7 @@ import {
   EditPanel,
   HoverBadge,
   PickOverlay,
+  XrayLabels,
   PANEL_TABS,
   type PanelTab,
 } from "@/components/editor";
@@ -559,9 +560,10 @@ function Playground() {
     if (!container) return;
     const wrappers = container.querySelectorAll<HTMLElement>("[data-jr-key]");
     if (!xrayMode || !displayedSpec) {
-      wrappers.forEach((wrapper) =>
-        wrapper.removeAttribute("data-jr-container"),
-      );
+      wrappers.forEach((wrapper) => {
+        wrapper.removeAttribute("data-jr-container");
+        wrapper.removeAttribute("data-jr-type");
+      });
       return;
     }
     wrappers.forEach((wrapper) => {
@@ -574,6 +576,10 @@ function Playground() {
           Object.values(element.slots ?? {}).flat().length > 0);
       if (hasChildren) wrapper.setAttribute("data-jr-container", "1");
       else wrapper.removeAttribute("data-jr-container");
+      // Type drives the x-ray family outline colors (globals.css) — set
+      // alongside the container tag so paint stays CSS-only.
+      if (element) wrapper.setAttribute("data-jr-type", element.type);
+      else wrapper.removeAttribute("data-jr-type");
     });
   }, [xrayMode, displayedSpec]);
 
@@ -695,14 +701,19 @@ function Playground() {
                   </div>
                 </div>
 
-                {/* Mounted after the scroll container, not inside it: the ring
-              overlay is absolutely positioned and must not join the scroller's
-              scrollable overflow (a selected element inside the carousel row
-              sticks out past the canvas column in unclipped geometry and used
-              to inflate scrollWidth — a phantom horizontal scrollbar). The
-              overlay is inset-0 on the stage with overflow-hidden, clipping
-              the ring to the canvas box; its rAF tracker follows the target's
-              viewport rect, so scroll tracking is unchanged. */}
+                {/* Both overlays mount after the scroll container, not inside
+              it: absolutely-positioned decorations must not join the
+              scroller's scrollable overflow (the selection ring used to
+              inflate scrollWidth — a phantom horizontal scrollbar). Each is
+              inset-0 on the stage with overflow-hidden, clipping decorations
+              to the canvas box; trackers follow viewport rects, so scroll
+              tracking is unchanged. XrayLabels renders under PickOverlay so
+              the selection ring wins when both modes are on. */}
+                <XrayLabels
+                  enabled={xrayMode && !isStreaming && displayedSpec !== null}
+                  containerRef={containerRef}
+                  spec={displayedSpec}
+                />
                 <PickOverlay
                   enabled={pickMode && !isStreaming && displayedSpec !== null}
                   containerRef={containerRef}

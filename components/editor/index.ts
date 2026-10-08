@@ -6,3 +6,4 @@ export { HoverBadge } from "./hover-badge";
 export { PickOverlay } from "./pick-overlay";
 export { PropertyForm } from "./property-form";
 export { StructureTab } from "./structure-tab";
+export { XrayLabels } from "./xray-labels";

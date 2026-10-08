@@ -80,7 +80,19 @@ export const CAROUSEL_UI_LINES: string[] = [
     value: {
       type: COMPONENT.stack,
       props: { direction: "vertical", gap: "sm" },
-      children: ["carousel-row"],
+      children: ["carousel-row", "carousel-ghost"],
+    },
+  }),
+  // Boxless element (Card passes className through; `hidden` → display:none):
+  // drives the x-ray label's forced-marker path for components that paint
+  // nothing.
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-ghost"),
+    value: {
+      type: COMPONENT.card,
+      props: { className: "hidden" },
+      children: [],
     },
   }),
   line({
@@ -94,11 +106,25 @@ export const CAROUSEL_UI_LINES: string[] = [
         className: "overflow-x-auto pb-4",
       },
       children: [
+        "carousel-tabs",
         "carousel-card-1",
         "carousel-card-2",
         "carousel-card-3",
         "carousel-card-4",
       ],
+    },
+  }),
+  // Quiet leaf with a real box (button padding) at the row's top edge — its
+  // chip collides with carousel-row's chip, driving the lane-stacking
+  // overlap regression. (Whitespace-only text collapses to 0×0, hence a
+  // padded Button rather than a bare Text.)
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-tabs"),
+    value: {
+      type: COMPONENT.button,
+      props: { label: " " },
+      children: [],
     },
   }),
   ...["1", "2", "3", "4"].flatMap((index) => [

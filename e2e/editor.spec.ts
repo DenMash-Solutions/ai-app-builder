@@ -521,14 +521,87 @@ test.describe("editor", () => {
       page.locator('[data-jr-key="heading-1"][data-jr-container]'),
     ).toHaveCount(0);
 
+    // Tiered labels: the container chip is always on…
+    await expect(page.locator('[data-xray-chip="card-1"]')).toHaveCount(1);
+    // …a text-bearing leaf is a dot only (it self-identifies)…
+    await expect(page.locator('[data-xray-dot="heading-1"]')).toHaveCount(1);
+    await expect(page.locator('[data-xray-chip="heading-1"]')).toHaveCount(0);
+    // …and hovering the leaf expands its chip
+    await page.getByText(UI.mockHeading).hover();
+    await expect(page.locator('[data-xray-chip="heading-1"]')).toHaveCount(1);
+
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
     await expect(page.locator("[data-jr-container]")).toHaveCount(0);
+    await expect(page.locator("[data-xray-chip]")).toHaveCount(0);
+    await expect(page.locator("[data-xray-dot]")).toHaveCount(0);
 
     await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
     await page.getByText(UI.mockHeading).hover();
     const badge = page.locator("[data-editor-badge]");
     await expect(badge).toBeVisible();
     await expect(badge).toContainText("heading-1");
+  });
+
+  test("x-ray labels mark boxless elements and never overflow the canvas", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { lines: CAROUSEL_UI_LINES });
+    await page.goto("/");
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page.setViewportSize({ width: 724, height: 900 });
+    await expect(page.getByText("Carousel Heading 1")).toBeVisible();
+
+    await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
+
+    // Container chips cover the structure, including past the canvas column
+    await expect(page.locator('[data-xray-chip="carousel-row"]')).toHaveCount(
+      1,
+    );
+    await expect(
+      page.locator('[data-xray-chip="carousel-card-3"]'),
+    ).toHaveCount(1);
+
+    // Lane stacking: carousel-tabs sits at the same top edge as carousel-row,
+    // so its chip must be pushed into another lane, never overlapping
+    await expect(page.locator('[data-xray-chip="carousel-tabs"]')).toHaveCount(
+      1,
+    );
+    const chipsOverlap = await page.evaluate(() => {
+      const rectOf = (selector: string) => {
+        const el = document.querySelector(selector);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      };
+      const row = rectOf('[data-xray-chip="carousel-row"]');
+      const tabs = rectOf('[data-xray-chip="carousel-tabs"]');
+      if (!row || !tabs) return null;
+      return (
+        row.x < tabs.x + tabs.w &&
+        row.x + row.w > tabs.x &&
+        row.y < tabs.y + tabs.h &&
+        row.y + row.h > tabs.y
+      );
+    });
+    expect(chipsOverlap).toBe(false);
+
+    // The `hidden` card paints nothing → forced marker + always-on chip
+    await expect(page.locator("[data-xray-marker]")).toHaveCount(1);
+    await expect(page.locator('[data-xray-chip="carousel-ghost"]')).toHaveCount(
+      1,
+    );
+
+    // Labels are clipped to the canvas box — decorations never add scrollable
+    // overflow (same invariant as the selection-ring regression)
+    const metrics = await page
+      .locator("main .overflow-y-auto")
+      .first()
+      .evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+    expect(metrics.scrollWidth).toBe(metrics.clientWidth);
   });
 
   test("selection ring on an element past the canvas edge adds no horizontal overflow", async ({
