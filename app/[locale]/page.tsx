@@ -80,6 +80,7 @@ import {
 } from "@/lib/history";
 import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
+import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
 
@@ -221,6 +222,10 @@ function Playground() {
   };
 
   const displayedSpec = restoredSpec ?? spec;
+  // Derived render copy: carousels get scroll-container classes and
+  // width-definite ancestors (see scroll-layout-fixup) without mutating what
+  // the model produced or what editing/history operate on.
+  const renderSpec = displayedSpec ? fixupScrollLayout(displayedSpec) : null;
   // Derived selection: stale keys (removed by a patch/undo) simply read as
   // unselected — no effect round trip needed.
   const effectiveKey =
@@ -649,7 +654,7 @@ function Playground() {
                       </div>
                     )}
                     <Renderer
-                      spec={displayedSpec}
+                      spec={renderSpec}
                       registry={registry}
                       loading={isStreaming}
                     />
