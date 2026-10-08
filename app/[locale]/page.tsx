@@ -34,6 +34,7 @@ import {
 } from "@/components/editor";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { PromptBar, ToolRail, TopBar } from "@/components/playground";
+import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { FailureDialog } from "@/components/failure-dialog";
 import {
   STRUCTURE_OPS,
@@ -222,6 +223,9 @@ function Playground() {
   };
 
   const displayedSpec = restoredSpec ?? spec;
+  // Runtime classes: spec classNames exist only at runtime — compile any not
+  // yet covered via /api/tailwind and inject the CSS (no-op on failure).
+  useRuntimeClasses(displayedSpec);
   // Derived render copy: carousels get scroll-container classes and
   // width-definite ancestors (see scroll-layout-fixup) without mutating what
   // the model produced or what editing/history operate on.

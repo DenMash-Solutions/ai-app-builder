@@ -41,6 +41,7 @@
     "freeformPlaceholder": "Describe the change…",
     "list": {
       "addClass": "Add class",
+      "classNotCompiled": "No compiled rule — this may not be a valid utility class.",
       "addStyleProp": "Add style property",
       "remove": "Remove {name}",
       "newRow": "new row",

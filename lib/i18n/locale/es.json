@@ -41,6 +41,7 @@
     "freeformPlaceholder": "Describe el cambio…",
     "list": {
       "addClass": "Añadir clase",
+      "classNotCompiled": "Sin reglas compiladas — puede que no sea una clase de utilidad válida.",
       "addStyleProp": "Añadir propiedad de estilo",
       "remove": "Eliminar {name}",
       "newRow": "fila nueva",

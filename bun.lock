@@ -10,6 +10,7 @@
         "@json-render/core": "^0.21.0",
         "@json-render/react": "^0.21.0",
         "@json-render/shadcn": "^0.21.0",
+        "@tailwindcss/node": "4.3.3",
         "ai": "^7.0.127",
         "class-variance-authority": "^0.7.1",
         "cn": "^0.4.0",

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, X } from "lucide-react";
+import { Plus, TriangleAlert, X } from "lucide-react";
 import { joinClassTokens, toClassTokens } from "@/lib/editor";
+import { getMissing, subscribeMissing } from "@/lib/runtime-classes/missing";
 import { Button } from "@/components/ui/button";
 import {
   Combobox,
@@ -44,6 +45,10 @@ export function ClassTokenList({
   const rows = draft ?? fromProps;
   const listRef = useRef<HTMLUListElement | null>(null);
   const focusLastRef = useRef(false);
+  // Tokens the runtime compiler reported as producing no CSS rule.
+  const [missingTokens, setMissingTokens] =
+    useState<ReadonlySet<string>>(getMissing);
+  useEffect(() => subscribeMissing(() => setMissingTokens(getMissing())), []);
 
   useEffect(() => {
     if (!focusLastRef.current) return;
@@ -146,6 +151,16 @@ export function ClassTokenList({
                 </ComboboxList>
               </ComboboxContent>
             </Combobox>
+            {token.trim() !== "" && missingTokens.has(token.trim()) && (
+              <span
+                title={t("editor.list.classNotCompiled")}
+                aria-label={t("editor.list.classNotCompiled")}
+                role="img"
+                className="flex shrink-0 items-center text-amber-500"
+              >
+                <TriangleAlert aria-hidden className="size-4" />
+              </span>
+            )}
             <Button
               type="button"
               variant="ghost"

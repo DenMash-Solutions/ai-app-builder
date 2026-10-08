@@ -1,6 +1,6 @@
 # Safelist Audit — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-08
 
 ## Goal
@@ -33,10 +33,10 @@ The `@source inline` safelist in `app/globals.css` (17 sources, ~25–30k expand
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build`
-- [ ] Audit test passes against current `app/globals.css`; if it exposes rotten entries, fix them in the same change set and re-run
-- [ ] Manual break check: temporarily add `aspect-portrait` to an inline source → test fails listing it → revert
-- [ ] Chain baselines hold (≥188 unit tests, build ✓)
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build` — all green; unit suite 202 pass / 618 assertions / 858 ms, e2e 35/35
+- [x] Audit test passed after fixing the 27 rotten entries its first run exposed (see status log); re-run clean
+- [x] Manual break check: temporarily added `aspect-portrait` to an inline source → test failed listing it → reverted
+- [x] Chain baselines hold (unit 188 → 202, build ✓, e2e 35 ✓)
 
 ## Status log
 
@@ -44,3 +44,6 @@ The `@source inline` safelist in `app/globals.css` (17 sources, ~25–30k expand
 | ---- | ----- |
 | 2026-10-08 | plan drafted in implementation preview |
 | 2026-10-08 | approved (user "ok") |
+| 2026-10-08 | audit first run found 27 rotten candidates: 18 × `*destructive-foreground` (theme lacked `--destructive-foreground` — every other semantic pair had one, so the token was added to `app/theme-tokens.css` instead of deleting the vocabulary), `translate-y--2/--1` (negative-prefix form is what v4 compiles — pattern rewritten), `auto-cols-{xs…3xl}` (only `min,max,fr` exist — pattern narrowed) |
+| 2026-10-08 | design decision 2 follow-up applied: `hasRule` per-token scans (5.3 s over 4.5 MB) replaced by single-pass selector-Set `findMissingTokens` in `lib/runtime-classes/escape.ts` (hex-escape aware, `)`-terminating); audit now runs in <1 s, endpoint shares the path |
+| 2026-10-08 | implemented — chain green (202 unit / 618 assertions, 35 e2e), break check confirmed the audit catches injected rot |

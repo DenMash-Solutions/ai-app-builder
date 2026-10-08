@@ -315,6 +315,17 @@ test.describe("runtime class coverage", () => {
         results.push(`aspect-[3/4]: aspectRatio = "${aspectValue}", want 0.75`);
       }
 
+      // aspect-[4/5] is the carousel spec's image ratio — added to the
+      // safelist after it silently no-opped (incident 2026-10-08).
+      const aspectFourFive = probe("aspect-[4/5]");
+      const aspectFourFiveValue = style(aspectFourFive)["aspectRatio"];
+      aspectFourFive.remove();
+      if (aspectFourFiveValue !== "0.8" && aspectFourFiveValue !== "4 / 5") {
+        results.push(
+          `aspect-[4/5]: aspectRatio = "${aspectFourFiveValue}", want 0.8`,
+        );
+      }
+
       const itemsEl = probe("items-stretch");
       const itemsValue = style(itemsEl)["alignItems"];
       itemsEl.remove();
@@ -481,5 +492,31 @@ test.describe("runtime class coverage", () => {
     });
 
     expect(failures).toEqual([]);
+  });
+
+  test("on-demand compile endpoint returns css and reports missing", async ({
+    page,
+  }) => {
+    // MSW only mocks */api/generate (onUnhandledFrame bypass), so this hits
+    // the real /api/tailwind route.
+    const response = await page.request.post("/api/tailwind", {
+      data: {
+        candidates: ["aspect-[4/5]", "mt-[13px]", "aspect-portrait"],
+      },
+    });
+    expect(response.ok()).toBe(true);
+    const body = (await response.json()) as { css: string; missing: string[] };
+    expect(body.css).toContain("aspect-\\[4\\/5\\]");
+    expect(body.css).toContain("13px");
+    expect(body.missing).toEqual(["aspect-portrait"]);
+  });
+
+  test("on-demand compile endpoint rejects malformed payloads", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/tailwind", {
+      data: { candidates: "p-4" },
+    });
+    expect(response.status()).toBe(400);
   });
 });
