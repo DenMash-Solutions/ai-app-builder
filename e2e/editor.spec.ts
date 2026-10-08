@@ -586,6 +586,24 @@ test.describe("editor", () => {
     });
     expect(chipsOverlap).toBe(false);
 
+    // Hierarchy: a child chip never sits above its ancestor's chip — the
+    // tree reads top-down (parent at the top)
+    const hierarchy = await page.evaluate(() => {
+      const yOf = (selector: string) =>
+        document.querySelector(selector)?.getBoundingClientRect().y ?? null;
+      return {
+        row: yOf('[data-xray-chip="carousel-row"]'),
+        tabs: yOf('[data-xray-chip="carousel-tabs"]'),
+        card: yOf('[data-xray-chip="carousel-card-1"]'),
+      };
+    });
+    if (hierarchy.row !== null && hierarchy.tabs !== null) {
+      expect(hierarchy.tabs).toBeGreaterThanOrEqual(hierarchy.row);
+    }
+    if (hierarchy.row !== null && hierarchy.card !== null) {
+      expect(hierarchy.card).toBeGreaterThanOrEqual(hierarchy.row);
+    }
+
     // The `hidden` card paints nothing → forced marker + always-on chip
     await expect(page.locator("[data-xray-marker]")).toHaveCount(1);
     await expect(page.locator('[data-xray-chip="carousel-ghost"]')).toHaveCount(

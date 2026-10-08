@@ -73,10 +73,17 @@ interface LabelBox {
   y: number;
   width: number;
   height: number;
-  /** Chip left, clamped inside the overlay so long keys never clip mid-word. */
+  /** Chip left: box x, edge-anchored (overlay clips at the canvas edge). */
   chipLeft: number;
-  /** Chip top: above the box (default), below when clamped at the top edge. */
+  /** Chip top: above the box (default), lane/row-shifted by placement. */
   chipTop: number;
+  /** DOM wrapper for this instance — placement matches ancestors by
+   *  element identity, never by key (repeat instances share keys). */
+  wrapper: HTMLElement;
+  /** Ancestor wrappers (same instance), outermost-first. */
+  ancestorWrappers: Set<HTMLElement>;
+  /** DOM nesting depth — placement order, ancestors first. */
+  depth: number;
 }
 
 const CHIP_HEIGHT = 20;
@@ -85,6 +92,7 @@ const EDGE = 2;
 const LANE_GAP = 2;
 const CHIP_LANES_UP = 3;
 const CHIP_LANES_DOWN = 2;
+const TUCK_LANES = 3;
 
 /** `font-mono` 10px ≈ 6.2px/char; "key · type" + px-1.5 padding + border. */
 function estimateChipWidth(key: string, type: string): number {
@@ -109,18 +117,6 @@ function isContainer(spec: Spec, key: string): boolean {
   );
 }
 
-/** child key → parent key, built from the spec tree (hover focus). */
-function buildParentMap(spec: Spec): Record<string, string> {
-  const parents: Record<string, string> = {};
-  for (const [key, element] of Object.entries(spec.elements)) {
-    for (const child of element?.children ?? []) parents[child] = key;
-    for (const slotChildren of Object.values(element?.slots ?? {})) {
-      for (const child of slotChildren) parents[child] = key;
-    }
-  }
-  return parents;
-}
-
 /**
  * Identity labels for x-ray mode, tiered so the anatomy stays scannable:
  * containers get always-on `key · Type` chips (the layout skeleton), leaves
@@ -129,9 +125,13 @@ function buildParentMap(spec: Spec): Record<string, string> {
  * invisible before. Family colors (Stack/Card/Text/…) make structure
  * readable before any text is. Hovering an element focuses its subtree
  * (chips expand, everything else fades) — events come from the canvas; the
- * overlay stays pointer-events-none. Permanent chips are placed by a greedy
- * lane-stacking pass (up 3 lanes, then below-box) so nested and sibling
- * chips never overlap, and are edge-anchored (no horizontal clamp; the
+ * overlay stays pointer-events-none. Containment comes from the DOM wrapper
+ * tree (display:contents nesting), which matches the rendered hierarchy even
+ * when the model-generated spec omits child links. Permanent chips are
+ * placed by a greedy hierarchy-aware lane pass (ancestors reserve first; a
+ * child never sits above an ancestor's chip — up 3 lanes, one row under the
+ * parent, then below-box) so nested and sibling chips never overlap and the
+ * tree reads top-down, and are edge-anchored (no horizontal clamp; the
  * overlay clips at the canvas edge). Renders into a clipping overlay
  * (sibling of the scroll container) so decorations never join the scroller's
  * scrollable overflow. Measurement is event-driven (spec/toggle, passive
@@ -153,11 +153,28 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
       raf = 0;
       const overlayRect = overlay.getBoundingClientRect();
       const next: LabelBox[] = [];
+      const domParents: Record<string, string> = {};
       const nodes = container.querySelectorAll<HTMLElement>("[data-jr-key]");
       nodes.forEach((wrapper) => {
         const key = wrapper.dataset.jrKey;
         const element = key ? spec.elements[key] : undefined;
         if (!key || !element) return;
+
+        // DOM-derived containment: display:contents wrappers nest exactly per
+        // the rendered tree, unlike spec fields which the model can shape
+        // arbitrarily. Key→parent feeds hover focus; the wrapper-identity
+        // ancestor set feeds placement (repeat instances share keys, so
+        // placement must never match ancestors by key).
+        const ancestorWrappers = new Set<HTMLElement>();
+        let ancestor =
+          wrapper.parentElement?.closest<HTMLElement>("[data-jr-key]");
+        while (ancestor) {
+          ancestorWrappers.add(ancestor);
+          ancestor =
+            ancestor.parentElement?.closest<HTMLElement>("[data-jr-key]");
+        }
+        const parentKey = [...ancestorWrappers].at(-1)?.dataset.jrKey;
+        if (parentKey && parentKey !== key) domParents[key] = parentKey;
 
         // Union of direct element children — display:contents wrappers and
         // zero-area boxes contribute nothing; fragments union correctly.
@@ -235,19 +252,39 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
           // the overlay's overflow-hidden clips at the canvas edge.
           chipLeft: x,
           chipTop: boxless ? y - CHIP_HEIGHT / 2 : y - CHIP_HEIGHT - EDGE,
+          wrapper,
+          ancestorWrappers,
+          depth: ancestorWrappers.size,
         });
       });
 
-      // Lane stacking for permanent chips (containers + quiet leaves), in
-      // (y, x) order so higher/left chips reserve their spot first: shift up
-      // one lane per collision (max 3), then try below the box (max 2),
-      // else accept. Width is pre-estimated from label text — font-mono 10px
-      // metrics are stable enough, and measuring after render would flicker.
-      const placed: Array<{ x: number; y: number; w: number; h: number }> = [];
+      // Hierarchy-aware lane stacking for permanent chips (containers +
+      // quiet leaves). Ancestors place first (DOM nesting depth, then y, x)
+      // so parents always reserve their natural above-box spot, and a child
+      // never lands above an ancestor chip of the SAME INSTANCE (matched by
+      // wrapper element identity — repeat instances share keys, so key
+      // matching would cascade floors across cards) — the tree reads
+      // top-down. Candidates: above-box lanes, one row under each blocking
+      // ancestor chip, a hierarchy row, then below-box lanes; last resort
+      // accepts with a hierarchy-respecting default. Width is pre-estimated
+      // from label text — font-mono 10px metrics are stable enough, and
+      // measuring after render would flicker.
+      const placed: Array<{
+        wrapper: HTMLElement;
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+      }> = [];
       const order = next
         .map((label, index) => ({ label, index }))
         .filter(({ label }) => label.container || label.quiet)
-        .sort((a, b) => a.label.y - b.label.y || a.label.x - b.label.x);
+        .sort(
+          (a, b) =>
+            a.label.depth - b.label.depth ||
+            a.label.y - b.label.y ||
+            a.label.x - b.label.x,
+        );
       for (const { label, index } of order) {
         const w = estimateChipWidth(label.key, label.type);
         const h = CHIP_HEIGHT;
@@ -255,19 +292,54 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
         const belowBase = label.boxless
           ? label.y + h / 2 + EDGE
           : label.y + label.height + EDGE;
+
+        // Same-instance ancestor chips bound the child from above — no x
+        // scoping (a wide row's parent chip sits at the left; right-side
+        // children must still stay below it) and no key matching (repeat
+        // instances share keys; cross-instance chips must not cascade).
+        const x2 = label.x + Math.max(label.width, w);
+        const ancestorChips = placed.filter((p) =>
+          label.ancestorWrappers.has(p.wrapper),
+        );
+        // Strictly below the lowest ancestor chip row (hierarchy reads top-down).
+        const minY = ancestorChips.reduce((m, p) => Math.max(m, p.y + p.h), 0);
+        // Tuck candidates only for ancestors that actually block this x-span.
+        const blockers = ancestorChips.filter(
+          (p) => p.x < x2 && p.x + p.w > label.x,
+        );
+
         const candidates = [
           ...Array.from({ length: CHIP_LANES_UP + 1 }, (_, lane) => ({
             y: aboveBase - lane * (h + LANE_GAP),
           })),
+          // Tuck rows stack under each blocking ancestor (same-top siblings
+          // compete for the first row; without lanes the loser falls through
+          // to below-box and drags its whole subtree to the element's bottom).
+          ...blockers.flatMap((p) =>
+            Array.from({ length: TUCK_LANES }, (_, lane) => ({
+              y: p.y + p.h + LANE_GAP + lane * (h + LANE_GAP),
+            })),
+          ),
+          ...Array.from({ length: TUCK_LANES }, (_, lane) => ({
+            y: minY + LANE_GAP + lane * (h + LANE_GAP),
+          })).filter(() => minY > 0),
           ...Array.from({ length: CHIP_LANES_DOWN }, (_, lane) => ({
             y: belowBase + lane * (h + LANE_GAP),
           })),
         ];
-        let chosen = candidates[0].y;
+        // Hierarchy-respecting fallback: overlap is tolerable, inversion is not.
+        let chosen = Math.max(aboveBase, minY + LANE_GAP);
         for (const candidate of candidates) {
           if (candidate.y < EDGE || candidate.y + h > overlayRect.height - EDGE)
             continue;
-          const rect = { x: label.x, y: candidate.y, w, h };
+          if (candidate.y < minY) continue;
+          const rect = {
+            wrapper: label.wrapper,
+            x: label.x,
+            y: candidate.y,
+            w,
+            h,
+          };
           if (!placed.some((p) => rectsOverlap(rect, p))) {
             chosen = candidate.y;
             placed.push(rect);
@@ -278,7 +350,7 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
       }
 
       setLabels(next);
-      setParentMap(buildParentMap(spec));
+      setParentMap(domParents);
     };
 
     const schedule = () => {
