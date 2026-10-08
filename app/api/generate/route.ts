@@ -5,6 +5,12 @@ import { playgroundCatalog } from "@/lib/playground/catalog";
 import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
 import { validatePatchText } from "@/lib/playground/patch-text";
 import { STYLING_RULES } from "@/lib/playground/styling-rules";
+import {
+  FIRST_CHUNK_TIMEOUT_MS,
+  IDLE_TIMEOUT_MS,
+  StreamTimeoutError,
+  withDeadline,
+} from "@/lib/playground/deadline";
 
 export const maxDuration = 60;
 
@@ -37,6 +43,12 @@ function isRateLimitError(error: unknown): boolean {
 function errorResponse(error: unknown, model: string): Response {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[generate] model=${model} failed: ${message}`);
+  if (error instanceof StreamTimeoutError) {
+    return Response.json(
+      { error: error.message, code: "service_unavailable" },
+      { status: 503 },
+    );
+  }
   if (isRateLimitError(error)) {
     return Response.json(
       {
@@ -87,6 +99,15 @@ export async function POST(req: Request) {
   const spec = isNonEmptySpec(currentSpec) ? currentSpec : null;
   const isEdit = spec !== null;
 
+  // One deadline per request: on timeout the upstream call is aborted (so a
+  // dead model stops consuming quota/connections) and the wait rejects with a
+  // classified StreamTimeoutError → 503 service_unavailable.
+  const abort = new AbortController();
+  const onTimeout = () => {
+    abort.abort();
+    return new StreamTimeoutError(model);
+  };
+
   // Edit mode documents JSONL patch semantics; completeness rules only apply
   // to fresh generations (a patch never needs to "finish every section").
   const systemPrompt =
@@ -105,6 +126,7 @@ export async function POST(req: Request) {
     system: systemPrompt,
     prompt: userPrompt,
     temperature: 0.7,
+    abortSignal: abort.signal,
     onFinish: ({ finishReason, usage, text }) => {
       console.log(
         `[${isEdit ? "edit" : "generate"}] finish=${finishReason} in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"}`,
@@ -145,7 +167,11 @@ export async function POST(req: Request) {
       const iterator = stream[Symbol.asyncIterator]();
       let first: IteratorResult<string>;
       try {
-        first = await iterator.next();
+        first = await withDeadline(
+          iterator.next(),
+          FIRST_CHUNK_TIMEOUT_MS,
+          onTimeout,
+        );
       } catch (error) {
         return { kind: "error", error };
       }
@@ -153,7 +179,11 @@ export async function POST(req: Request) {
       let text = first.value;
       try {
         for (;;) {
-          const next = await iterator.next();
+          const next = await withDeadline(
+            iterator.next(),
+            IDLE_TIMEOUT_MS,
+            onTimeout,
+          );
           if (next.done) break;
           text += next.value;
         }
@@ -178,6 +208,7 @@ export async function POST(req: Request) {
         system: systemPrompt,
         prompt: userPrompt,
         temperature: 0.7,
+        abortSignal: abort.signal,
         onFinish: ({ finishReason, usage, text }) => {
           console.log(
             `[edit-retry] finish=${finishReason} in=${usage.inputTokens ?? "?"} out=${usage.outputTokens ?? "?"}`,
@@ -215,7 +246,11 @@ export async function POST(req: Request) {
   const iterator = result.textStream[Symbol.asyncIterator]();
   let first: IteratorResult<string>;
   try {
-    first = await iterator.next();
+    first = await withDeadline(
+      iterator.next(),
+      FIRST_CHUNK_TIMEOUT_MS,
+      onTimeout,
+    );
   } catch (error) {
     return errorResponse(error, model);
   }
@@ -229,7 +264,11 @@ export async function POST(req: Request) {
       try {
         if (!first.done) controller.enqueue(first.value);
         for (;;) {
-          const next = await iterator.next();
+          const next = await withDeadline(
+            iterator.next(),
+            IDLE_TIMEOUT_MS,
+            onTimeout,
+          );
           if (next.done) break;
           controller.enqueue(next.value);
         }
