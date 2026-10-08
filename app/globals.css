@@ -40,6 +40,12 @@
 @source inline("font-{serif,sans,mono,light,normal} italic not-italic opacity-{5,10,15,20,30,35,40,45,55,60,65,70,80,85,95} leading-{snug,tight,normal,relaxed} items-{start,end,stretch,baseline} inset-x-{0,4} inset-y-0 rounded tracking-{wide,wider,widest} line-clamp-{1,2,3} aspect-{auto,square,video,portrait} aspect-[3/4] aspect-[4/3] aspect-[16/9] shadow-xs shadow-2xl text-[9px] text-[10px] text-[11px] text-[13px] tracking-[0.18em] tracking-[0.2em] tracking-[0.25em]");
 @source inline("{group-hover:,dark:group-hover:}scale-{90,95,100,105,110} {group-hover:,dark:group-hover:}text-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
 
+/* Scrollable single-row carousel — the prompt rule now mandates this pattern
+   (flex/grid-flow-col + overflow-x-auto + snap, fixed-width shrink-0 cards).
+   Named min-w scale for card widths; a few observed arbitrary min-w forms;
+   negative mx for the edge-bleed idiom models pair with scroll rows. */
+@source inline("overflow-x-{auto,scroll} scroll-smooth snap-x snap-start snap-end snap-always snap-mandatory snap-proximity shrink-0 grow-0 flex-nowrap grid-flow-col auto-cols-{min,max,fr,xs,sm,md,lg,xl,2xl,3xl} min-w-{0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96} max-w-{48,52,56,60,64,72,80,96} min-w-[240px] min-w-[260px] min-w-[280px] min-w-[300px] min-w-[320px] max-w-[240px] max-w-[260px] max-w-[280px] max-w-[300px] max-w-[320px] -mx-{4,5,6,8,10,12}");
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -341,4 +341,145 @@ test.describe("runtime class coverage", () => {
 
     expect(failures).toEqual([]);
   });
+
+  test("single-row scrollable carousel pattern compiles and applies", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const failures = await page.evaluate(() => {
+      const results: string[] = [];
+      const style = (el: Element): Record<string, string> =>
+        getComputedStyle(el) as unknown as Record<string, string>;
+
+      // 8 fixed-width cards in the prompt-mandated scroll container, narrower
+      // than the cards so the row must overflow and scroll.
+      const container = document.createElement("div");
+      container.className = "flex flex-nowrap gap-4 overflow-x-auto snap-x";
+      container.style.width = "600px";
+      const cards: HTMLElement[] = [];
+      for (let i = 0; i < 8; i++) {
+        const card = document.createElement("div");
+        card.className = "shrink-0 snap-start min-w-64";
+        card.style.height = "100px";
+        card.textContent = `Card ${i}`;
+        container.appendChild(card);
+        cards.push(card);
+      }
+      document.body.appendChild(container);
+
+      try {
+        const containerStyle = style(container);
+        if (!containerStyle["overflowX"].includes("auto")) {
+          results.push(
+            `overflow-x-auto: overflowX = "${containerStyle["overflowX"]}"`,
+          );
+        }
+        if (containerStyle["scrollSnapType"] === "none") {
+          results.push(
+            `snap-x: scrollSnapType = "${containerStyle["scrollSnapType"]}"`,
+          );
+        }
+        // flex-nowrap's computed value equals the initial value (nowrap), so
+        // probe the stylesheet for the rule itself instead (recurse into
+        // @layer blocks where v4 utilities live).
+        let hasFlexNowrapRule = false;
+        const scanRules = (rules: CSSRuleList): void => {
+          for (const rule of rules) {
+            const selector = (rule as { selectorText?: string }).selectorText;
+            if (selector?.includes(".flex-nowrap")) {
+              hasFlexNowrapRule = true;
+            }
+            if ("cssRules" in rule) {
+              scanRules((rule as { cssRules: CSSRuleList }).cssRules);
+            }
+          }
+        };
+        for (const sheet of document.styleSheets) {
+          try {
+            scanRules(sheet.cssRules);
+          } catch {
+            continue;
+          }
+        }
+        if (!hasFlexNowrapRule) {
+          results.push("flex-nowrap: no rule found in any stylesheet");
+        }
+
+        const rects = cards.map((card) => card.getBoundingClientRect());
+        const firstY = rects[0].y;
+        if (!rects.every((r) => Math.abs(r.y - firstY) < 1)) {
+          results.push(
+            `cards wrapped into multiple rows: y = ${rects.map((r) => r.y).join(", ")}`,
+          );
+        }
+        if (container.scrollWidth <= container.clientWidth) {
+          results.push(
+            `not scrollable: scrollWidth ${container.scrollWidth} <= clientWidth ${container.clientWidth}`,
+          );
+        }
+        if (rects[7].right <= container.getBoundingClientRect().right) {
+          results.push("8th card is not hidden beyond the container edge");
+        }
+
+        const cardStyle = style(cards[0]);
+        if (cardStyle["flexShrink"] !== "0") {
+          results.push(`shrink-0: flexShrink = "${cardStyle["flexShrink"]}"`);
+        }
+        if (cardStyle["minWidth"] !== "256px") {
+          results.push(
+            `min-w-64: minWidth = "${cardStyle["minWidth"]}", want "256px"`,
+          );
+        }
+        // Lite paired min-w-72 max-w-72 for fixed cards; only min-w covered
+        // then — max-w named spacing scale must compile too.
+        const maxProbe = document.createElement("div");
+        maxProbe.className = "max-w-72";
+        document.body.appendChild(maxProbe);
+        const maxWidth = style(maxProbe)["maxWidth"];
+        maxProbe.remove();
+        if (maxWidth !== "288px") {
+          results.push(`max-w-72: maxWidth = "${maxWidth}", want "288px"`);
+        }
+        if (cardStyle["scrollSnapAlign"] !== "start") {
+          results.push(
+            `snap-start: scrollSnapAlign = "${cardStyle["scrollSnapAlign"]}"`,
+          );
+        }
+
+        // grid-flow-col variant of the same pattern + observed arbitrary width.
+        // Snapshot computed values before remove(): getComputedStyle returns a
+        // live object that reads "" once the element is detached.
+        const gridRow = document.createElement("div");
+        gridRow.className =
+          "grid grid-flow-col auto-cols-min overflow-x-auto min-w-[260px]";
+        document.body.appendChild(gridRow);
+        const gridFlow = style(gridRow)["gridAutoFlow"];
+        const gridAutoCols = style(gridRow)["gridAutoColumns"];
+        const gridMinWidth = style(gridRow)["minWidth"];
+        gridRow.remove();
+        // Chrome serializes the keyword "col" as "column".
+        if (gridFlow !== "col" && gridFlow !== "column") {
+          results.push(
+            `grid-flow-col: gridAutoFlow = "${gridFlow}", want "col"`,
+          );
+        }
+        if (gridAutoCols === "auto") {
+          results.push(`auto-cols-min: gridAutoColumns = "${gridAutoCols}"`);
+        }
+        if (gridMinWidth !== "260px") {
+          results.push(
+            `min-w-[260px]: minWidth = "${gridMinWidth}", want "260px"`,
+          );
+        }
+      } finally {
+        container.remove();
+      }
+
+      return results;
+    });
+
+    expect(failures).toEqual([]);
+  });
 });
