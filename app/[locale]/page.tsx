@@ -328,6 +328,19 @@ function Playground() {
     setHistoryOpen(false);
   };
 
+  // Imported JSON becomes its own history entry (steer/pick/edits all
+  // require an active entry), then activates like a history selection.
+  // The import lives in the history drawer, which closes once the spec
+  // is on canvas.
+  const handleImportSpec = (importedSpec: Spec) => {
+    const entry = createEntry(t("playground.importedEntry"), importedSpec);
+    addEntry(entry);
+    setRestoredSpec(entry.spec);
+    setActiveId(entry.id);
+    clearSelection();
+    setHistoryOpen(false);
+  };
+
   const handleDelete = (id: string) => {
     removeEntry(id);
     if (activeId === id) {
@@ -739,6 +752,7 @@ function Playground() {
                 onSelect={handleSelect}
                 onDelete={handleDelete}
                 onClear={handleClear}
+                onImportJson={handleImportSpec}
               />
             </main>
           </ValidationProvider>

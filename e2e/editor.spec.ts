@@ -7,6 +7,7 @@ import {
   ROLE,
   UI,
   dndGhostLabel,
+  entryRowName,
   historyButtonName,
 } from "./constants";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
@@ -134,7 +135,7 @@ test.describe("editor", () => {
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
     await page
-      .getByRole(ROLE.button, { name: new RegExp(PROMPTS.signIn) })
+      .getByRole(ROLE.button, { name: entryRowName(PROMPTS.signIn) })
       .click();
     await expect(page.getByText(UI.editedHeading)).toBeVisible();
     await expect(page.getByText(UI.mockHeading)).toHaveCount(0);

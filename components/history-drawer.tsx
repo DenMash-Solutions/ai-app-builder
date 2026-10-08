@@ -1,6 +1,9 @@
 "use client";
 
+import type { Spec } from "@json-render/core";
+import { Copy } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -11,8 +14,10 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import { JsonImportButton } from "@/components/playground/json-import-button";
 import type { HistoryEntry } from "@/lib/history";
 import { formatRelativeTime } from "@/lib/history";
+import { copySpecToClipboard } from "@/lib/playground/json-io";
 
 interface HistoryDrawerProps {
   open: boolean;
@@ -22,6 +27,7 @@ interface HistoryDrawerProps {
   onSelect: (entry: HistoryEntry) => void;
   onDelete: (id: string) => void;
   onClear: () => void;
+  onImportJson: (spec: Spec) => void;
 }
 
 export function HistoryDrawer({
@@ -32,9 +38,19 @@ export function HistoryDrawer({
   onSelect,
   onDelete,
   onClear,
+  onImportJson,
 }: HistoryDrawerProps) {
   const t = useTranslations();
   const locale = useLocale();
+
+  const handleExportEntry = async (entry: HistoryEntry): Promise<void> => {
+    try {
+      await copySpecToClipboard(entry.spec);
+      toast.success(t("playground.jsonCopied"));
+    } catch {
+      toast.error(t("playground.jsonCopyFailed"));
+    }
+  };
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
@@ -78,6 +94,18 @@ export function HistoryDrawer({
                       type="button"
                       variant="ghost"
                       size="sm"
+                      aria-label={t("playground.jsonExportEntry", {
+                        title: entry.prompt,
+                      })}
+                      className="h-7 px-2 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      onClick={() => void handleExportEntry(entry)}
+                    >
+                      <Copy aria-hidden="true" className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       aria-label={t("historyDrawer.deleteEntry")}
                       className="h-7 px-2 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                       onClick={() => onDelete(entry.id)}
@@ -92,6 +120,7 @@ export function HistoryDrawer({
         </div>
 
         <DrawerFooter>
+          <JsonImportButton onImport={onImportJson} />
           <DrawerClose asChild>
             <Button type="button" variant="outline">
               {t("historyDrawer.close")}

@@ -14,7 +14,19 @@
     "history": "History",
     "generationFailed": "Generation failed",
     "emptyState": "The generated UI will render here.",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "importJson": "Import JSON",
+    "importedEntry": "Imported spec",
+    "jsonDialogTitle": "Import UI JSON",
+    "jsonDialogDescription": "Paste a json-render spec (root + elements). It is saved as a new history entry.",
+    "jsonPlaceholder": "'{' \"root\": \"page\", \"elements\": '{' … '}' '}'",
+    "jsonCancel": "Cancel",
+    "jsonImport": "Import",
+    "jsonInvalidJson": "That is not valid JSON — check the syntax.",
+    "jsonInvalidSpec": "Valid JSON, but not a renderable spec: it needs a string \"root\", a non-empty \"elements\" object containing it, and every element must have a string \"type\".",
+    "jsonCopied": "Spec copied to clipboard",
+    "jsonCopyFailed": "Could not copy to the clipboard",
+    "jsonExportEntry": "Export JSON: {title}"
   },
   "editor": {
     "pick": "Pick",

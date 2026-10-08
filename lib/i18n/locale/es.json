@@ -14,7 +14,19 @@
     "history": "Historial",
     "generationFailed": "Error al generar",
     "emptyState": "La interfaz generada se mostrará aquí.",
-    "openMenu": "Abrir menú"
+    "openMenu": "Abrir menú",
+    "importJson": "Importar JSON",
+    "importedEntry": "Spec importada",
+    "jsonDialogTitle": "Importar JSON de la interfaz",
+    "jsonDialogDescription": "Pega una especificación json-render (root + elements). Se guardará como una nueva entrada del historial.",
+    "jsonPlaceholder": "'{' \"root\": \"page\", \"elements\": '{' … '}' '}'",
+    "jsonCancel": "Cancelar",
+    "jsonImport": "Importar",
+    "jsonInvalidJson": "Eso no es JSON válido — revisa la sintaxis.",
+    "jsonInvalidSpec": "JSON válido, pero no es una especificación renderizable: necesita un \"root\" de tipo string, un objeto \"elements\" no vacío que lo contenga, y cada elemento debe tener un \"type\" de tipo string.",
+    "jsonCopied": "Spec copiada al portapapeles",
+    "jsonCopyFailed": "No se pudo copiar al portapapeles",
+    "jsonExportEntry": "Exportar JSON: {title}"
   },
   "editor": {
     "pick": "Seleccionar",

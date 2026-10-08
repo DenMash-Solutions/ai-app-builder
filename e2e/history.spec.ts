@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { ACTIONS, PROMPTS, ROLE, UI, historyButtonName } from "./constants";
+import {
+  ACTIONS,
+  PROMPTS,
+  ROLE,
+  UI,
+  entryRowName,
+  historyButtonName,
+} from "./constants";
 import {
   generateCalls,
   mockGenerate,
@@ -38,7 +45,7 @@ test.describe("history", () => {
     // Restore from the drawer without calling the API
     await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
     const entry = page.getByRole(ROLE.button, {
-      name: new RegExp(PROMPTS.signIn),
+      name: entryRowName(PROMPTS.signIn),
     });
     await expect(entry).toBeVisible();
     await expect(page.getByText(UI.justNow)).toBeVisible();
@@ -83,12 +90,12 @@ test.describe("history", () => {
     await page.getByRole(ROLE.button, { name: historyButtonName(2) }).click();
     await expect(
       page.getByRole(ROLE.button, {
-        name: new RegExp(PROMPTS.signIn),
+        name: entryRowName(PROMPTS.signIn),
       }),
     ).toBeVisible();
     await expect(
       page.getByRole(ROLE.button, {
-        name: new RegExp(PROMPTS.revenueDashboard),
+        name: entryRowName(PROMPTS.revenueDashboard),
       }),
     ).toBeVisible();
     await page.getByRole(ROLE.button, { name: ACTIONS.clearAll }).click();

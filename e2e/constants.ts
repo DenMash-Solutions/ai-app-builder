@@ -11,6 +11,14 @@ export const ROLE = {
   tab: "tab",
   combobox: "combobox",
   option: "option",
+  textbox: "textbox",
+} as const;
+
+/** shadcn/vaul internal slots — the history drawer and the JSON dialog are
+ *  BOTH `role="dialog"`, so locators must scope by slot instead of role. */
+export const SLOTS = {
+  drawer: '[data-slot="drawer-content"]',
+  dialog: '[data-slot="dialog-content"]',
 } as const;
 
 export const UI = {
@@ -158,6 +166,35 @@ export const SERVICE = {
 
 export const historyButtonName = (count?: number): string =>
   count === undefined ? ACTIONS.history : `${ACTIONS.history} ${count}`;
+
+/**
+ * Row select-button locator for a history entry. Anchored with `^` so it
+ * never matches the per-row export button (aria-label "Export JSON: {title}"
+ * embeds the same prompt) — strict mode would otherwise see two buttons.
+ */
+export const entryRowName = (prompt: string): RegExp =>
+  new RegExp(`^${prompt}`);
+
+/** JSON import/export buttons + dialog copy (en). */
+export const JSON_IO = {
+  import: en.playground.importJson,
+  importedEntry: en.playground.importedEntry,
+  dialogTitle: en.playground.jsonDialogTitle,
+  importConfirm: en.playground.jsonImport,
+  cancel: en.playground.jsonCancel,
+  invalidJson: en.playground.jsonInvalidJson,
+  copied: en.playground.jsonCopied,
+  pick: en.editor.pick,
+  /**
+   * The RENDERED placeholder — the raw message quote-escapes braces
+   * (`'{' … '}'`, next-intl ICU); a fallback (parse failure) would render
+   * the key path instead, which this assertion catches.
+   */
+  placeholder: '{ "root": "page", "elements": { … } }',
+  /** Per-row export button — title makes every history row uniquely named. */
+  entryExport: (title: string): string =>
+    en.playground.jsonExportEntry.replace("{title}", title),
+} as const;
 
 /** next-intl interpolates `{key}` — mirror it for locator assertions. */
 export const dndGhostLabel = (key: string): string =>
