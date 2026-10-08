@@ -1,0 +1,306 @@
+{
+  "root": "main-container",
+  "elements": {
+    "main-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "max-w-7xl mx-auto px-4 py-10 sm:px-6 lg:px-8 bg-background min-h-screen text-foreground"
+      },
+      "children": ["header-container", "carousel-wrapper"]
+    },
+    "header-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm",
+        "align": "start",
+        "className": "mb-2"
+      },
+      "children": ["header-badge-text", "header-title", "header-description"]
+    },
+    "header-badge-text": {
+      "type": "Text",
+      "props": {
+        "text": "DAILY RITUALS",
+        "variant": "caption",
+        "className": "text-xs font-semibold tracking-widest text-primary uppercase"
+      },
+      "children": []
+    },
+    "header-title": {
+      "type": "Heading",
+      "props": {
+        "text": "The Botanical Collection",
+        "level": "h1",
+        "className": "text-3xl sm:text-4xl font-serif font-light tracking-tight text-foreground"
+      },
+      "children": []
+    },
+    "header-description": {
+      "type": "Text",
+      "props": {
+        "text": "Targeted formulas designed to restore natural radiance, balance moisture, and protect your skin daily.",
+        "variant": "muted",
+        "className": "text-sm text-muted-foreground max-w-xl"
+      },
+      "children": []
+    },
+    "carousel-wrapper": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": "w-full overflow-hidden"
+      },
+      "children": ["carousel-scroll-container", "carousel-controls-bar"]
+    },
+    "carousel-scroll-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "className": "flex overflow-x-auto snap-x snap-mandatory gap-6 py-4 px-1 scrollbar-none scroll-smooth"
+      },
+      "repeat": {
+        "statePath": "/products",
+        "key": "id"
+      },
+      "children": ["product-card"]
+    },
+    "product-card": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": "shrink-0 w-72 sm:w-80 snap-start bg-card border border-border/70 rounded-2xl p-4 shadow-xs hover:shadow-md transition-all duration-300 group flex flex-col justify-between"
+      },
+      "children": ["product-card-top", "product-card-bottom"]
+    },
+    "product-card-top": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm"
+      },
+      "children": ["product-image-container", "product-info"]
+    },
+    "product-image-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "className": "relative aspect-square w-full rounded-xl overflow-hidden bg-muted/30 mb-1"
+      },
+      "children": ["product-image", "product-badge-wrapper"]
+    },
+    "product-image": {
+      "type": "Image",
+      "props": {
+        "src": {
+          "$item": "image"
+        },
+        "alt": {
+          "$item": "name"
+        },
+        "className": "w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+      },
+      "children": []
+    },
+    "product-badge-wrapper": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "className": "absolute top-3 left-3 z-10"
+      },
+      "children": ["product-badge"]
+    },
+    "product-badge": {
+      "type": "Badge",
+      "props": {
+        "text": {
+          "$item": "badge"
+        },
+        "variant": "secondary",
+        "className": "text-[11px] font-medium tracking-wider uppercase bg-background/90 text-foreground border border-border/40 px-2.5 py-0.5 rounded-full shadow-xs backdrop-blur-md"
+      },
+      "children": []
+    },
+    "product-info": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "none",
+        "className": "space-y-1"
+      },
+      "children": ["product-category", "product-name", "product-desc"]
+    },
+    "product-category": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "category"
+        },
+        "variant": "caption",
+        "className": "text-[10px] font-bold tracking-widest uppercase text-muted-foreground/80"
+      },
+      "children": []
+    },
+    "product-name": {
+      "type": "Heading",
+      "props": {
+        "text": {
+          "$item": "name"
+        },
+        "level": "h4",
+        "className": "text-base font-serif font-medium tracking-tight text-foreground truncate"
+      },
+      "children": []
+    },
+    "product-desc": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "description"
+        },
+        "variant": "muted",
+        "className": "text-xs text-muted-foreground line-clamp-1"
+      },
+      "children": []
+    },
+    "product-card-bottom": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "justify": "between",
+        "align": "center",
+        "className": "pt-3 border-t border-border/40 mt-2"
+      },
+      "children": ["product-price", "add-to-cart-button"]
+    },
+    "product-price": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "price"
+        },
+        "variant": "body",
+        "className": "text-sm font-semibold tracking-tight text-foreground"
+      },
+      "children": []
+    },
+    "add-to-cart-button": {
+      "type": "Button",
+      "props": {
+        "label": "Quick Add +",
+        "variant": "outline",
+        "className": "h-8 text-xs font-medium px-3.5 rounded-full border-border/80 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+      },
+      "children": []
+    },
+    "carousel-controls-bar": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "justify": "between",
+        "align": "center",
+        "className": "px-1 pt-2 text-xs text-muted-foreground"
+      },
+      "children": ["carousel-hint", "carousel-count"]
+    },
+    "carousel-hint": {
+      "type": "Text",
+      "props": {
+        "text": "← Scroll sideways to discover all formulas →",
+        "variant": "caption",
+        "className": "text-xs text-muted-foreground italic tracking-wide"
+      },
+      "children": []
+    },
+    "carousel-count": {
+      "type": "Text",
+      "props": {
+        "text": "8 Products Available",
+        "variant": "caption",
+        "className": "text-xs font-semibold tracking-wider uppercase text-muted-foreground"
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "products": [
+      {
+        "id": "1",
+        "name": "Botanical Radiance Serum",
+        "category": "SERUMS",
+        "description": "Nourishing oil with cold-pressed Rosehip & Vitamin C",
+        "price": "$68",
+        "badge": "Best Seller",
+        "image": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "2",
+        "name": "Hydra-Surge Gel Cream",
+        "category": "MOISTURIZERS",
+        "description": "Deeply hydrating hyaluronic & botanical extract blend",
+        "price": "$52",
+        "badge": "New Formula",
+        "image": "https://images.unsplash.com/photo-1608248597261-7117d79b29cb?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "3",
+        "name": "Gentle Oat Milk Cleanser",
+        "category": "CLEANSERS",
+        "description": "Calming milk wash for sensitive & dry skin barrier",
+        "price": "$38",
+        "badge": "Gentle",
+        "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "4",
+        "name": "Cellular Renewal Essence",
+        "category": "TONERS",
+        "description": "Exfoliating AHA/BHA gentle daily resurfacing liquid",
+        "price": "$64",
+        "badge": "Editor's Pick",
+        "image": "https://images.unsplash.com/photo-1601049541289-9b1b7bbbfe19?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "5",
+        "name": "Midnight Recovery Mask",
+        "category": "MASKS",
+        "description": "Overnight barrier repair treatment with tri-peptides",
+        "price": "$76",
+        "badge": "Restorative",
+        "image": "https://images.unsplash.com/photo-1567928257827-4a01c678a1b0?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "6",
+        "name": "Velvet Silk Eye Elixir",
+        "category": "EYE CARE",
+        "description": "Targeted caffeine and peptide anti-puffiness gel",
+        "price": "$58",
+        "badge": "Top Rated",
+        "image": "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "7",
+        "name": "Solar Shield Fluid SPF 50+",
+        "category": "SUNCARE",
+        "description": "Invisible, weightless mineral broad-spectrum protection",
+        "price": "$44",
+        "badge": "Essential",
+        "image": "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=600&auto=format&fit=crop&q=80"
+      },
+      {
+        "id": "8",
+        "name": "Pure Squalane Facial Oil",
+        "category": "OILS",
+        "description": "100% olive-derived lightweight hydration seal",
+        "price": "$42",
+        "badge": "Organic",
+        "image": "https://images.unsplash.com/photo-1608248540862-28e3368297a7?w=600&auto=format&fit=crop&q=80"
+      }
+    ]
+  }
+}

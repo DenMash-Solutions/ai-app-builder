@@ -1,0 +1,22 @@
+{
+  "model": "gemini-3-flash",
+  "ok": false,
+  "httpStatus": 503,
+  "bytes": 0,
+  "lines": 0,
+  "patches": 0,
+  "invalidLines": 0,
+  "usage": null,
+  "root": "",
+  "elementCount": 0,
+  "stateKeys": [],
+  "productsCount": null,
+  "repeats": [],
+  "scrollContainers": [],
+  "flexWrapElements": [],
+  "minWidthNamed": [],
+  "minWidthArbitrary": [],
+  "maxWidthArbitrary": [],
+  "error": "Service unavailable: gemini-3-flash returned no response — switch model and retry.",
+  "code": "service_unavailable"
+}

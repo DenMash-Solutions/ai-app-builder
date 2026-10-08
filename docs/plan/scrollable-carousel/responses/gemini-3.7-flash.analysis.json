@@ -1,0 +1,21 @@
+{
+  "model": "gemini-3.7-flash",
+  "ok": false,
+  "httpStatus": 0,
+  "bytes": 0,
+  "lines": 0,
+  "patches": 0,
+  "invalidLines": 0,
+  "usage": null,
+  "root": "",
+  "elementCount": 0,
+  "stateKeys": [],
+  "productsCount": null,
+  "repeats": [],
+  "scrollContainers": [],
+  "flexWrapElements": [],
+  "minWidthNamed": [],
+  "minWidthArbitrary": [],
+  "maxWidthArbitrary": [],
+  "error": "The operation timed out."
+}

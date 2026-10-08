@@ -1,0 +1,380 @@
+{
+  "root": "page-container",
+  "elements": {
+    "page-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "p-6 md:p-10 max-w-7xl mx-auto w-full"
+      },
+      "children": ["header-section", "carousel-track", "footer-bar"]
+    },
+    "header-section": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm",
+        "className": "w-full"
+      },
+      "children": ["header-top-row", "header-meta-row"]
+    },
+    "header-top-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "align": "center",
+        "gap": "sm"
+      },
+      "children": ["collection-badge", "collection-tag"]
+    },
+    "collection-badge": {
+      "type": "Badge",
+      "props": {
+        "text": "COLLECTION 2025",
+        "variant": "outline",
+        "className": "font-mono tracking-widest text-[11px] uppercase border-border/80"
+      },
+      "children": []
+    },
+    "collection-tag": {
+      "type": "Text",
+      "props": {
+        "text": "BARRIER REPAIR & RADIANCE",
+        "variant": "caption",
+        "className": "uppercase tracking-widest text-[11px] text-muted-foreground font-medium"
+      },
+      "children": []
+    },
+    "header-meta-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "justify": "between",
+        "align": "end",
+        "className": "w-full pt-1"
+      },
+      "children": ["header-title-box", "header-scroll-hint"]
+    },
+    "header-title-box": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "none",
+        "className": "max-w-2xl"
+      },
+      "children": ["main-title", "subtitle-text"]
+    },
+    "main-title": {
+      "type": "Heading",
+      "props": {
+        "text": "Daily Botanical Formulations",
+        "level": "h2",
+        "className": "text-2xl md:text-3xl font-semibold tracking-tight text-foreground"
+      },
+      "children": []
+    },
+    "subtitle-text": {
+      "type": "Text",
+      "props": {
+        "text": "Targeted active botanicals and bio-lipids clinically formulated for long-lasting barrier resilience.",
+        "variant": "muted",
+        "className": "text-sm md:text-base text-muted-foreground mt-1"
+      },
+      "children": []
+    },
+    "header-scroll-hint": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "align": "center",
+        "gap": "xs",
+        "className": "text-muted-foreground text-xs font-mono"
+      },
+      "children": ["scroll-hint-text"]
+    },
+    "scroll-hint-text": {
+      "type": "Text",
+      "props": {
+        "text": "SWIPE / SCROLL HORIZONTALLY →",
+        "variant": "caption",
+        "className": "tracking-wider text-xs font-medium text-muted-foreground"
+      },
+      "children": []
+    },
+    "carousel-track": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "className": "flex overflow-x-auto snap-x scrollbar-none pb-4 pt-1 px-1 -mx-1"
+      },
+      "repeat": {
+        "statePath": "/products",
+        "key": "id"
+      },
+      "children": ["product-card"]
+    },
+    "product-card": {
+      "type": "Card",
+      "props": {
+        "className": "shrink-0 min-w-64 w-72 snap-start flex flex-col justify-between overflow-hidden bg-card border border-border/70 hover:border-foreground/30 transition-all duration-200 shadow-sm p-4 rounded-xl"
+      },
+      "children": ["product-image-container", "product-info", "product-footer"]
+    },
+    "product-image-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "xs",
+        "className": "relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-muted/60 mb-3"
+      },
+      "children": ["product-img", "product-badge-float"]
+    },
+    "product-img": {
+      "type": "Image",
+      "props": {
+        "src": {
+          "$item": "image"
+        },
+        "alt": {
+          "$item": "name"
+        },
+        "className": "w-full h-full object-cover object-center rounded-lg transition-transform duration-300 hover:scale-105"
+      },
+      "children": []
+    },
+    "product-badge-float": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "className": "absolute top-2.5 left-2.5 z-10"
+      },
+      "children": ["product-badge"]
+    },
+    "product-badge": {
+      "type": "Badge",
+      "props": {
+        "text": {
+          "$item": "badge"
+        },
+        "variant": "secondary",
+        "className": "text-[10px] font-medium tracking-wide bg-background/90 text-foreground backdrop-blur-md border border-border/50 py-0.5 px-2 shadow-xs"
+      },
+      "children": []
+    },
+    "product-info": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "xs",
+        "className": "flex-1 min-h-[96px]"
+      },
+      "children": ["product-step-tag", "product-name", "product-desc"]
+    },
+    "product-step-tag": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "step"
+        },
+        "variant": "caption",
+        "className": "uppercase tracking-widest text-[10px] font-semibold text-muted-foreground"
+      },
+      "children": []
+    },
+    "product-name": {
+      "type": "Heading",
+      "props": {
+        "text": {
+          "$item": "name"
+        },
+        "level": "h4",
+        "className": "text-base font-medium text-foreground tracking-tight line-clamp-1"
+      },
+      "children": []
+    },
+    "product-desc": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "description"
+        },
+        "variant": "muted",
+        "className": "text-xs leading-relaxed text-muted-foreground line-clamp-2 mt-0.5"
+      },
+      "children": []
+    },
+    "product-footer": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "justify": "between",
+        "align": "center",
+        "className": "pt-3 mt-2 border-t border-border/50"
+      },
+      "children": ["product-price-display", "product-quick-add"]
+    },
+    "product-price-display": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "price"
+        },
+        "variant": "body",
+        "className": "text-sm font-semibold tracking-tight text-foreground font-mono"
+      },
+      "children": []
+    },
+    "product-quick-add": {
+      "type": "Button",
+      "props": {
+        "label": "Add",
+        "variant": "secondary",
+        "className": "h-7 px-3 text-xs font-medium rounded-md hover:bg-primary hover:text-primary-foreground transition-colors"
+      },
+      "children": []
+    },
+    "footer-bar": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "justify": "between",
+        "align": "center",
+        "className": "pt-4 border-t border-border/60 flex-wrap gap-4"
+      },
+      "children": ["footer-indicators", "footer-actions"]
+    },
+    "footer-indicators": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "lg",
+        "align": "center",
+        "className": "text-xs text-muted-foreground flex-wrap"
+      },
+      "children": ["indicator-1", "indicator-2", "indicator-3"]
+    },
+    "indicator-1": {
+      "type": "Text",
+      "props": {
+        "text": "• Dermatologist Approved",
+        "variant": "caption",
+        "className": "font-medium text-foreground/80"
+      },
+      "children": []
+    },
+    "indicator-2": {
+      "type": "Text",
+      "props": {
+        "text": "• Fragrance & Cruelty Free",
+        "variant": "caption",
+        "className": "font-medium text-foreground/80"
+      },
+      "children": []
+    },
+    "indicator-3": {
+      "type": "Text",
+      "props": {
+        "text": "• Recyclable Miron Glass",
+        "variant": "caption",
+        "className": "font-medium text-foreground/80"
+      },
+      "children": []
+    },
+    "footer-actions": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "align": "center"
+      },
+      "children": ["view-routine-btn"]
+    },
+    "view-routine-btn": {
+      "type": "Button",
+      "props": {
+        "label": "Build Custom Regimen",
+        "variant": "primary",
+        "className": "text-xs font-medium px-4 h-8"
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "products": [
+      {
+        "id": "p1",
+        "name": "Celestial Essence Mist",
+        "step": "Step 01 / Balance",
+        "badge": "Best Seller",
+        "description": "Micro-fine humectant mist with alpine rose water and snow mushroom extract.",
+        "price": "$48",
+        "image": "https://images.unsplash.com/photo-1608248597359-2045e7f22521?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p2",
+        "name": "Lipid Shield Emulsion",
+        "step": "Step 02 / Nourish",
+        "badge": "Award Winner",
+        "description": "Triple ceramide complex bio-identical to stratum corneum lipids.",
+        "price": "$76",
+        "image": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p3",
+        "name": "Phyto-Retinol Elixir",
+        "step": "Step 03 / Resurface",
+        "badge": "Clean 100%",
+        "description": "Gentle 2% bakuchiol and cacay seed oil smoothing micro-texture overnight.",
+        "price": "$84",
+        "image": "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p4",
+        "name": "Kombucha Purifying Gel",
+        "step": "Step 00 / Cleanse",
+        "badge": "New",
+        "description": "Low-pH amino acid wash clearing daily impurities without lipid depletion.",
+        "price": "$42",
+        "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p5",
+        "name": "Luminous C Bio-Serum",
+        "step": "Step 02 / Illuminate",
+        "badge": "Potent Active",
+        "description": "15% lipid-soluble THD ascorbate blended with ferulic acid & sea buckthorn.",
+        "price": "$88",
+        "image": "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p6",
+        "name": "Squalane Cloud Creme",
+        "step": "Step 03 / Seal",
+        "badge": "Cult Classic",
+        "description": "Whipped vegan squalane imparting weightless 72-hour deep moisture.",
+        "price": "$64",
+        "image": "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p7",
+        "name": "Peptide Contour Balm",
+        "step": "Step 02 / Focus",
+        "badge": "Staff Pick",
+        "description": "Concentrated hexapeptide with green caffeine combating orbital fatigue.",
+        "price": "$58",
+        "image": "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?auto=format&fit=crop&w=600&q=80"
+      },
+      {
+        "id": "p8",
+        "name": "Zinc Mineral Veil SPF 50",
+        "step": "Step 04 / Defend",
+        "badge": "Daily Essential",
+        "description": "Ultra-sheer non-nano zinc oxide with ectoin defense and a velvet finish.",
+        "price": "$46",
+        "image": "https://images.unsplash.com/photo-1556228722-d0b77732a3ef?auto=format&fit=crop&w=600&q=80"
+      }
+    ]
+  }
+}

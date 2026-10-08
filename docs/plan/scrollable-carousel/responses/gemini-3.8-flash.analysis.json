@@ -1,0 +1,38 @@
+{
+  "model": "gemini-3.8-flash",
+  "ok": true,
+  "httpStatus": 200,
+  "bytes": 9929,
+  "lines": 41,
+  "patches": 41,
+  "invalidLines": 0,
+  "usage": null,
+  "root": "page-container",
+  "elementCount": 31,
+  "stateKeys": ["products"],
+  "productsCount": 8,
+  "repeats": [
+    {
+      "key": "carousel-track",
+      "statePath": "/products"
+    }
+  ],
+  "scrollContainers": [
+    {
+      "key": "carousel-track",
+      "className": "flex overflow-x-auto snap-x scrollbar-none pb-4 pt-1 px-1 -mx-1",
+      "hasFlexWrap": false,
+      "hasFlexNowrap": false,
+      "overflowX": "overflow-x-auto",
+      "snapType": "snap-x",
+      "gridFlowCol": false,
+      "childKeys": ["product-card"],
+      "childShrinkZero": "true",
+      "childMinWidths": "min-w-64"
+    }
+  ],
+  "flexWrapElements": ["footer-bar", "footer-indicators"],
+  "minWidthNamed": ["product-card:64"],
+  "minWidthArbitrary": [],
+  "maxWidthArbitrary": []
+}

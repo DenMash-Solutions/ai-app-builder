@@ -1,0 +1,160 @@
+{
+  "root": "product-carousel",
+  "elements": {
+    "product-carousel": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "p-6"
+      },
+      "children": ["heading", "scroll-container"]
+    },
+    "heading": {
+      "type": "Heading",
+      "props": {
+        "text": "Skincare Essentials",
+        "level": "h2"
+      },
+      "children": []
+    },
+    "scroll-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "className": "overflow-x-auto pb-4 snap-x"
+      },
+      "repeat": {
+        "statePath": "/products",
+        "key": "id"
+      },
+      "children": ["product-card"]
+    },
+    "product-card": {
+      "type": "Card",
+      "props": {
+        "className": "shrink-0 w-64 snap-start border-border"
+      },
+      "children": ["img-wrapper", "info-stack"]
+    },
+    "img-wrapper": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "className": "relative h-48 bg-muted rounded-t-lg overflow-hidden"
+      },
+      "children": ["badge"]
+    },
+    "badge": {
+      "type": "Badge",
+      "props": {
+        "text": {
+          "$item": "tag"
+        },
+        "variant": "secondary",
+        "className": "absolute top-2 left-2"
+      },
+      "children": []
+    },
+    "info-stack": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm",
+        "className": "p-4"
+      },
+      "children": ["name", "desc", "price"]
+    },
+    "name": {
+      "type": "Heading",
+      "props": {
+        "text": {
+          "$item": "name"
+        },
+        "level": "h4"
+      },
+      "children": []
+    },
+    "desc": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "description"
+        },
+        "variant": "muted"
+      },
+      "children": []
+    },
+    "price": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "price"
+        },
+        "className": "font-semibold"
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "products": [
+      {
+        "id": "1",
+        "name": "Hydrating Serum",
+        "description": "Deep moisture boost",
+        "price": "$42",
+        "tag": "Best Seller"
+      },
+      {
+        "id": "2",
+        "name": "Vitamin C Glow",
+        "description": "Brightening daily dose",
+        "price": "$38",
+        "tag": "New"
+      },
+      {
+        "id": "3",
+        "name": "Calming Cleanser",
+        "description": "Gentle daily wash",
+        "price": "$24",
+        "tag": "Essential"
+      },
+      {
+        "id": "4",
+        "name": "Retinol Night",
+        "description": "Smooth fine lines",
+        "price": "$55",
+        "tag": "Pro"
+      },
+      {
+        "id": "5",
+        "name": "SPF 50 Shield",
+        "description": "Total sun protection",
+        "price": "$32",
+        "tag": "Essential"
+      },
+      {
+        "id": "6",
+        "name": "Eye Revival",
+        "description": "Wake up tired eyes",
+        "price": "$45",
+        "tag": "New"
+      },
+      {
+        "id": "7",
+        "name": "Clay Mask",
+        "description": "Deep pore detox",
+        "price": "$28",
+        "tag": "Weekly"
+      },
+      {
+        "id": "8",
+        "name": "Lip Treatment",
+        "description": "Ultra-soft finish",
+        "price": "$18",
+        "tag": "Best Seller"
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "model": "gemini-3.1-flash-lite",
+  "ok": true,
+  "httpStatus": 200,
+  "bytes": 2918,
+  "lines": 20,
+  "patches": 20,
+  "invalidLines": 0,
+  "usage": null,
+  "root": "product-carousel",
+  "elementCount": 10,
+  "stateKeys": ["products"],
+  "productsCount": 8,
+  "repeats": [
+    {
+      "key": "scroll-container",
+      "statePath": "/products"
+    }
+  ],
+  "scrollContainers": [
+    {
+      "key": "scroll-container",
+      "className": "overflow-x-auto pb-4 snap-x",
+      "hasFlexWrap": false,
+      "hasFlexNowrap": false,
+      "overflowX": "overflow-x-auto",
+      "snapType": "snap-x",
+      "gridFlowCol": false,
+      "childKeys": ["product-card"],
+      "childShrinkZero": "true",
+      "childMinWidths": ""
+    }
+  ],
+  "flexWrapElements": [],
+  "minWidthNamed": [],
+  "minWidthArbitrary": [],
+  "maxWidthArbitrary": []
+}

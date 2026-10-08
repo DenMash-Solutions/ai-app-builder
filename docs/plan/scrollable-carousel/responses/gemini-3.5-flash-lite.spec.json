@@ -1,0 +1,237 @@
+{
+  "root": "main-container",
+  "elements": {
+    "main-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "p-6 md:p-10 max-w-7xl mx-auto bg-background text-foreground"
+      },
+      "children": ["header-section", "carousel-section"]
+    },
+    "header-section": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm",
+        "className": "mb-4"
+      },
+      "children": ["heading-el", "subtitle-el"]
+    },
+    "heading-el": {
+      "type": "Heading",
+      "props": {
+        "text": "Curated Skincare Essentials",
+        "level": "h1",
+        "className": "text-3xl font-serif tracking-tight"
+      },
+      "children": []
+    },
+    "subtitle-el": {
+      "type": "Text",
+      "props": {
+        "text": "Discover our edit of high-performance formulations for radiant, healthy skin. Swipe to explore the collection.",
+        "variant": "muted",
+        "className": "text-sm md:text-base max-w-xl"
+      },
+      "children": []
+    },
+    "carousel-section": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
+      "children": ["scroll-container"]
+    },
+    "scroll-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "className": "flex overflow-x-auto snap-x py-4 px-1 no-scrollbar"
+      },
+      "repeat": {
+        "statePath": "/products",
+        "key": "id"
+      },
+      "children": ["product-card"]
+    },
+    "product-card": {
+      "type": "Card",
+      "props": {
+        "className": "shrink-0 min-w-[280px] max-w-[280px] snap-start border border-border/60 bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
+      },
+      "children": ["card-content-stack"]
+    },
+    "card-content-stack": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": "p-5"
+      },
+      "children": ["image-container", "info-stack"]
+    },
+    "image-container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "none",
+        "className": "relative aspect-square bg-muted rounded-lg overflow-hidden flex items-center justify-center"
+      },
+      "children": ["product-image", "product-badge"]
+    },
+    "product-image": {
+      "type": "Image",
+      "props": {
+        "alt": {
+          "$item": "name"
+        },
+        "className": "object-cover w-full h-full opacity-90"
+      },
+      "children": []
+    },
+    "product-badge": {
+      "type": "Badge",
+      "props": {
+        "text": {
+          "$item": "badge"
+        },
+        "variant": "secondary",
+        "className": "absolute top-3 left-3 text-xs font-medium bg-background/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-border/40"
+      },
+      "children": []
+    },
+    "info-stack": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "xs",
+        "className": ""
+      },
+      "children": ["product-name", "product-desc", "price-row"]
+    },
+    "product-name": {
+      "type": "Heading",
+      "props": {
+        "text": {
+          "$item": "name"
+        },
+        "level": "h3",
+        "className": "text-base font-medium tracking-tight text-foreground truncate"
+      },
+      "children": []
+    },
+    "product-desc": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "description"
+        },
+        "variant": "muted",
+        "className": "text-xs line-clamp-1 h-5 text-muted-foreground"
+      },
+      "children": []
+    },
+    "price-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "justify": "between",
+        "align": "center",
+        "className": "pt-2 mt-1 border-t border-border/40"
+      },
+      "children": ["product-price", "buy-button"]
+    },
+    "product-price": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$item": "price"
+        },
+        "className": "text-sm font-semibold text-foreground"
+      },
+      "children": []
+    },
+    "buy-button": {
+      "type": "Button",
+      "props": {
+        "label": "Add",
+        "variant": "secondary",
+        "className": "text-xs h-7 px-3 rounded-md font-medium transition-colors hover:bg-primary hover:text-primary-foreground"
+      },
+      "children": []
+    }
+  },
+  "state": {
+    "products": [
+      {
+        "id": "p1",
+        "name": "Botanical Hydration Serum",
+        "category": "Bestseller",
+        "description": "Deeply nourishing hyaluronic acid infusion with rosewater.",
+        "price": "$68.00",
+        "badge": "Bestseller"
+      },
+      {
+        "id": "p2",
+        "name": "Radiance C-Complex",
+        "category": "Vitamin C",
+        "description": "Potent 15% L-ascorbic acid serum for luminous clarity.",
+        "price": "$85.00",
+        "badge": "New"
+      },
+      {
+        "id": "p3",
+        "name": "Barrier Repair Peptide Cream",
+        "category": "Recovery",
+        "description": "Rich daily moisturizer with ceramides and peptides.",
+        "price": "$62.00",
+        "badge": "Essential"
+      },
+      {
+        "id": "p4",
+        "name": "Gentle Enzyme Cleanser",
+        "category": "Cleanse",
+        "description": "Papaya and green tea foaming wash for soft skin.",
+        "price": "$42.00",
+        "badge": "Award"
+      },
+      {
+        "id": "p5",
+        "name": "Night Renewal Retinol Oil",
+        "category": "Night Treatment",
+        "description": "Gentle 0.5% retinol blend with squalane and rosehip.",
+        "price": "$76.00",
+        "badge": "Popular"
+      },
+      {
+        "id": "p6",
+        "name": "Soothing Niacinamide Toner",
+        "category": "Tone",
+        "description": "Balancing mist to refine pores and calm redness.",
+        "price": "$38.00",
+        "badge": "Vegan"
+      },
+      {
+        "id": "p7",
+        "name": "Mineral SPF 50 Shield",
+        "category": "Protection",
+        "description": "Invisible zinc oxide broad-spectrum daily sunscreen.",
+        "price": "$48.00",
+        "badge": "Daily SPF"
+      },
+      {
+        "id": "p8",
+        "name": "Revitalizing Eye Complex",
+        "category": "Targeted",
+        "description": "Caffeine and peptide formula to brighten dark circles.",
+        "price": "$54.00",
+        "badge": "Limited"
+      }
+    ]
+  }
+}
