@@ -46,8 +46,14 @@ describe("STYLING_RULES", () => {
   test("steers models from arbitrary bracket values to named tokens", () => {
     expect(STYLING_RULES).toContain("named Tailwind tokens");
     expect(STYLING_RULES).toContain("bg-[#hex]");
+    expect(STYLING_RULES).toContain("aspect-square");
     expect(STYLING_RULES).toContain("aspect-video");
+    expect(STYLING_RULES).toContain("aspect-[3/4]");
+    expect(STYLING_RULES).toContain("aspect-[4/3]");
+    expect(STYLING_RULES).toContain("aspect-[16/9]");
     expect(STYLING_RULES).toContain("may not exist in the compiled stylesheet");
+    expect(STYLING_RULES).not.toContain("aspect-portrait");
+    expect(STYLING_RULES).not.toContain("aspect-3/4");
   });
 
   test("mandates single-row scrollable carousels over wrapping grids", () => {

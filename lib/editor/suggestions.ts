@@ -9,6 +9,12 @@ import { toClassTokens } from "./class-tokens";
 export const COMMON_TAILWIND_CLASSES = [
   "absolute",
   "antialiased",
+  "aspect-[16/9]",
+  "aspect-[3/4]",
+  "aspect-[4/3]",
+  "aspect-[4/5]",
+  "aspect-auto",
+  "aspect-square",
   "aspect-video",
   "backdrop-blur-md",
   "bg-amber-400",

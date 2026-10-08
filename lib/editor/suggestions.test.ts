@@ -56,4 +56,21 @@ describe("curated lists", () => {
       expect(new Set(list).size).toBe(list.length);
     }
   });
+
+  test("suggests every compiled aspect-ratio token", () => {
+    const suggestions = getClassSuggestions(null);
+    for (const token of [
+      "aspect-auto",
+      "aspect-square",
+      "aspect-video",
+      "aspect-[3/4]",
+      "aspect-[4/3]",
+      "aspect-[4/5]",
+      "aspect-[16/9]",
+    ]) {
+      expect(suggestions).toContain(token);
+    }
+    expect(suggestions).not.toContain("aspect-portrait");
+    expect(suggestions).not.toContain("aspect-3/4");
+  });
 });
