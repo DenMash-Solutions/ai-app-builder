@@ -9,6 +9,8 @@ async function generateStateful(page: Page): Promise<void> {
   await page.goto("/");
   await waitForMsw(page);
   await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+  // Wait for the post-generation /ui/[id] remount before enabling pick
+  await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 }
 
 async function pickElement(page: Page, text: string) {

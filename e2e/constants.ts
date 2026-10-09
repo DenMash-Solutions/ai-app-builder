@@ -33,6 +33,9 @@ export const UI = {
   mockHeading: "Mock UI",
   mockBody: "Rendered from MSW mock",
   editedHeading: "Edited heading",
+  uiRouteLoading: en.uiRoute.loading,
+  uiRouteNotFoundTitle: en.uiRoute.notFound.title,
+  uiRouteNotFoundBack: en.uiRoute.notFound.back,
 } as const;
 
 export const ES_UI = {

@@ -98,12 +98,13 @@ test.describe("json import/export", () => {
     expect(box.height).toBeLessThanOrEqual(272);
     expect(box.scrollHeight).toBeGreaterThan(box.clientHeight);
 
-    // Valid spec → dialog and drawer close, renders, lands in history.
+    // Valid spec → dialog and drawer close, renders on /ui/[id], lands in history.
     await dialog
       .getByRole(ROLE.button, { name: JSON_IO.importConfirm, exact: true })
       .click();
     await expect(dialog).toBeHidden();
     await expect(drawer).toBeHidden();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
       page.getByRole(ROLE.heading, { name: "Imported works" }),
     ).toBeVisible();

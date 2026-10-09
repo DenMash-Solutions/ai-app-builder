@@ -179,6 +179,9 @@ test.describe("error handling", () => {
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    // Steer only exists on /ui/[id] — wait for the post-generate redirect,
+    // or the prompt bar on the landing would start a fresh generation
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 
     // The edit stream carries one truncated JSONL line — the fragment is
     // dropped, so the completion equals the request baseline spec.

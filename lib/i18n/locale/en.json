@@ -28,6 +28,14 @@
     "jsonCopyFailed": "Could not copy to the clipboard",
     "jsonExportEntry": "Export JSON: {title}"
   },
+  "uiRoute": {
+    "loading": "Loading UI…",
+    "notFound": {
+      "title": "UI not found",
+      "description": "This link points to a UI that is not in this browser's history — it may have been deleted, or it was created in another browser.",
+      "back": "Back to the playground"
+    }
+  },
   "editor": {
     "pick": "Pick",
     "dragdrop": "Drag & drop",

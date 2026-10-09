@@ -571,6 +571,8 @@ test.describe("runtime class coverage", () => {
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    // Generation redirects to /ui/[id] (remount) — sync before tool clicks
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 
     // Injected utilities must live in the `components` cascade layer (below
     // the static build's `utilities`) so collisions like flex-col lose.

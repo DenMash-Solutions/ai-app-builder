@@ -22,9 +22,10 @@ test.describe("history", () => {
     await page.goto("/");
     await waitForMsw(page);
 
-    // Generate → auto-saved
+    // Generate → auto-saved (then redirected to /ui/[id])
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
       page.getByRole(ROLE.button, { name: historyButtonName(1) }),
     ).toBeVisible();
@@ -34,13 +35,13 @@ test.describe("history", () => {
     expect(stored[0].prompt).toBe(PROMPTS.signIn);
     expect(stored[0].spec).toHaveProperty("elements");
 
-    // Persist across a full reload
+    // Persist across a full reload — the /ui/[id] URL deep-links the entry
     await page.reload();
     await waitForMsw(page);
     await expect(
       page.getByRole(ROLE.button, { name: historyButtonName(1) }),
     ).toBeVisible();
-    await expect(page.getByText(UI.emptyState)).toBeVisible();
+    await expect(page.getByText(UI.mockHeading)).toBeVisible();
 
     // Restore from the drawer without calling the API
     await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
@@ -55,10 +56,13 @@ test.describe("history", () => {
     await expect(page.getByText(UI.mockBody)).toBeVisible();
     expect(await generateCalls(page)).toBe(0);
 
-    // Delete the entry (drawer stays open showing the empty state)
+    // Delete the active entry → back to the landing (the drawer unmounts
+    // with the route, so reopen it to confirm the empty state)
     await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
     await page.getByRole(ROLE.button, { name: ACTIONS.deleteEntry }).click();
 
+    await expect(page.getByText(UI.emptyState)).toBeVisible();
+    await page.getByRole(ROLE.button, { name: historyButtonName() }).click();
     await expect(page.getByText(UI.historyEmpty)).toBeVisible();
     await page.getByRole(ROLE.button, { name: ACTIONS.close }).click();
     await expect(
@@ -73,6 +77,7 @@ test.describe("history", () => {
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
       page.getByRole(ROLE.button, { name: historyButtonName(1) }),
     ).toBeVisible();
@@ -82,6 +87,7 @@ test.describe("history", () => {
     await page
       .getByRole(ROLE.button, { name: PROMPTS.revenueDashboard })
       .click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
       page.getByRole(ROLE.button, { name: historyButtonName(2) }),
     ).toBeVisible();
@@ -100,6 +106,10 @@ test.describe("history", () => {
     ).toBeVisible();
     await page.getByRole(ROLE.button, { name: ACTIONS.clearAll }).click();
 
+    // Clearing from /ui/[id] navigates back to the landing and unmounts the
+    // drawer — reopen it to confirm it is empty
+    await expect(page.getByText(UI.emptyState)).toBeVisible();
+    await page.getByRole(ROLE.button, { name: historyButtonName() }).click();
     await expect(page.getByText(UI.historyEmpty)).toBeVisible();
     await page.getByRole(ROLE.button, { name: ACTIONS.close }).click();
     await expect(

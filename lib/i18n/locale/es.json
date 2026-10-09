@@ -28,6 +28,14 @@
     "jsonCopyFailed": "No se pudo copiar al portapapeles",
     "jsonExportEntry": "Exportar JSON: {title}"
   },
+  "uiRoute": {
+    "loading": "Cargando interfaz…",
+    "notFound": {
+      "title": "Interfaz no encontrada",
+      "description": "Este enlace apunta a una interfaz que no está en el historial de este navegador: puede que se haya eliminado o se creó en otro navegador.",
+      "back": "Volver al playground"
+    }
+  },
   "editor": {
     "pick": "Seleccionar",
     "dragdrop": "Arrastrar y soltar",

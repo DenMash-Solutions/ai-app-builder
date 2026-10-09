@@ -24,6 +24,10 @@ async function generateSample(page: Page): Promise<void> {
   await waitForMsw(page);
   await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
   await expect(page.getByText(UI.mockHeading)).toBeVisible();
+  // Generation redirects to /ui/[id] and remounts the playground — wait for
+  // the route before interacting, or tool-state clicks hit the old instance
+  // and are lost on unmount.
+  await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 }
 
 async function pickHeading(page: Page) {
@@ -551,6 +555,7 @@ test.describe("editor", () => {
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await page.setViewportSize({ width: 724, height: 900 });
     await expect(page.getByText("Carousel Heading 1")).toBeVisible();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
 
@@ -633,6 +638,7 @@ test.describe("editor", () => {
 
     const heading = page.getByText("Carousel Heading 3");
     await expect(heading).toBeVisible();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     const canvas = page.locator("main .overflow-y-auto").first();
 
     // Sanity: the row scrolls internally, but getBoundingClientRect is
