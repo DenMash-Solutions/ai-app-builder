@@ -264,6 +264,51 @@ test.describe("prompt scope chips", () => {
     await expect(page.locator("[data-jr-scope]")).toHaveCount(0);
   });
 
+  test("x-ray chips pick and scope like the canvas", async ({ page }) => {
+    await generateStateful(page);
+    await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
+    await enablePick(page);
+
+    // Chips are interactive only while pick is armed
+    await page.getByText("Item B", { exact: true }).hover();
+    const chip = page.locator('[data-xray-chip="state-item"]');
+    await expect(chip).toHaveCount(1);
+    await expect(chip).toHaveCSS("pointer-events", "auto");
+
+    // Chip click selects the instance → editor opens for it
+    await chip.click();
+    const panel = page.locator("[data-editor-panel]");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("state-item");
+
+    // Chip shift+click scopes the hovered instance (Item C = 3rd of 6)
+    await page.getByText("Item C", { exact: true }).hover();
+    await page
+      .locator('[data-xray-chip="state-item"]')
+      .click({ modifiers: ["Shift"] });
+    const chips = page.getByTestId("prompt-scope");
+    await expect(chips).toContainText(SCOPE.chip("Text", 3, 6));
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
+
+    // Chip shift+alt+click replaces it with the shared template
+    await page.getByText("Item C", { exact: true }).hover();
+    await page
+      .locator('[data-xray-chip="state-item"]')
+      .click({ modifiers: ["Shift", "Alt"] });
+    await expect(chips).toContainText(SCOPE.chipAll("Text", 6));
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
+    // The scope toggles never moved the editor selection
+    await expect(panel).toBeVisible();
+
+    // Pick off: chips return to pass-through
+    await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
+    await page.getByText("Item B", { exact: true }).hover();
+    await expect(page.locator('[data-xray-chip="state-item"]')).toHaveCSS(
+      "pointer-events",
+      "none",
+    );
+  });
+
   test("the drawer template toggle adds and removes all instances", async ({
     page,
   }) => {

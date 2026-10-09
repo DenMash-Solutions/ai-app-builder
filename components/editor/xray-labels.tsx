@@ -3,11 +3,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Spec } from "@json-render/core";
+import type { InstanceChain } from "@/lib/editor";
+import { computeInstanceChain } from "./instance-dom";
 
 interface XrayLabelsProps {
   enabled: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   spec: Spec | null;
+  /**
+   * Pick mode armed: chips become clickable with the canvas pick semantics
+   * (click = select, shift+click = instance scope, shift+alt+click =
+   * template scope) and keep the hover-focus while the pointer is over a
+   * chip. Off = chips stay pointer-events-none and clicks fall through.
+   */
+  interactive?: boolean;
+  onSelect?: (key: string, chain: InstanceChain | null) => void;
+  onToggleScope?: (
+    key: string,
+    chain: InstanceChain | null,
+    template: boolean,
+  ) => void;
 }
 
 /** Per-family chip/dot colors. Static strings so Tailwind compiles them;
@@ -136,7 +151,14 @@ function isContainer(spec: Spec, key: string): boolean {
  * scrollable overflow. Measurement is event-driven (spec/toggle, passive
  * scroll + mouseover, ResizeObserver) and rAF-coalesced.
  */
-export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
+export function XrayLabels({
+  enabled,
+  containerRef,
+  spec,
+  interactive = false,
+  onSelect,
+  onToggleScope,
+}: XrayLabelsProps) {
   const [labels, setLabels] = useState<LabelBox[]>([]);
   const [parentMap, setParentMap] = useState<Record<string, string>>({});
   const [hoverKey, setHoverKey] = useState<string | null>(null);
@@ -369,7 +391,12 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
       setHoverWrapper(wrapper instanceof HTMLElement ? wrapper : null);
     };
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = (event: MouseEvent) => {
+      // Pointer entering a chip (a sibling overlay) keeps the hover focus —
+      // hover-only chips would otherwise unmount mid-flight and be
+      // unclickable. The chip's own leave clears the state.
+      const next = event.relatedTarget;
+      if (next instanceof Node && overlayRef.current?.contains(next)) return;
       setHoverKey(null);
       setHoverWrapper(null);
     };
@@ -453,8 +480,46 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
                 {showChip ? (
                   <div
                     data-xray-chip={label.key}
-                    className={`absolute max-w-[160px] truncate rounded-md border bg-zinc-950/95 px-1.5 py-0.5 font-mono text-[10px] leading-3 text-zinc-200 shadow-sm ${label.family.chip}`}
+                    className={`absolute max-w-[160px] truncate rounded-md border bg-zinc-950/95 px-1.5 py-0.5 font-mono text-[10px] leading-3 text-zinc-200 shadow-sm ${label.family.chip}${
+                      interactive
+                        ? " pointer-events-auto cursor-pointer select-none"
+                        : ""
+                    }`}
                     style={{ left: label.chipLeft, top: label.chipTop }}
+                    onClick={
+                      interactive && spec
+                        ? (event) => {
+                            const chain = computeInstanceChain(
+                              spec,
+                              label.wrapper,
+                            );
+                            const instance = chain.length > 0 ? chain : null;
+                            // Same modifier mapping as the canvas pick:
+                            // shift = instance scope, shift+alt = template.
+                            if (event.shiftKey && onToggleScope) {
+                              onToggleScope(label.key, instance, event.altKey);
+                              return;
+                            }
+                            onSelect?.(label.key, instance);
+                          }
+                        : undefined
+                    }
+                    onMouseEnter={
+                      interactive
+                        ? () => {
+                            setHoverKey(label.key);
+                            setHoverWrapper(label.wrapper);
+                          }
+                        : undefined
+                    }
+                    onMouseLeave={
+                      interactive
+                        ? () => {
+                            setHoverKey(null);
+                            setHoverWrapper(null);
+                          }
+                        : undefined
+                    }
                   >
                     {label.key}
                     <span className={label.family.label}> · {label.type}</span>

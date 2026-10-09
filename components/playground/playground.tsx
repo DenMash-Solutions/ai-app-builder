@@ -983,6 +983,11 @@ export function Playground({ initialId }: PlaygroundProps) {
                   enabled={xrayMode && !isStreaming && displayedSpec !== null}
                   containerRef={containerRef}
                   spec={displayedSpec}
+                  interactive={
+                    pickMode && !isStreaming && displayedSpec !== null
+                  }
+                  onSelect={handlePick}
+                  onToggleScope={handleToggleScope}
                 />
                 <PickOverlay
                   enabled={pickMode && !isStreaming && displayedSpec !== null}
