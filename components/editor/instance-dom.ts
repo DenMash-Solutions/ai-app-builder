@@ -43,6 +43,16 @@ export function chainsEqual(a: InstanceChain, b: InstanceChain): boolean {
   );
 }
 
+/** Every wrapper rendered for `key`, in DOM order (repeats included). */
+export function findWrappersForKey(
+  container: HTMLElement,
+  key: string,
+): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>("[data-jr-key]"),
+  ).filter((candidate) => candidate.getAttribute("data-jr-key") === key);
+}
+
 /**
  * Wrapper element for `key` matching `chain`; an empty chain selects the
  * first instance (template-level selection).
@@ -53,9 +63,7 @@ export function findWrapperForChain(
   key: string,
   chain: InstanceChain,
 ): HTMLElement | null {
-  const candidates = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-jr-key]"),
-  ).filter((candidate) => candidate.getAttribute("data-jr-key") === key);
+  const candidates = findWrappersForKey(container, key);
   if (chain.length === 0) return candidates[0] ?? null;
   return (
     candidates.find((candidate) =>

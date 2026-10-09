@@ -197,6 +197,67 @@ export function resolveInstanceScope(
   return { basePath: base, itemIndex: innermost.index, count };
 }
 
+/**
+ * Number of rendered instances of `key` for the current spec+state. Walks
+ * from the root through repeats, multiplying nested repeats and applying the
+ * item filter to the outermost repeat only — mirroring `walkChain`/the
+ * renderer.
+ */
+export function countKeyInstances(spec: Spec, key: string): number {
+  const state = spec.state ?? {};
+  let total = 0;
+  const visit = (
+    elementKey: string,
+    env: {
+      multiplier: number;
+      base: string | null;
+      outermost: boolean;
+    },
+  ): void => {
+    const element = spec.elements[elementKey];
+    if (!element) return;
+    const children = element.children ?? [];
+    if (!element.repeat) {
+      if (elementKey === key) total += env.multiplier;
+      for (const child of children) visit(child, env);
+      return;
+    }
+    const arrayPath = resolveRepeatStatePath(
+      element.repeat.statePath,
+      env.base,
+    );
+    if (arrayPath === undefined) return;
+    const items = getByPath(state, arrayPath);
+    if (!Array.isArray(items)) return;
+    const { itemFilter } = env.outermost
+      ? splitRepeatVisibility(element.visible)
+      : { itemFilter: undefined };
+    for (let index = 0; index < items.length; index += 1) {
+      if (
+        itemFilter &&
+        !evaluateVisibility(itemFilter, {
+          stateModel: state,
+          repeatItem: items[index],
+          repeatIndex: index,
+        })
+      ) {
+        continue;
+      }
+      // The repeated container itself renders once per visible item.
+      if (elementKey === key) total += env.multiplier;
+      for (const child of children) {
+        visit(child, {
+          multiplier: env.multiplier,
+          base: resolveRepeatItemStatePath(arrayPath, index),
+          outermost: false,
+        });
+      }
+    }
+  };
+  visit(spec.root, { multiplier: 1, base: null, outermost: true });
+  return total;
+}
+
 /** Absolute state path a prop writes to under this chain, or null. */
 export function resolveDataPath(
   spec: Spec,

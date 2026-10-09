@@ -45,6 +45,15 @@ export function generateCalls(page: Page): Promise<number> {
   );
 }
 
+/** Prompt of the most recent intercepted `/api/generate` request. */
+export function lastGeneratePrompt(page: Page): Promise<string> {
+  return page.evaluate(
+    () =>
+      (window as unknown as { __LAST_GENERATE_PROMPT__?: string })
+        .__LAST_GENERATE_PROMPT__ ?? "",
+  );
+}
+
 export interface StoredElement {
   children?: string[];
   props?: Record<string, unknown>;

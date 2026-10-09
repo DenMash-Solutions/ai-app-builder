@@ -12,6 +12,7 @@ import {
   propertyRevisionLabel,
   replaceProp,
   scopeInstruction,
+  scopeTargetsInstruction,
 } from "./editor";
 
 function makeSpec(): Spec {
@@ -69,6 +70,115 @@ describe("scopeInstruction", () => {
     expect(instruction).toContain('"Heading"');
     expect(instruction).toContain("Make it pop");
     expect(instruction).toContain("leave every other element unchanged");
+  });
+
+  test("describes the instance scope when the selection is repeat-scoped", () => {
+    const instruction = scopeInstruction("text", "Text", "Fix the label", {
+      basePath: "/images/2",
+      itemIndex: 2,
+      count: 3,
+    });
+
+    expect(instruction).toContain(
+      'element "text" (component type "Text"), instance 3 of 3, state path "/images/2"',
+    );
+    expect(instruction).toContain("Fix the label");
+  });
+});
+
+/** Repeat spec mirroring instance-path fixtures: `/images` with one hidden item. */
+function makeRepeatSpec(): Spec {
+  return {
+    root: "root",
+    elements: {
+      root: { type: "Stack", props: {}, children: ["grid"] },
+      grid: {
+        type: "Grid",
+        props: {},
+        repeat: { statePath: "/images", key: "id" },
+        children: ["image"],
+      },
+      image: { type: "Image", props: { src: { $item: "src" } } },
+    },
+    state: {
+      images: [
+        { id: "a", src: "/a.png" },
+        { id: "b", src: "/b.png" },
+        { id: "c", src: "/c.png" },
+      ],
+    },
+  };
+}
+
+describe("scopeTargetsInstruction", () => {
+  test("lists each target with its instance path so repeats stay distinct", () => {
+    const instruction = scopeTargetsInstruction(
+      makeRepeatSpec(),
+      [
+        { key: "image", chain: [{ containerKey: "grid", domIndex: 0 }] },
+        { key: "image", chain: [{ containerKey: "grid", domIndex: 2 }] },
+      ],
+      "Fix the first image and replace the third",
+    );
+
+    expect(instruction).toContain("Edit only these 2 elements");
+    expect(instruction).toContain(
+      '1) element "image" (component type "Image"), instance 1 of 3, state path "/images/0"',
+    );
+    expect(instruction).toContain(
+      '2) element "image" (component type "Image"), instance 3 of 3, state path "/images/2"',
+    );
+    expect(instruction).toContain(
+      "User request:\nFix the first image and replace the third",
+    );
+    expect(instruction).toContain("leave every other element unchanged");
+  });
+
+  test("a single template-level target uses the singular format without instance text", () => {
+    const instruction = scopeTargetsInstruction(
+      makeSpec(),
+      [{ key: "heading", chain: null }],
+      "Make it pop",
+    );
+
+    expect(instruction).toContain("Edit only this element");
+    expect(instruction).toContain(
+      'element "heading" (component type "Heading")',
+    );
+    expect(instruction).not.toContain("instance ");
+    expect(instruction).toContain("User request:\nMake it pop");
+  });
+
+  test("a repeated key with a null chain is described as the shared template", () => {
+    const instruction = scopeTargetsInstruction(
+      makeRepeatSpec(),
+      [{ key: "image", chain: null }],
+      "Make every image grayscale",
+    );
+
+    expect(instruction).toContain("Edit only this element");
+    expect(instruction).toContain(
+      'shared template of element "image" (component type "Image"), applies to all 3 rendered instances',
+    );
+    expect(instruction).not.toContain("state path");
+    expect(instruction).toContain("User request:\nMake every image grayscale");
+  });
+
+  test("mixes a template target with an unrelated instance target", () => {
+    const instruction = scopeTargetsInstruction(
+      makeRepeatSpec(),
+      [
+        { key: "image", chain: null },
+        { key: "root", chain: null },
+      ],
+      "Restyle everything",
+    );
+
+    expect(instruction).toContain("Edit only these 2 elements");
+    expect(instruction).toContain(
+      '1) shared template of element "image" (component type "Image"), applies to all 3 rendered instances',
+    );
+    expect(instruction).toContain('2) element "root" (component type "Stack")');
   });
 });
 

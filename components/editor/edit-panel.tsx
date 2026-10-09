@@ -3,9 +3,11 @@
 import type { Spec, UIElement } from "@json-render/core";
 import { cn } from "cn";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Plus,
   Redo2,
   Undo2,
   X,
@@ -89,6 +91,14 @@ interface EditPanelProps {
   onUnwrap: (key: string) => void;
   onMove: (key: string, direction: MoveDirection) => void;
   onDuplicate: (key: string) => void;
+  /** True when this element is in the prompt scope (main-prompt chips). */
+  inPromptScope: boolean;
+  onTogglePromptScope: () => void;
+  /** Rendered instances of the selected key; > 1 enables the template toggle. */
+  promptScopeInstanceCount: number;
+  /** True when the key's shared template is in the prompt scope. */
+  inPromptScopeTemplate: boolean;
+  onTogglePromptScopeTemplate: () => void;
 }
 
 export function EditPanel({
@@ -115,6 +125,11 @@ export function EditPanel({
   onUnwrap,
   onMove,
   onDuplicate,
+  inPromptScope,
+  onTogglePromptScope,
+  promptScopeInstanceCount,
+  inPromptScopeTemplate,
+  onTogglePromptScopeTemplate,
 }: EditPanelProps) {
   const t = useTranslations();
   const [isDesktop, setIsDesktop] = useState(
@@ -391,6 +406,53 @@ export function EditPanel({
           </button>
         </div>
       </div>
+
+      <button
+        type="button"
+        data-testid="prompt-scope-toggle"
+        aria-pressed={inPromptScope}
+        onClick={onTogglePromptScope}
+        className={`flex w-full shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3 py-1.5 text-left text-xs transition-colors hover:bg-zinc-800/60 ${
+          inPromptScope ? "bg-emerald-400/10 text-emerald-300" : "text-zinc-300"
+        }`}
+      >
+        {inPromptScope ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <Plus className="h-3.5 w-3.5" />
+        )}
+        {t(
+          inPromptScope
+            ? "editor.promptScope.active"
+            : "editor.promptScope.add",
+        )}
+      </button>
+
+      {promptScopeInstanceCount > 1 && (
+        <button
+          type="button"
+          data-testid="prompt-scope-template-toggle"
+          aria-pressed={inPromptScopeTemplate}
+          onClick={onTogglePromptScopeTemplate}
+          className={`flex w-full shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3 py-1.5 text-left text-xs transition-colors hover:bg-zinc-800/60 ${
+            inPromptScopeTemplate
+              ? "bg-emerald-400/10 text-emerald-300"
+              : "text-zinc-300"
+          }`}
+        >
+          {inPromptScopeTemplate ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
+          {t(
+            inPromptScopeTemplate
+              ? "editor.promptScope.activeAll"
+              : "editor.promptScope.addAll",
+            { count: promptScopeInstanceCount },
+          )}
+        </button>
+      )}
 
       {scope && (
         <div

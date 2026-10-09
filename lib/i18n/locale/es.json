@@ -26,7 +26,11 @@
     "jsonInvalidSpec": "JSON válido, pero no es una especificación renderizable: necesita un \"root\" de tipo string, un objeto \"elements\" no vacío que lo contenga, y cada elemento debe tener un \"type\" de tipo string.",
     "jsonCopied": "Spec copiada al portapapeles",
     "jsonCopyFailed": "No se pudo copiar al portapapeles",
-    "jsonExportEntry": "Exportar JSON: {title}"
+    "jsonExportEntry": "Exportar JSON: {title}",
+    "scopeChip": "{type}",
+    "scopeChipInstance": "{type} {index}/{count}",
+    "scopeChipAll": "{type} ×{count}",
+    "scopeRemove": "Quitar {label} del ámbito del prompt"
   },
   "uiRoute": {
     "loading": "Cargando interfaz…",
@@ -40,6 +44,12 @@
     "pick": "Seleccionar",
     "dragdrop": "Arrastrar y soltar",
     "xray": "Rayos X",
+    "promptScope": {
+      "add": "Añadir al ámbito del prompt",
+      "active": "En el ámbito del prompt",
+      "addAll": "Añadir las {count} instancias al ámbito del prompt",
+      "activeAll": "Las {count} instancias en el ámbito del prompt"
+    },
     "panelTitle": "Editor de elemento",
     "close": "Cerrar",
     "undo": "Deshacer",

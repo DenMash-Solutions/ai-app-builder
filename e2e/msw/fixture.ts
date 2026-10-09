@@ -12,6 +12,8 @@ export interface GenerateMockConfig {
   body?: Record<string, unknown>;
   lines?: string[];
   editLines?: string[];
+  /** Artificial response delay (ms) so tests can observe streaming UI. */
+  delayMs?: number;
 }
 
 function line(op: Record<string, unknown>): string {

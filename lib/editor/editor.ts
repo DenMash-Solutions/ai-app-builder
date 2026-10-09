@@ -1,5 +1,7 @@
 import type { Spec } from "@json-render/core";
 import { REVISION_LABELS } from "@/lib/history";
+import type { InstanceChain, InstanceScope } from "./instance-path";
+import { countKeyInstances, resolveInstanceScope } from "./instance-path";
 
 export const EDIT_ACTION_KEYS = [
   "bolder",
@@ -136,19 +138,86 @@ export function replaceProp(
 }
 
 /**
+ * A prompt-scope target: element key plus the repeat chain of the picked
+ * instance (null = template-level).
+ */
+export interface PromptScopeTarget {
+  key: string;
+  chain: InstanceChain | null;
+}
+
+function describeTarget(
+  key: string,
+  type: string,
+  scope: InstanceScope | null,
+  instanceCount?: number,
+): string {
+  const base = `element "${key}" (component type "${type}")`;
+  if (scope) {
+    return `${base}, instance ${scope.itemIndex + 1} of ${scope.count}, state path "${scope.basePath}"`;
+  }
+  if (instanceCount !== undefined && instanceCount > 1) {
+    return `shared template of ${base}, applies to all ${instanceCount} rendered instances`;
+  }
+  return base;
+}
+
+function formatScopedInstruction(
+  descriptions: string[],
+  instruction: string,
+): string {
+  const singular = descriptions.length === 1;
+  const header = singular
+    ? "Edit only this element (leave every other element unchanged):"
+    : `Edit only these ${descriptions.length} elements (leave every other element unchanged):`;
+  const list = singular
+    ? descriptions[0]
+    : descriptions.map((line, index) => `${index + 1}) ${line}`).join("\n");
+  const tail = singular
+    ? "Patch the existing spec in place."
+    : "Patch the existing spec in place. Apply each part of the request to the most relevant listed element.";
+  return [header, list, "", "User request:", instruction, "", tail].join("\n");
+}
+
+/**
+ * Wraps a user instruction so the model patches exactly the listed elements
+ * — each described with its instance scope (index/count/state path) so
+ * repeated instances of the same key stay distinguishable.
+ */
+export function scopeTargetsInstruction(
+  spec: Spec,
+  targets: PromptScopeTarget[],
+  instruction: string,
+): string {
+  const state = spec.state ?? {};
+  const descriptions = targets.map((target) => {
+    const type = spec.elements[target.key]?.type ?? "unknown";
+    const scope = resolveInstanceScope(spec, state, target.chain ?? []);
+    return describeTarget(
+      target.key,
+      type,
+      scope,
+      countKeyInstances(spec, target.key),
+    );
+  });
+  return formatScopedInstruction(descriptions, instruction);
+}
+
+/**
  * Wraps a user instruction so the model patches exactly one element.
+ * Pass the instance scope (when the selection is repeat-scoped) so the
+ * model can tell which instance of a repeated key to edit.
  */
 export function scopeInstruction(
   key: string,
   type: string,
   instruction: string,
+  scope?: InstanceScope | null,
 ): string {
-  return [
-    `Edit only the element "${key}" (component type "${type}"):`,
+  return formatScopedInstruction(
+    [describeTarget(key, type, scope ?? null)],
     instruction,
-    "",
-    "Patch the existing spec in place and leave every other element unchanged.",
-  ].join("\n");
+  );
 }
 
 export function propertyRevisionLabel(prop: string): string {

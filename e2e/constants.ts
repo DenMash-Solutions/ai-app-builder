@@ -67,6 +67,26 @@ export const STATE_MOCK = {
   itemLabels: ["Item A", "Item B", "Item C", "Item D", "Item E", "Item F"],
 } as const;
 
+export const SCOPE = {
+  chip: (type: string, index: number, count: number): string =>
+    en.playground.scopeChipInstance
+      .replace("{type}", type)
+      .replace("{index}", String(index))
+      .replace("{count}", String(count)),
+  chipAll: (type: string, count: number): string =>
+    en.playground.scopeChipAll
+      .replace("{type}", type)
+      .replace("{count}", String(count)),
+  removeChip: (label: string): string =>
+    en.playground.scopeRemove.replace("{label}", label),
+  add: en.editor.promptScope.add,
+  active: en.editor.promptScope.active,
+  addAll: (count: number): string =>
+    en.editor.promptScope.addAll.replace("{count}", String(count)),
+  activeAll: (count: number): string =>
+    en.editor.promptScope.activeAll.replace("{count}", String(count)),
+} as const;
+
 export const MOCK_KEYS = {
   card: "card-1",
   heading: "heading-1",

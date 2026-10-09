@@ -17,6 +17,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -42,6 +43,7 @@ import {
   MOVE_DIRECTIONS,
   STRUCTURE_OPS,
   chainForKey,
+  countKeyInstances,
   duplicateElement,
   findParentKey,
   getAncestorPath,
@@ -52,12 +54,18 @@ import {
   propertyRevisionLabel,
   removeElement,
   replaceProp,
+  resolveInstanceScope,
   scopeInstruction,
+  scopeTargetsInstruction,
   structureRevisionLabel,
   unwrapElement,
   wrapElement,
 } from "@/lib/editor";
-import type { InstanceChain, MoveDirection } from "@/lib/editor";
+import type {
+  InstanceChain,
+  MoveDirection,
+  PromptScopeTarget,
+} from "@/lib/editor";
 import { examplePropsFor } from "@/lib/playground/catalog";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
@@ -87,6 +95,11 @@ import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
+
+/** Stable identity for a scope target: key + JSON-serialized instance chain. */
+function scopeTargetId(target: PromptScopeTarget): string {
+  return `${target.key}|${JSON.stringify(target.chain ?? [])}`;
+}
 
 const PENDING_OP_KINDS = {
   generate: "generate",
@@ -147,6 +160,10 @@ export function Playground({ initialId }: PlaygroundProps) {
   const [selectedChain, setSelectedChain] = useState<InstanceChain | null>(
     null,
   );
+  // Prompt scope: elements the next main-prompt steer is limited to — shown
+  // as removable chips in the prompt bar, highlighted on the canvas. Deduped
+  // by key + instance chain; cleared on route change (entry-scoped).
+  const [scopeTargets, setScopeTargets] = useState<PromptScopeTarget[]>([]);
   const [panelTab, setPanelTab] = useState<PanelTab>(PANEL_TABS.properties);
   const pendingOpRef = useRef<PendingOp | null>(null);
   const [failure, setFailure] = useState<{
@@ -276,6 +293,37 @@ export function Playground({ initialId }: PlaygroundProps) {
     displayedSpec && effectiveKey
       ? getAncestorPath(displayedSpec, effectiveKey)
       : [];
+  // Live prompt scope: drop targets whose element left the spec (patch/undo)
+  // — same derivation style as effectiveKey, no effect round trip.
+  const scopedTargets = useMemo(
+    () =>
+      displayedSpec
+        ? scopeTargets.filter((target) => displayedSpec.elements[target.key])
+        : [],
+    [displayedSpec, scopeTargets],
+  );
+  const selectionInScope =
+    effectiveKey !== null &&
+    scopedTargets.some((target) => {
+      if (target.key !== effectiveKey) return false;
+      // A template (or singleton) target covers any selection of its key.
+      if ((target.chain?.length ?? 0) === 0) return true;
+      return (
+        scopeTargetId(target) ===
+        scopeTargetId({ key: effectiveKey, chain: selectedChain })
+      );
+    });
+  const selectedInstanceCount =
+    displayedSpec && effectiveKey
+      ? countKeyInstances(displayedSpec, effectiveKey)
+      : 0;
+  const templateInScope =
+    effectiveKey !== null &&
+    selectedInstanceCount > 1 &&
+    scopedTargets.some(
+      (target) =>
+        target.key === effectiveKey && (target.chain?.length ?? 0) === 0,
+    );
 
   // Edit drawer lifecycle: the close is *delayed*, not the unmount — while
   // `panelClosing` is true the selection stays alive, so the panel keeps
@@ -314,6 +362,7 @@ export function Playground({ initialId }: PlaygroundProps) {
     setSelectedKey(null);
     setSelectedChain(null);
     setPanelClosing(false);
+    setScopeTargets([]);
   }
 
   // The selection carries the repeat scopes captured at pick time so data
@@ -344,6 +393,36 @@ export function Playground({ initialId }: PlaygroundProps) {
     [handlePick],
   );
 
+  // Shift+click (pick armed) and the drawer toggles both flip membership.
+  // Per-key exclusivity: a template target and instance targets of the same
+  // key contradict each other, so adding either drops the other side.
+  const handleToggleScope = useCallback(
+    (key: string, chain: InstanceChain | null, template = false) => {
+      setScopeTargets((prev) => {
+        const count = displayedSpec ? countKeyInstances(displayedSpec, key) : 1;
+        const asTemplate = template && count > 1;
+        const target: PromptScopeTarget = {
+          key,
+          chain: asTemplate ? null : chain,
+        };
+        const id = scopeTargetId(target);
+        const exists = prev.some((entry) => scopeTargetId(entry) === id);
+        if (asTemplate) {
+          const kept = prev.filter((entry) => entry.key !== key);
+          return exists ? kept : [...kept, target];
+        }
+        if (exists) {
+          return prev.filter((entry) => scopeTargetId(entry) !== id);
+        }
+        const kept = prev.filter(
+          (entry) => !(entry.key === key && (entry.chain?.length ?? 0) === 0),
+        );
+        return [...kept, target];
+      });
+    },
+    [displayedSpec],
+  );
+
   const handleSelectKey = (key: string) => {
     setPanelClosing(false);
     setSelectedKey(key);
@@ -353,6 +432,8 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   // Main input: edits the displayed result (steer), generates when empty.
+  // A non-empty prompt scope wraps the instruction so the model patches
+  // exactly the scoped elements (with their instance paths).
   const handleSend = (prompt: string) => {
     const base = displayedSpec;
     if (base?.root && routeId) {
@@ -362,7 +443,11 @@ export function Playground({ initialId }: PlaygroundProps) {
         label: promptRevisionLabel(prompt),
       };
       steerBaselineRef.current = structuredClone(base);
-      sendNow(prompt, { previousSpec: structuredClone(base) });
+      const instruction =
+        scopedTargets.length > 0
+          ? scopeTargetsInstruction(base, scopedTargets, prompt)
+          : prompt;
+      sendNow(instruction, { previousSpec: structuredClone(base) });
       return;
     }
     handleGenerate(prompt);
@@ -431,9 +516,17 @@ export function Playground({ initialId }: PlaygroundProps) {
       label,
     };
     steerBaselineRef.current = structuredClone(base);
-    sendNow(scopeInstruction(selectedKey, element.type, instruction), {
-      previousSpec: structuredClone(base),
-    });
+    sendNow(
+      scopeInstruction(
+        selectedKey,
+        element.type,
+        instruction,
+        resolveInstanceScope(base, base.state ?? {}, selectedChain ?? []),
+      ),
+      {
+        previousSpec: structuredClone(base),
+      },
+    );
   };
 
   const handleFailureConfirm = (model: ModelId) => {
@@ -899,6 +992,16 @@ export function Playground({ initialId }: PlaygroundProps) {
                   selectedChain={selectedChain}
                   onSelect={handlePick}
                   onActivate={isStreaming ? undefined : handleActivate}
+                  onToggleScope={handleToggleScope}
+                  scopeTargets={scopedTargets.map((target) => ({
+                    ...target,
+                    id: scopeTargetId(target),
+                    count:
+                      (target.chain?.length ?? 0) === 0 && displayedSpec
+                        ? countKeyInstances(displayedSpec, target.key)
+                        : undefined,
+                  }))}
+                  scopeLoading={isStreaming}
                 />
 
                 {failure && (
@@ -913,6 +1016,39 @@ export function Playground({ initialId }: PlaygroundProps) {
                   isStreaming={isStreaming}
                   hasSpec={displayedSpec !== null}
                   onSend={handleSend}
+                  scope={scopedTargets.map((target) => {
+                    const type =
+                      displayedSpec?.elements[target.key]?.type ?? target.key;
+                    const isTemplate = (target.chain?.length ?? 0) === 0;
+                    const count = displayedSpec
+                      ? countKeyInstances(displayedSpec, target.key)
+                      : 1;
+                    const instance =
+                      !isTemplate && displayedSpec
+                        ? resolveInstanceScope(
+                            displayedSpec,
+                            displayedSpec.state ?? {},
+                            target.chain ?? [],
+                          )
+                        : null;
+                    return {
+                      id: scopeTargetId(target),
+                      label: instance
+                        ? t("playground.scopeChipInstance", {
+                            type,
+                            index: instance.itemIndex + 1,
+                            count: instance.count,
+                          })
+                        : isTemplate && count > 1
+                          ? t("playground.scopeChipAll", { type, count })
+                          : t("playground.scopeChip", { type }),
+                    };
+                  })}
+                  onRemoveScope={(id) =>
+                    setScopeTargets((prev) =>
+                      prev.filter((target) => scopeTargetId(target) !== id),
+                    )
+                  }
                 />
               </div>
 
@@ -941,6 +1077,19 @@ export function Playground({ initialId }: PlaygroundProps) {
                   onUnwrap={handleUnwrap}
                   onMove={handleMove}
                   onDuplicate={handleDuplicate}
+                  inPromptScope={selectionInScope}
+                  onTogglePromptScope={() => {
+                    if (effectiveKey) {
+                      handleToggleScope(effectiveKey, selectedChain, false);
+                    }
+                  }}
+                  promptScopeInstanceCount={selectedInstanceCount}
+                  inPromptScopeTemplate={templateInScope}
+                  onTogglePromptScopeTemplate={() => {
+                    if (effectiveKey) {
+                      handleToggleScope(effectiveKey, null, true);
+                    }
+                  }}
                 />
               )}
 

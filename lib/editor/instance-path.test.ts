@@ -5,6 +5,7 @@ import {
   analyzePropBinding,
   analyzePropValue,
   chainForKey,
+  countKeyInstances,
   mapDomIndexToIndex,
   resolveChainBasePath,
   resolveDataPath,
@@ -356,5 +357,27 @@ describe("chainForKey", () => {
   test("empty chains stay empty", () => {
     const spec = makeSpec();
     expect(chainForKey(spec, [], "item")).toBeNull();
+  });
+});
+
+describe("countKeyInstances", () => {
+  test("counts rendered instances through a filtered repeat", () => {
+    const spec = makeSpec();
+    // 3 images, one hidden by the item filter.
+    expect(countKeyInstances(spec, "item")).toBe(2);
+    expect(countKeyInstances(spec, "grid")).toBe(2);
+    expect(countKeyInstances(spec, "root")).toBe(1);
+  });
+
+  test("multiplies nested repeats", () => {
+    const spec = makeNestedSpec();
+    expect(countKeyInstances(spec, "row")).toBe(3);
+    // The inner container is itself repeated: 2 items in g0 + 1 in g1.
+    expect(countKeyInstances(spec, "inner")).toBe(3);
+    expect(countKeyInstances(spec, "groups")).toBe(2);
+  });
+
+  test("unknown keys count zero", () => {
+    expect(countKeyInstances(makeSpec(), "missing")).toBe(0);
   });
 });

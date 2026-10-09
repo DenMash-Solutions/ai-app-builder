@@ -182,6 +182,35 @@
   }
 }
 
+/* Prompt-scope highlight: dashed emerald outline (distinct from the gradient
+   selection ring) tracking each scoped element in the clipping overlay.
+   Hidden until the tracker measures the element's rect. */
+.jr-scope-ring {
+  position: absolute;
+  display: none;
+  box-sizing: border-box;
+  border: 1.5px dashed rgb(52 211 153 / 0.9);
+  pointer-events: none;
+  background: rgb(52 211 153 / 0.06);
+}
+.jr-scope-ring[data-scope-loading="true"] {
+  animation: jr-scope-pulse 1.2s ease-in-out infinite;
+}
+@keyframes jr-scope-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jr-scope-ring[data-scope-loading="true"] {
+    animation: none;
+  }
+}
+
 /* Active drag: lock the cursor, stop text selection, and give zero-height
    (empty) containers a real hit area so the "inside" zone is reachable. */
 [data-dnd-dragging],

@@ -26,7 +26,11 @@
     "jsonInvalidSpec": "Valid JSON, but not a renderable spec: it needs a string \"root\", a non-empty \"elements\" object containing it, and every element must have a string \"type\".",
     "jsonCopied": "Spec copied to clipboard",
     "jsonCopyFailed": "Could not copy to the clipboard",
-    "jsonExportEntry": "Export JSON: {title}"
+    "jsonExportEntry": "Export JSON: {title}",
+    "scopeChip": "{type}",
+    "scopeChipInstance": "{type} {index}/{count}",
+    "scopeChipAll": "{type} ×{count}",
+    "scopeRemove": "Remove {label} from prompt scope"
   },
   "uiRoute": {
     "loading": "Loading UI…",
@@ -40,6 +44,12 @@
     "pick": "Pick",
     "dragdrop": "Drag & drop",
     "xray": "X-ray",
+    "promptScope": {
+      "add": "Add to prompt scope",
+      "active": "In prompt scope",
+      "addAll": "Add all {count} instances to prompt scope",
+      "activeAll": "All {count} instances in prompt scope"
+    },
     "panelTitle": "Element editor",
     "close": "Close",
     "undo": "Undo",

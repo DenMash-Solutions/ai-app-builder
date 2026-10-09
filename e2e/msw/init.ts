@@ -9,6 +9,8 @@ import {
 interface MockWindow {
   __GENERATE_MOCK__?: GenerateMockConfig;
   __GENERATE_CALLS__?: number;
+  /** Prompt of the most recent intercepted /api/generate request. */
+  __LAST_GENERATE_PROMPT__?: string;
   __MSW_READY__?: boolean;
 }
 
@@ -19,15 +21,23 @@ const worker = setupWorker(
     mockWindow.__GENERATE_CALLS__ = (mockWindow.__GENERATE_CALLS__ ?? 0) + 1;
     const config = mockWindow.__GENERATE_MOCK__ ?? {};
 
+    const body = (await request.json().catch(() => ({}))) as {
+      currentSpec?: { root?: string } | null;
+      prompt?: string;
+    };
+    mockWindow.__LAST_GENERATE_PROMPT__ =
+      typeof body.prompt === "string" ? body.prompt : "";
+
+    if (config.delayMs && config.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, config.delayMs));
+    }
+
     if (config.status && config.status >= 400) {
       return HttpResponse.json(config.body ?? { error: "Mock failure" }, {
         status: config.status,
       });
     }
 
-    const body = (await request.json().catch(() => ({}))) as {
-      currentSpec?: { root?: string } | null;
-    };
     const isEdit =
       typeof body.currentSpec?.root === "string" &&
       body.currentSpec.root.length > 0;
