@@ -609,6 +609,34 @@ test.describe("editor", () => {
       expect(hierarchy.card).toBeGreaterThanOrEqual(hierarchy.row);
     }
 
+    // DFS placement: within the overlay card the badge chip sits in the row
+    // directly under its real parent (carousel-overlay-content). The full-
+    // bleed image — a later DOM sibling sharing the card's top edge — used
+    // to reserve rows first (global depth sort) and land between the two,
+    // making the image look like the badge's parent.
+    const adjacency = await page.evaluate(() => {
+      const yOf = (selector: string) =>
+        document.querySelector(selector)?.getBoundingClientRect().y ?? null;
+      return {
+        content: yOf('[data-xray-chip="carousel-overlay-content"]'),
+        badge: yOf('[data-xray-chip="carousel-overlay-badge"]'),
+        image: yOf('[data-xray-chip="carousel-overlay-image"]'),
+      };
+    });
+    expect(adjacency.content).not.toBeNull();
+    expect(adjacency.badge).not.toBeNull();
+    expect(adjacency.image).not.toBeNull();
+    if (
+      adjacency.content !== null &&
+      adjacency.badge !== null &&
+      adjacency.image !== null
+    ) {
+      // Directly under the parent: one chip row (CHIP_HEIGHT + LANE_GAP = 22)
+      expect(adjacency.badge - adjacency.content).toBe(22);
+      // The later sibling comes after the whole subtree, never between
+      expect(adjacency.image).toBeGreaterThan(adjacency.badge);
+    }
+
     // The `hidden` card paints nothing → forced marker + always-on chip
     await expect(page.locator("[data-xray-marker]")).toHaveCount(1);
     await expect(page.locator('[data-xray-chip="carousel-ghost"]')).toHaveCount(

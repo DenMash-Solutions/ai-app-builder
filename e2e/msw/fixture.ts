@@ -113,6 +113,7 @@ export const CAROUSEL_UI_LINES: string[] = [
         "carousel-card-2",
         "carousel-card-3",
         "carousel-card-4",
+        "carousel-overlay-card",
       ],
     },
   }),
@@ -152,6 +153,69 @@ export const CAROUSEL_UI_LINES: string[] = [
       },
     }),
   ]),
+  // Overlay card mirroring the live Gemini carousel shape: an absolutely
+  // positioned content stack (with a badge child) plus a later DOM sibling
+  // image that fills the same box. Both share the card's top edge, so the
+  // global-depth placement (all depth-N before any depth-N+1) used to put
+  // the image chip between the content chip and its badge child — the image
+  // looked like the badge's parent. DFS placement must keep the badge chip
+  // directly under the content chip, image last.
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-overlay-card"),
+    value: {
+      type: COMPONENT.card,
+      props: {
+        title: "Overlay Card",
+        className: "min-w-[280px] max-w-[280px] shrink-0 relative",
+      },
+      children: ["carousel-overlay-content", "carousel-overlay-image"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-overlay-content"),
+    value: {
+      type: COMPONENT.stack,
+      props: {
+        direction: "vertical",
+        gap: "xs",
+        className: "absolute inset-0 p-5",
+      },
+      children: ["carousel-overlay-badge"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-overlay-badge"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "xs" },
+      children: ["carousel-overlay-badge-text"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-overlay-badge-text"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: "Overlay Badge" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("carousel-overlay-image"),
+    value: {
+      type: "Image",
+      props: {
+        src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+        alt: "Overlay",
+        className: "absolute inset-0 h-full w-full object-cover",
+      },
+      children: [],
+    },
+  }),
 ];
 
 /**

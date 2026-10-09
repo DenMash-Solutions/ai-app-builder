@@ -82,8 +82,6 @@ interface LabelBox {
   wrapper: HTMLElement;
   /** Ancestor wrappers (same instance), outermost-first. */
   ancestorWrappers: Set<HTMLElement>;
-  /** DOM nesting depth — placement order, ancestors first. */
-  depth: number;
 }
 
 const CHIP_HEIGHT = 20;
@@ -258,21 +256,27 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
           chipTop: boxless ? y - CHIP_HEIGHT / 2 : y - CHIP_HEIGHT - EDGE,
           wrapper,
           ancestorWrappers,
-          depth: ancestorWrappers.size,
         });
       });
 
       // Hierarchy-aware lane stacking for permanent chips (containers +
-      // quiet leaves). Ancestors place first (DOM nesting depth, then y, x)
-      // so parents always reserve their natural above-box spot, and a child
-      // never lands above an ancestor chip of the SAME INSTANCE (matched by
-      // wrapper element identity — repeat instances share keys, so key
-      // matching would cascade floors across cards) — the tree reads
-      // top-down. Candidates: above-box lanes, one row under each blocking
-      // ancestor chip, a hierarchy row, then below-box lanes; last resort
-      // accepts with a hierarchy-respecting default. Width is pre-estimated
-      // from label text — font-mono 10px metrics are stable enough, and
-      // measuring after render would flicker.
+      // quiet leaves). Placement runs in DFS document order (the
+      // querySelectorAll collection order above) so ancestors are always
+      // placed before their descendants and each subtree stacks
+      // contiguously — a later DOM sibling (e.g. a full-bleed background
+      // image) can never reserve rows between a parent and its children
+      // (the previous global depth sort did exactly that: every depth-N
+      // chip across all instances was placed before any depth-N+1 chip, so
+      // children landed under unrelated siblings and looked like the
+      // sibling's subtree). A child never lands above an ancestor chip of
+      // the SAME INSTANCE (matched by wrapper element identity — repeat
+      // instances share keys, so key matching would cascade floors across
+      // cards) — the tree reads top-down. Candidates: above-box lanes, one
+      // row under each blocking ancestor chip, a hierarchy row, then
+      // below-box lanes; last resort accepts with a hierarchy-respecting
+      // default. Width is pre-estimated from label text — font-mono 10px
+      // metrics are stable enough, and measuring after render would
+      // flicker.
       const placed: Array<{
         wrapper: HTMLElement;
         x: number;
@@ -282,13 +286,7 @@ export function XrayLabels({ enabled, containerRef, spec }: XrayLabelsProps) {
       }> = [];
       const order = next
         .map((label, index) => ({ label, index }))
-        .filter(({ label }) => label.container || label.quiet)
-        .sort(
-          (a, b) =>
-            a.label.depth - b.label.depth ||
-            a.label.y - b.label.y ||
-            a.label.x - b.label.x,
-        );
+        .filter(({ label }) => label.container || label.quiet);
       for (const { label, index } of order) {
         const w = estimateChipWidth(label.key, label.type);
         const h = CHIP_HEIGHT;
