@@ -13,6 +13,14 @@ interface PickOverlayProps {
   selectedKey: string | null;
   selectedChain: InstanceChain | null;
   onSelect: (key: string | null, chain: InstanceChain | null) => void;
+  /**
+   * Double-click on the canvas: called with the hit element's key+chain so
+   * the host can enter pick mode and open the editor in one gesture. Left
+   * undefined while streaming (the host passes undefined) — dblclick then
+   * passes through untouched. Separate from `onSelect` because it must
+   * attach even while pick mode is off.
+   */
+  onActivate?: (key: string, chain: InstanceChain | null) => void;
 }
 
 /**
@@ -31,6 +39,7 @@ export function PickOverlay({
   selectedKey,
   selectedChain,
   onSelect,
+  onActivate,
 }: PickOverlayProps) {
   useEffect(() => {
     const container = containerRef.current;
@@ -54,6 +63,31 @@ export function PickOverlay({
     container.addEventListener("click", handleClick, true);
     return () => container.removeEventListener("click", handleClick, true);
   }, [enabled, containerRef, spec, onSelect]);
+
+  // Double-click-to-edit: attaches whenever the host provides `onActivate`
+  // (i.e. a spec is on canvas and no stream is running), independent of pick
+  // mode — one gesture from reading to editing. Capture phase + swallow the
+  // event so generated-UI dblclick handlers never see it.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !spec || !onActivate) return;
+
+    const handleDblClick = (event: MouseEvent) => {
+      if ((event.target as Element).closest("[data-editor-panel]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const target = (event.target as Element).closest<HTMLElement>(
+        "[data-jr-key]",
+      );
+      if (!target || !target.dataset.jrKey) return;
+      const chain = computeInstanceChain(spec, target);
+      onActivate(target.dataset.jrKey, chain.length > 0 ? chain : null);
+    };
+
+    container.addEventListener("dblclick", handleDblClick, true);
+    return () =>
+      container.removeEventListener("dblclick", handleDblClick, true);
+  }, [containerRef, spec, onActivate]);
 
   useEffect(() => {
     const container = containerRef.current;

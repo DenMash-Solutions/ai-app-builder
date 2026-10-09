@@ -1,6 +1,6 @@
 # Canvas Editing Shortcuts — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-08
 
 ## Goal
@@ -47,10 +47,10 @@ Make canvas editing direct: double-click any rendered element to jump straight i
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e` (baselines: 202 unit / 618 assertions, 43 e2e)
-- [ ] e2e new (`e2e/shortcuts.spec.ts` or extended `editor.spec.ts`): dblclick heading → panel opens with Heading shown, Pick rail active; dblclick 3rd repeated instance → instance scope chip says item 3 (chain-scoped); `P`/`X`/`G` toggles (rail aria-pressed / x-ray chips); `Delete` removes element + history revision + Cmd+Z restores; typing `p` inside the prompt input does not toggle Pick; Escape closes panel first, second Escape turns Pick off
-- [ ] MCP spot-check: dblclick an element on a generated UI → panel opens; `X` toggles x-ray; Delete + Cmd+Z round-trip; tooltips show shortcut hints in both locales
-- [ ] en/es parity for updated ToolRail tooltips; `aria-keyshortcuts` present
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e` — all green; 202 unit / 618 assertions; **49 e2e** (43 baseline + 6 new)
+- [x] e2e `e2e/shortcuts.spec.ts`: dblclick heading → panel + Pick armed; dblclick 3rd repeat instance → scope chip `3/6 · /items/2`; P/X/G toggles + letters ignored inside the prompt input; Delete removes + Cmd+Z restores (head/revision checks); Cmd+D duplicate then Alt+ArrowUp reorder (children-array checks); Escape cascade (panel first, Pick stays armed; second Escape disarms)
+- [x] MCP spot-check (carousel restore, 8 repeated `product-name`): dblclick 3rd product → Pick armed, panel open, scope chip `elemento 3/8 · /products/2`, ring on the right instance; `X` toggled x-ray (35 chips → 0); Delete removed the instance + Cmd+Z restored; Escape cascade (panel out → Pick off); ToolRail titles `Seleccionar (P)` / `Rayos X (X)` / `Arrastrar y soltar (G)` + `aria-keyshortcuts` present
+- [x] en/es parity: no new message keys (shortcut suffixes appended to existing labels, language-neutral); `aria-keyshortcuts` on all three toggles
 
 ## Status log
 
@@ -58,3 +58,4 @@ Make canvas editing direct: double-click any rendered element to jump straight i
 | ---- | ----- |
 | 2026-10-08 | plan drafted (research: no dblclick anywhere; keyboard surface = Escape-in-panel + Cmd+Z; PickOverlay chain capture reusable) |
 | 2026-10-08 | approved — three clarifying answers: dblclick always-on (auto-enables Pick), app-actions shortcut set (no panel Actions keys), Delete direct + undoable |
+| 2026-10-08 | implemented — lint clean (0 warnings; keydown listener uses latest-value `shortcutsRef` pattern so it never re-subscribes), 49/49 e2e, MCP spot-check all green |

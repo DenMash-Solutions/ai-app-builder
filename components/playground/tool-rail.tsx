@@ -32,7 +32,8 @@ export function ToolRail({
         size="icon"
         aria-pressed={pickMode}
         aria-label={t("editor.pick")}
-        title={t("editor.pick")}
+        aria-keyshortcuts="p"
+        title={`${t("editor.pick")} (P)`}
         onClick={onTogglePick}
       >
         <MousePointer2 />
@@ -43,7 +44,8 @@ export function ToolRail({
         size="icon"
         aria-pressed={dndMode}
         aria-label={t("editor.dragdrop")}
-        title={t("editor.dragdrop")}
+        aria-keyshortcuts="g"
+        title={`${t("editor.dragdrop")} (G)`}
         onClick={onToggleDnd}
       >
         <Hand />
@@ -54,7 +56,8 @@ export function ToolRail({
         size="icon"
         aria-pressed={xrayMode}
         aria-label={t("editor.xray")}
-        title={t("editor.xray")}
+        aria-keyshortcuts="x"
+        title={`${t("editor.xray")} (X)`}
         onClick={onToggleXray}
       >
         <Layers />

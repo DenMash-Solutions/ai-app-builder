@@ -39,6 +39,7 @@ import { PromptBar, ToolRail, TopBar } from "@/components/playground";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { FailureDialog } from "@/components/failure-dialog";
 import {
+  MOVE_DIRECTIONS,
   STRUCTURE_OPS,
   chainForKey,
   duplicateElement,
@@ -333,6 +334,16 @@ export function Playground({ initialId }: PlaygroundProps) {
     [],
   );
 
+  // Double-click on any canvas element: enter pick mode and open the editor
+  // for the exact instance under the cursor.
+  const handleActivate = useCallback(
+    (key: string, chain: InstanceChain | null) => {
+      setPickMode(true);
+      handlePick(key, chain);
+    },
+    [handlePick],
+  );
+
   const handleSelectKey = (key: string) => {
     setPanelClosing(false);
     setSelectedKey(key);
@@ -614,38 +625,142 @@ export function Playground({ initialId }: PlaygroundProps) {
       else wrapper.removeAttribute("data-jr-type");
     });
   }, [xrayMode, displayedSpec]);
-
-  // Cmd+Z / Cmd+Shift+Z — scoped to the canvas, never inside form fields.
+  // Keyboard shortcuts: Cmd+Z/Cmd+Shift+Z (undo/redo), Cmd+D (duplicate),
+  // Alt+arrows (move sibling), Escape cascade (panel → pick off), and the
+  // letter toggles P/X/G. Never while typing in a form field; mutating
+  // shortcuts additionally need a live selection and no active stream. The
+  // listener attaches once and reads the latest state/handlers through a
+  // ref (same latest-value pattern as pendingOpRef) so it never
+  // re-subscribes on every render.
+  const shortcutsRef = useRef({
+    activeEntry,
+    isStreaming,
+    effectiveKey,
+    panelTarget,
+    panelClosing,
+    pickMode,
+    applyRevision,
+    handleDuplicate,
+    handleMove,
+    handleRemove,
+    handleTogglePick,
+    beginPanelClose,
+  });
   useEffect(() => {
+    shortcutsRef.current = {
+      activeEntry,
+      isStreaming,
+      effectiveKey,
+      panelTarget,
+      panelClosing,
+      pickMode,
+      applyRevision,
+      handleDuplicate,
+      handleMove,
+      handleRemove,
+      handleTogglePick,
+      beginPanelClose,
+    };
+  });
+
+  useEffect(() => {
+    const isFormField = (target: HTMLElement | null): boolean =>
+      !!target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable);
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        !(event.metaKey || event.ctrlKey) ||
-        event.key.toLowerCase() !== "z"
-      ) {
-        return;
-      }
+      const {
+        activeEntry,
+        isStreaming,
+        effectiveKey,
+        panelTarget,
+        panelClosing,
+        pickMode,
+        applyRevision,
+        handleDuplicate,
+        handleMove,
+        handleRemove,
+        handleTogglePick,
+        beginPanelClose,
+      } = shortcutsRef.current;
       const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable)
-      ) {
+      const inField = isFormField(target);
+      const command = event.metaKey || event.ctrlKey;
+
+      if (command && event.key.toLowerCase() === "z") {
+        if (inField) return;
+        if (!activeEntry || isStreaming) return;
+        event.preventDefault();
+        if (event.shiftKey) {
+          if (canRedo(activeEntry)) applyRevision(redoRevision(activeEntry));
+        } else if (canUndo(activeEntry)) {
+          applyRevision(undoRevision(activeEntry));
+        }
         return;
       }
-      if (!activeEntry || isStreaming) return;
-      event.preventDefault();
-      if (event.shiftKey) {
-        if (canRedo(activeEntry)) applyRevision(redoRevision(activeEntry));
-      } else if (canUndo(activeEntry)) {
-        applyRevision(undoRevision(activeEntry));
+
+      if (command && event.key.toLowerCase() === "d") {
+        if (inField || !effectiveKey || !activeEntry || isStreaming) return;
+        event.preventDefault();
+        handleDuplicate(effectiveKey);
+        return;
+      }
+
+      if (
+        event.altKey &&
+        (event.key === "ArrowUp" || event.key === "ArrowDown")
+      ) {
+        if (inField || !effectiveKey || !activeEntry || isStreaming) return;
+        event.preventDefault();
+        handleMove(
+          effectiveKey,
+          event.key === "ArrowUp" ? MOVE_DIRECTIONS.up : MOVE_DIRECTIONS.down,
+        );
+        return;
+      }
+
+      if (command || event.altKey) return;
+
+      if (event.key === "Escape") {
+        // The EditPanel's own Escape listener closes the panel (it runs
+        // after this one, registered later); while a panel is open or
+        // exiting, Escape belongs to it — this branch only turns Pick off
+        // once nothing panel-related is in flight.
+        if (event.defaultPrevented || panelTarget || panelClosing) return;
+        if (pickMode) {
+          beginPanelClose();
+          setPickMode(false);
+        }
+        return;
+      }
+
+      if (inField) return;
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (!effectiveKey || !activeEntry || isStreaming) return;
+        event.preventDefault();
+        handleRemove(effectiveKey);
+        return;
+      }
+
+      switch (event.key) {
+        case "p":
+          handleTogglePick();
+          return;
+        case "x":
+          setXrayMode((prev) => !prev);
+          return;
+        case "g":
+          setDndMode((prev) => !prev);
+          return;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeEntry, applyRevision, isStreaming]);
-
+  }, []);
   // Route gates: resolution runs client-side, so a deep link first paints
   // the neutral loading state (never the empty state or the error panel);
   // an unknown/deleted/foreign id explains itself instead of silently
@@ -783,6 +898,7 @@ export function Playground({ initialId }: PlaygroundProps) {
                   selectedKey={effectiveKey}
                   selectedChain={selectedChain}
                   onSelect={handlePick}
+                  onActivate={isStreaming ? undefined : handleActivate}
                 />
 
                 {failure && (
