@@ -252,7 +252,7 @@ export function PromptBar({
   return (
     <form
       onSubmit={handleSubmit}
-      className="absolute bottom-6 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 px-4"
+      className="absolute bottom-6 left-1/2 z-[1002] w-full max-w-2xl -translate-x-1/2 px-4"
     >
       {chips.length > 0 && (
         <div

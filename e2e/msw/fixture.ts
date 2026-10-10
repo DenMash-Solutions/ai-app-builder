@@ -293,3 +293,63 @@ export const STATEFUL_UI_LINES: string[] = [
     },
   }),
 ];
+
+/**
+ * Like STATEFUL, but the repeat's per-item child is a container
+ * (`state-row` Stack wrapping the Text). The renderer repeats the
+ * repeated element's children, not the element itself, so this yields six
+ * per-instance container wrappers — each with a permanent x-ray chip
+ * (STATEFUL's Text leaves only get hover chips, which pick mode hides).
+ */
+export const STATEFUL_ROWS_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: {
+      title: STATE_MOCK.title,
+      revealed: false,
+      items: STATE_MOCK.itemLabels.map((label, index) => ({
+        id: `item-${index}`,
+        label,
+      })),
+    },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "state-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("state-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "sm" },
+      children: ["state-list"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("state-list"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical" },
+      repeat: { statePath: "/items", key: "id" },
+      children: ["state-row"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("state-row"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical" },
+      children: ["state-item"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("state-item"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: { $item: "label" }, className: "tracking-wide" },
+      children: [],
+    },
+  }),
+];

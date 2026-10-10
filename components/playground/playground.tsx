@@ -893,8 +893,12 @@ export function Playground({ initialId }: PlaygroundProps) {
             <main className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row">
               {/* Stage: holds all chrome and the canvas; shrinks when the
                   edit panel docks (right on desktop, bottom on mobile) so the
-                  rail, prompt bar, and top bar are never covered. */}
-              <div className="relative min-h-0 min-w-0 flex-1">
+                  rail, prompt bar, and top bar are never covered. `isolate`
+                  scopes the overlays' z-[1000] to this stage: x-ray/pick
+                  decorations beat all canvas chrome (top bar, rail, prompt
+                  bar) while dialogs outside the stage (z-50) still open
+                  above them. */}
+              <div className="relative isolate min-h-0 min-w-0 flex-1">
                 <TopBar
                   historyCount={history.length}
                   onOpenHistory={() => setHistoryOpen(true)}

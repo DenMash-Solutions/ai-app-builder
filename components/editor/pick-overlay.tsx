@@ -278,7 +278,7 @@ export function PickOverlay({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-[1000] overflow-hidden"
     >
       {showRing && (
         <div

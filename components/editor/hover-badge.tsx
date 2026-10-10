@@ -98,7 +98,7 @@ export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
     <div
       data-editor-badge
       aria-hidden="true"
-      className="pointer-events-none fixed z-50 rounded-md border border-zinc-700 bg-zinc-950/95 px-2 py-1 font-mono text-[11px] text-zinc-200 shadow-lg"
+      className="pointer-events-none fixed z-[1001] rounded-md border border-zinc-700 bg-zinc-950/95 px-2 py-1 font-mono text-[11px] text-zinc-200 shadow-lg"
       style={{
         top: badge.below ? badge.top + 4 : badge.top - 28,
         left: Math.max(badge.left, 8),

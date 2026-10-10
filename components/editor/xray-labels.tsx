@@ -15,7 +15,10 @@ interface XrayLabelsProps {
    * Pick mode armed: chips become clickable with the canvas pick semantics
    * (click = select, shift+click = instance scope, shift+alt+click =
    * template scope) and keep the hover-focus while the pointer is over a
-   * chip. Off = chips stay pointer-events-none and clicks fall through.
+   * chip. Hover-revealed chips are suppressed while armed — the picker's
+   * HoverBadge owns the hovered item's label; permanent chips (containers +
+   * quiet leaves) stay. Off = chips stay pointer-events-none, hover chips
+   * show, and clicks fall through.
    */
   interactive?: boolean;
   onSelect?: (key: string, chain: InstanceChain | null) => void;
@@ -403,13 +406,18 @@ export function XrayLabels({
     <div
       ref={overlayRef}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-[1000] overflow-hidden"
     >
       {enabled
         ? labels.map((label, index) => {
             const focused = focusSet === null || focusSet.has(label.key);
+            // Pick armed: no hover-revealed chips — the HoverBadge is the
+            // hovered label; permanent chips (containers + quiet leaves)
+            // keep their chip and their click-to-pick semantics.
             const showChip =
-              label.container || label.quiet || label.wrapper === hoverWrapper;
+              label.container ||
+              label.quiet ||
+              (!interactive && label.wrapper === hoverWrapper);
             return (
               <div
                 key={`${index}-${label.key}`}

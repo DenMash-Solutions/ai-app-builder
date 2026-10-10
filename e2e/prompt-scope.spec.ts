@@ -15,7 +15,7 @@ import {
   waitForMsw,
   type GenerateMockConfig,
 } from "./helpers";
-import { STATEFUL_UI_LINES } from "./msw/fixture";
+import { STATEFUL_ROWS_UI_LINES, STATEFUL_UI_LINES } from "./msw/fixture";
 
 /** Canned edit patch against the stateful fixture's repeat template. */
 const STATEFUL_EDIT_LINES: string[] = [
@@ -267,42 +267,47 @@ test.describe("prompt scope chips", () => {
   });
 
   test("x-ray chips pick and scope like the canvas", async ({ page }) => {
-    await generateStateful(page);
+    // Rows fixture: the repeat's per-item child is a container, so each
+    // item carries a permanent chip (STATEFUL's Text leaves are hover-chip
+    // only, and pick mode hides those).
+    await mockGenerate(page, { lines: STATEFUL_ROWS_UI_LINES });
+    await page.goto("/");
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
     await enablePick(page);
 
-    // Chips are interactive only while pick is armed
+    // Chips are interactive only while pick is armed. Hover-revealed chips
+    // are suppressed while armed (the picker badge owns the hovered label);
+    // permanent chips — one `state-row` Stack per item — stay clickable.
     await page.getByText("Item B", { exact: true }).hover();
-    const chip = page.locator('[data-xray-chip="state-item"]');
-    await expect(chip).toHaveCount(1);
-    await expect(chip).toHaveCSS("pointer-events", "auto");
+    await expect(page.locator('[data-xray-chip="state-item"]')).toHaveCount(0);
+    await expect(page.locator("[data-editor-badge]")).toBeVisible();
+    const chip = page.locator('[data-xray-chip="state-row"]');
+    await expect(chip).toHaveCount(6);
+    await expect(chip.first()).toHaveCSS("pointer-events", "auto");
 
     // Chip click selects the instance → editor opens for it
-    await chip.click();
+    await chip.first().click();
     const panel = page.locator("[data-editor-panel]");
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText("state-item");
+    await expect(panel).toContainText("state-row");
 
-    // Chip shift+click scopes the hovered instance (Item C = 3rd of 6)
-    await page.getByText("Item C", { exact: true }).hover();
-    await page
-      .locator('[data-xray-chip="state-item"]')
-      .click({ modifiers: ["Shift"] });
+    // Chip shift+click scopes the clicked instance (Item C = 3rd of 6)
+    await chip.nth(2).click({ modifiers: ["Shift"] });
     const chips = page.getByTestId("prompt-scope");
-    await expect(chips).toContainText(SCOPE.chip("state-item", "Text", 3, 6));
+    await expect(chips).toContainText(SCOPE.chip("state-row", "Stack", 3, 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
 
     // Chip shift+alt+click replaces it with the shared template
-    await page.getByText("Item C", { exact: true }).hover();
-    await page
-      .locator('[data-xray-chip="state-item"]')
-      .click({ modifiers: ["Shift", "Alt"] });
-    await expect(chips).toContainText(SCOPE.chipAll("state-item", "Text", 6));
+    await chip.nth(2).click({ modifiers: ["Shift", "Alt"] });
+    await expect(chips).toContainText(SCOPE.chipAll("state-row", "Stack", 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
     // The scope toggles never moved the editor selection
     await expect(panel).toBeVisible();
 
-    // Pick off: chips return to pass-through
+    // Pick off: hover chips return as pass-through decorations
     await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
     await page.getByText("Item B", { exact: true }).hover();
     await expect(page.locator('[data-xray-chip="state-item"]')).toHaveCSS(
