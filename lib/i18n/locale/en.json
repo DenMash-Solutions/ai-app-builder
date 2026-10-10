@@ -27,10 +27,11 @@
     "jsonCopied": "Spec copied to clipboard",
     "jsonCopyFailed": "Could not copy to the clipboard",
     "jsonExportEntry": "Export JSON: {title}",
-    "scopeChip": "{type}",
-    "scopeChipInstance": "{type} {index}/{count}",
-    "scopeChipAll": "{type} ×{count}",
-    "scopeRemove": "Remove {label} from prompt scope"
+    "scopeChip": "{key} · {type}",
+    "scopeChipInstance": "{key} · {type} {index}/{count}",
+    "scopeChipAll": "{key} · {type} ×{count}",
+    "scopeRemove": "Remove {label} from prompt scope",
+    "mentionList": "Scoped elements"
   },
   "uiRoute": {
     "loading": "Loading UI…",

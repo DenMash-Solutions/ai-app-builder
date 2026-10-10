@@ -63,7 +63,7 @@ test.describe("prompt scope chips", () => {
 
     const chips = page.getByTestId("prompt-scope");
     await expect(chips).toBeVisible();
-    await expect(chips).toContainText(SCOPE.chip("Text", 3, 6));
+    await expect(chips).toContainText(SCOPE.chip("state-item", "Text", 3, 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
     // Selection untouched: no drawer, pick stays armed
     await expect(page.locator("[data-editor-panel]")).toHaveCount(0);
@@ -71,14 +71,16 @@ test.describe("prompt scope chips", () => {
     await page
       .getByText("Item E", { exact: true })
       .click({ modifiers: ["Shift"] });
-    await expect(chips).toContainText(SCOPE.chip("Text", 5, 6));
+    await expect(chips).toContainText(SCOPE.chip("state-item", "Text", 5, 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(2);
 
     // Re-shift+click toggles the first target back off
     await page
       .getByText("Item C", { exact: true })
       .click({ modifiers: ["Shift"] });
-    await expect(chips).not.toContainText(SCOPE.chip("Text", 3, 6));
+    await expect(chips).not.toContainText(
+      SCOPE.chip("state-item", "Text", 3, 6),
+    );
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
   });
 
@@ -109,7 +111,7 @@ test.describe("prompt scope chips", () => {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("prompt-scope")).toContainText(
-      SCOPE.chip("Text", 2, 6),
+      SCOPE.chip("state-item", "Text", 2, 6),
     );
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
 
@@ -170,7 +172,7 @@ test.describe("prompt scope chips", () => {
     // Highlight + chip remain after the stream
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
     await expect(page.getByTestId("prompt-scope")).toContainText(
-      SCOPE.chip("Text", 1, 6),
+      SCOPE.chip("state-item", "Text", 1, 6),
     );
   });
 
@@ -186,7 +188,7 @@ test.describe("prompt scope chips", () => {
     // Chip ✕ removes the target
     await page
       .getByRole(ROLE.button, {
-        name: SCOPE.removeChip(SCOPE.chip("Text", 3, 6)),
+        name: SCOPE.removeChip(SCOPE.chip("state-item", "Text", 3, 6)),
       })
       .click();
     await expect(page.getByTestId("prompt-scope")).toHaveCount(0);
@@ -230,7 +232,7 @@ test.describe("prompt scope chips", () => {
       .click({ modifiers: ["Shift", "Alt"] });
 
     const chips = page.getByTestId("prompt-scope");
-    await expect(chips).toContainText(SCOPE.chipAll("Text", 6));
+    await expect(chips).toContainText(SCOPE.chipAll("state-item", "Text", 6));
     // One mark + one box per rendered instance
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
     await expect(page.locator("[data-scope-box]")).toHaveCount(6);
@@ -250,7 +252,7 @@ test.describe("prompt scope chips", () => {
     expect(prompt).not.toContain("instance ");
     expect(prompt).toContain("User request:\nMake every item italic");
     // Template chip + all six marks survive the steer
-    await expect(chips).toContainText(SCOPE.chipAll("Text", 6));
+    await expect(chips).toContainText(SCOPE.chipAll("state-item", "Text", 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
 
     // Shift+alt+click again toggles the template off
@@ -287,7 +289,7 @@ test.describe("prompt scope chips", () => {
       .locator('[data-xray-chip="state-item"]')
       .click({ modifiers: ["Shift"] });
     const chips = page.getByTestId("prompt-scope");
-    await expect(chips).toContainText(SCOPE.chip("Text", 3, 6));
+    await expect(chips).toContainText(SCOPE.chip("state-item", "Text", 3, 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
 
     // Chip shift+alt+click replaces it with the shared template
@@ -295,7 +297,7 @@ test.describe("prompt scope chips", () => {
     await page
       .locator('[data-xray-chip="state-item"]')
       .click({ modifiers: ["Shift", "Alt"] });
-    await expect(chips).toContainText(SCOPE.chipAll("Text", 6));
+    await expect(chips).toContainText(SCOPE.chipAll("state-item", "Text", 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
     // The scope toggles never moved the editor selection
     await expect(panel).toBeVisible();
@@ -323,7 +325,7 @@ test.describe("prompt scope chips", () => {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("prompt-scope")).toContainText(
-      SCOPE.chipAll("Text", 6),
+      SCOPE.chipAll("state-item", "Text", 6),
     );
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
 
@@ -344,7 +346,7 @@ test.describe("prompt scope chips", () => {
       .getByText("Item B", { exact: true })
       .click({ modifiers: ["Shift"] });
     await expect(page.getByTestId("prompt-scope")).toContainText(
-      SCOPE.chip("Text", 2, 6),
+      SCOPE.chip("state-item", "Text", 2, 6),
     );
 
     // …then the template replaces it
@@ -352,10 +354,10 @@ test.describe("prompt scope chips", () => {
       .getByText("Item C", { exact: true })
       .click({ modifiers: ["Shift", "Alt"] });
     await expect(page.getByTestId("prompt-scope")).toContainText(
-      SCOPE.chipAll("Text", 6),
+      SCOPE.chipAll("state-item", "Text", 6),
     );
     await expect(page.getByTestId("prompt-scope")).not.toContainText(
-      SCOPE.chip("Text", 2, 6),
+      SCOPE.chip("state-item", "Text", 2, 6),
     );
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
 
@@ -364,11 +366,88 @@ test.describe("prompt scope chips", () => {
       .getByText("Item B", { exact: true })
       .click({ modifiers: ["Shift"] });
     await expect(page.getByTestId("prompt-scope")).toContainText(
-      SCOPE.chip("Text", 2, 6),
+      SCOPE.chip("state-item", "Text", 2, 6),
     );
     await expect(page.getByTestId("prompt-scope")).not.toContainText(
-      SCOPE.chipAll("Text", 6),
+      SCOPE.chipAll("state-item", "Text", 6),
     );
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
+  });
+
+  test("prompt input is an expandable textarea with @ scoped mentions", async ({
+    page,
+  }) => {
+    await generateStateful(page);
+    await enablePick(page);
+    await page
+      .getByText("Item B", { exact: true })
+      .click({ modifiers: ["Shift"] });
+
+    const input = page.getByPlaceholder("Describe the UI you want…");
+
+    // Shift+Enter inserts a newline instead of submitting
+    await input.click();
+    await input.pressSequentially("first line");
+    await input.press("Shift+Enter");
+    await input.pressSequentially("second line");
+    await expect(input).toHaveValue("first line\nsecond line");
+    await expect(page.getByTestId("mention-list")).toHaveCount(0);
+
+    // A second instance gives the mention list two rows to navigate
+    await page
+      .getByText("Item D", { exact: true })
+      .click({ modifiers: ["Shift"] });
+
+    // @ opens the autocomplete over scope chips only; the option row
+    // disambiguates the instance with its index and resolved content
+    await input.fill("");
+    await input.pressSequentially("tune @");
+    const list = page.getByTestId("mention-list");
+    await expect(list).toBeVisible();
+    await expect(list).toContainText("state-item");
+    await expect(list).toContainText("Text 2/6");
+    await expect(list).toContainText("Item B");
+
+    // The list spans exactly the input's width
+    const listBox = await list.boundingBox();
+    const inputBox = await input.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(inputBox).not.toBeNull();
+    expect(listBox?.width ?? 0).toBeCloseTo(inputBox?.width ?? -1, 0);
+
+    // Arrow keys move the highlight across options
+    await input.press("ArrowDown");
+    await expect(list.getByRole("option", { selected: true })).toHaveCount(1);
+    await expect(list.getByRole("option", { selected: true })).toContainText(
+      "Item D",
+    );
+    await input.press("ArrowUp");
+    await expect(list.getByRole("option", { selected: true })).toContainText(
+      "Item B",
+    );
+
+    // Enter picks the highlighted option and inserts the token — instance
+    // chips carry their index (`#2`) so two instances stay distinguishable
+    await input.press("Enter");
+    await expect(list).toHaveCount(0);
+    await expect(input).toHaveValue("tune @state-item#2");
+
+    // The mirror renders the scoped token as a family-colored chip
+    await expect(
+      page.locator(
+        '[data-testid="prompt-mirror"] [data-mention-chip="state-item#2"]',
+      ),
+    ).toHaveCount(1);
+
+    // A second Enter submits — the just-inserted token never re-opens the
+    // picker, so Enter falls through to the form submit
+    await input.press("Enter");
+    await expect(
+      page.getByRole(ROLE.button, { name: ACTIONS.steer }),
+    ).toBeEnabled();
+    const prompt = await lastGeneratePrompt(page);
+    // The `#2` suffix maps the mention back to the wrapper's "instance 2"
+    expect(prompt).toContain("tune @state-item#2");
+    expect(prompt).toContain("instance 2 of 6");
   });
 });

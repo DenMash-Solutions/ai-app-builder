@@ -6,6 +6,7 @@ import {
   analyzePropValue,
   chainForKey,
   countKeyInstances,
+  describeInstanceText,
   mapDomIndexToIndex,
   resolveChainBasePath,
   resolveDataPath,
@@ -379,5 +380,40 @@ describe("countKeyInstances", () => {
 
   test("unknown keys count zero", () => {
     expect(countKeyInstances(makeSpec(), "missing")).toBe(0);
+  });
+});
+
+describe("describeInstanceText", () => {
+  test("resolves the first text-ish prop through the instance chain", () => {
+    const spec = makeSpec();
+    // `item` binds `text: { $item: "title" }`; chain picks the third image.
+    expect(
+      describeInstanceText(spec, "item", [
+        { containerKey: "grid", domIndex: 1 },
+      ]),
+    ).toBe("Charlie");
+  });
+
+  test("falls through to a later prop when the first is unresolvable", () => {
+    const spec = makeSpec();
+    // `className` is not text-ish; `text` is the one that resolves here.
+    expect(describeInstanceText(spec, "item", [])).toBeNull();
+  });
+
+  test("returns null for unknown keys and missing props", () => {
+    const spec = makeSpec();
+    expect(describeInstanceText(spec, "missing", [])).toBeNull();
+    expect(describeInstanceText(spec, "root", [])).toBeNull();
+  });
+
+  test("truncates long resolved text to 28 chars", () => {
+    const spec = makeSpec();
+    (spec.state as { images: { title: string }[] }).images[2]!.title =
+      "A very long product title that overflows the row";
+    expect(
+      describeInstanceText(spec, "item", [
+        { containerKey: "grid", domIndex: 1 },
+      ]),
+    ).toBe("A very long product title t…");
   });
 });

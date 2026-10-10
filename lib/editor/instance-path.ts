@@ -354,3 +354,43 @@ export function chainForKey(
 function escapePointer(segment: string): string {
   return segment.replace(/~/g, "~0").replace(/\//g, "~1");
 }
+
+/** Props checked, in order, for a human-readable instance snippet. */
+const INSTANCE_TEXT_PROPS = [
+  "text",
+  "label",
+  "title",
+  "name",
+  "alt",
+  "placeholder",
+] as const;
+
+const INSTANCE_TEXT_MAX_LENGTH = 28;
+
+/**
+ * Best-effort readable snippet for a picked instance — the first non-empty
+ * string among text-ish props once resolved against the instance's repeat
+ * chain. Used by the prompt `@` autocomplete to tell instances of the same
+ * key apart ("Item B" vs "Item C"); returns null when nothing resolves.
+ */
+export function describeInstanceText(
+  spec: Spec,
+  key: string,
+  chain: InstanceChain,
+): string | null {
+  const element = spec.elements[key];
+  if (!element) return null;
+  const state = spec.state ?? {};
+  for (const prop of INSTANCE_TEXT_PROPS) {
+    const value = element.props?.[prop];
+    if (value === undefined) continue;
+    const resolved = resolvePropDisplay(spec, state, chain, value);
+    if (typeof resolved !== "string") continue;
+    const trimmed = resolved.trim();
+    if (trimmed.length === 0) continue;
+    return trimmed.length > INSTANCE_TEXT_MAX_LENGTH
+      ? `${trimmed.slice(0, INSTANCE_TEXT_MAX_LENGTH - 1)}…`
+      : trimmed;
+  }
+  return null;
+}

@@ -68,13 +68,15 @@ export const STATE_MOCK = {
 } as const;
 
 export const SCOPE = {
-  chip: (type: string, index: number, count: number): string =>
+  chip: (key: string, type: string, index: number, count: number): string =>
     en.playground.scopeChipInstance
+      .replace("{key}", key)
       .replace("{type}", type)
       .replace("{index}", String(index))
       .replace("{count}", String(count)),
-  chipAll: (type: string, count: number): string =>
+  chipAll: (key: string, type: string, count: number): string =>
     en.playground.scopeChipAll
+      .replace("{key}", key)
       .replace("{type}", type)
       .replace("{count}", String(count)),
   removeChip: (label: string): string =>

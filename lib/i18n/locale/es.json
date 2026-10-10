@@ -27,10 +27,11 @@
     "jsonCopied": "Spec copiada al portapapeles",
     "jsonCopyFailed": "No se pudo copiar al portapapeles",
     "jsonExportEntry": "Exportar JSON: {title}",
-    "scopeChip": "{type}",
-    "scopeChipInstance": "{type} {index}/{count}",
-    "scopeChipAll": "{type} ×{count}",
-    "scopeRemove": "Quitar {label} del ámbito del prompt"
+    "scopeChip": "{key} · {type}",
+    "scopeChipInstance": "{key} · {type} {index}/{count}",
+    "scopeChipAll": "{key} · {type} ×{count}",
+    "scopeRemove": "Quitar {label} del ámbito del prompt",
+    "mentionList": "Elementos del ámbito"
   },
   "uiRoute": {
     "loading": "Cargando interfaz…",

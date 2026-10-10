@@ -44,6 +44,7 @@ import {
   STRUCTURE_OPS,
   chainForKey,
   countKeyInstances,
+  describeInstanceText,
   duplicateElement,
   findParentKey,
   getAncestorPath,
@@ -1038,15 +1039,34 @@ export function Playground({ initialId }: PlaygroundProps) {
                         : null;
                     return {
                       id: scopeTargetId(target),
+                      key: target.key,
+                      type,
+                      detail:
+                        instance && displayedSpec
+                          ? describeInstanceText(
+                              displayedSpec,
+                              target.key,
+                              target.chain ?? [],
+                            )
+                          : null,
+                      instanceIndex: instance ? instance.itemIndex + 1 : null,
                       label: instance
                         ? t("playground.scopeChipInstance", {
+                            key: target.key,
                             type,
                             index: instance.itemIndex + 1,
                             count: instance.count,
                           })
                         : isTemplate && count > 1
-                          ? t("playground.scopeChipAll", { type, count })
-                          : t("playground.scopeChip", { type }),
+                          ? t("playground.scopeChipAll", {
+                              key: target.key,
+                              type,
+                              count,
+                            })
+                          : t("playground.scopeChip", {
+                              key: target.key,
+                              type,
+                            }),
                     };
                   })}
                   onRemoveScope={(id) =>
