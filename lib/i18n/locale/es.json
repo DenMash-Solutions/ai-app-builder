@@ -51,6 +51,11 @@
       "addAll": "Añadir las {count} instancias al ámbito del prompt",
       "activeAll": "Las {count} instancias en el ámbito del prompt"
     },
+    "xrayScope": {
+      "instance": "Esta instancia",
+      "all": "Todas las instancias"
+    },
+    "xrayRemove": "Quitar pin de rayos X",
     "panelTitle": "Editor de elemento",
     "close": "Cerrar",
     "undo": "Deshacer",

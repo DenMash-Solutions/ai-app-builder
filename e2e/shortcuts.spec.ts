@@ -70,7 +70,7 @@ test.describe("canvas editing shortcuts", () => {
 
     await page.keyboard.press("x");
     await expect(xray).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("[data-xray-chip]").first()).toBeVisible();
+    await expect(page.locator("[data-xray-dot]").first()).toBeVisible();
     await page.keyboard.press("x");
     await expect(xray).toHaveAttribute("aria-pressed", "false");
 

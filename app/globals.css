@@ -101,6 +101,60 @@
 .jr-xray [data-jr-key][data-jr-type="Button"] > * {
   outline-color: rgb(251 113 133 / 0.9);
 }
+/* Pin/hover highlight: the element's own border (2px amber outline, offset
+   outside so it frames rather than overlays; follows border-radius). Same
+   specificity as the family rules above — later source wins. */
+.jr-xray [data-jr-key][data-xray-pinned] > * {
+  outline: 2px solid rgb(251 191 36 / 0.95);
+  outline-offset: 2px;
+}
+.jr-xray [data-jr-key][data-xray-hover] > * {
+  outline: 2px solid rgb(251 191 36 / 0.75);
+  outline-offset: 2px;
+}
+
+/* X-ray pin: the dot transforms in place into a chip — scale-in from the
+   left edge (where the dot was), so the chip reads as growing out of the
+   dot. transform-origin left center; reduced-motion drops the animation. */
+@keyframes jr-xray-chip-in {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.jr-xray-chip-in {
+  animation: jr-xray-chip-in 180ms ease-out;
+  transform-origin: left center;
+}
+/* X-ray pin removal: shrink + fade in place (the fan slot is held until
+   the commit, so neighbors shift only after the chip is gone). */
+@keyframes jr-xray-chip-out {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+.jr-xray-chip-out {
+  animation: jr-xray-chip-out 180ms ease-in forwards;
+  transform-origin: left center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jr-xray-chip-in {
+    animation: none;
+  }
+  .jr-xray-chip-out {
+    animation: none;
+    opacity: 0;
+  }
+}
 
 /* Drag & drop: grab affordance on canvas elements. Declared before the pick
    rules so pick mode's crosshair still wins when both are active. */

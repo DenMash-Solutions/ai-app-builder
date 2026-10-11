@@ -51,6 +51,11 @@
       "addAll": "Add all {count} instances to prompt scope",
       "activeAll": "All {count} instances in prompt scope"
     },
+    "xrayScope": {
+      "instance": "This instance",
+      "all": "All instances"
+    },
+    "xrayRemove": "Remove x-ray pin",
     "panelTitle": "Element editor",
     "close": "Close",
     "undo": "Undo",

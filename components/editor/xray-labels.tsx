@@ -1,127 +1,199 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Spec } from "@json-render/core";
+import { useTranslations } from "next-intl";
+import { Check, Plus, X } from "lucide-react";
 import type { InstanceChain } from "@/lib/editor";
+import { scopeTargetId } from "@/lib/editor";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { computeInstanceChain } from "./instance-dom";
-import { familyFor } from "./type-families";
+import { familyFor, type TypeFamily } from "./type-families";
 
 interface XrayLabelsProps {
   enabled: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   spec: Spec | null;
   /**
-   * Pick mode armed: chips become clickable with the canvas pick semantics
-   * (click = select, shift+click = instance scope, shift+alt+click =
-   * template scope) and keep the hover-focus while the pointer is over a
-   * chip. Hover-revealed chips are suppressed while armed — the picker's
-   * HoverBadge owns the hovered item's label; permanent chips (containers +
-   * quiet leaves) stay. Off = chips stay pointer-events-none, hover chips
-   * show, and clicks fall through.
+   * Pick mode armed: clicking a dot also selects the element (canvas pick
+   * semantics). Dots are interactive whenever x-ray is on — pick only adds
+   * the select-on-click behavior.
    */
-  interactive?: boolean;
+  pickArmed?: boolean;
+  /** Scope target ids (see `scopeTargetId`) — drives the chip ✓/`+` state. */
+  scopeIds?: ReadonlySet<string>;
   onSelect?: (key: string, chain: InstanceChain | null) => void;
   onToggleScope?: (
     key: string,
     chain: InstanceChain | null,
     template: boolean,
   ) => void;
+  /** Remove every scope target for a key (chip X button removes pin + scope). */
+  onRemoveScope?: (key: string) => void;
 }
 
-interface LabelBox {
+interface DotBox {
   key: string;
   type: string;
-  family: { label: string; dot: string; chip: string };
-  /** Spec element has children/slots — the layout skeleton. */
-  container: boolean;
-  /** No rendered text (images, overlays, empty spacers) or no box at all. */
-  quiet: boolean;
-  /** No measurable box — render the forced marker. */
+  family: TypeFamily;
+  /** No measurable box — amber dot at the cascade anchor. */
   boxless: boolean;
-  /** Corner-dot / marker / chip anchor (box top-left), overlay coords. */
+  /** Anchor (box top-left or cascade), overlay coords, before fan. */
   x: number;
   y: number;
-  width: number;
-  height: number;
-  /** Chip left: box x, edge-anchored (overlay clips at the canvas edge). */
-  chipLeft: number;
-  /** Chip top: above the box (default), lane/row-shifted by placement. */
-  chipTop: number;
-  /** DOM wrapper for this instance — placement matches ancestors by
-   *  element identity, never by key (repeat instances share keys). */
+  /** DOM wrapper for this instance — pins follow element identity, never
+   *  key (repeat instances share keys). */
   wrapper: HTMLElement;
-  /** Ancestor wrappers (same instance), outermost-first. */
-  ancestorWrappers: Set<HTMLElement>;
 }
 
-const CHIP_HEIGHT = 20;
-const CHIP_MAX_WIDTH = 160;
+/** Placed position: unpinned dots fan as hit-sized spans around a center;
+ *  pinned chips fan as text-width spans from a left edge. */
+interface PlacedDot extends DotBox {
+  /** Dot center (unpinned) or chip left edge (pinned). */
+  placeX: number;
+}
+
+/** Dot visual is 14px inside a 20px hit button; the fan pitch equals the
+ *  hit size — a fanned member's neighbor sits exactly one hit-size away,
+ *  so every dot's center stays hittable (a larger hit box would cover the
+ *  neighbor's center and make the covered dot unreachable). */
+const DOT_VISUAL = 14;
+const DOT_HIT = 20;
+/** Fan pitch (and proximity threshold): spans within this distance in the
+ *  same y-band shift to rightmost + FAN_PITCH — tight rows, no hidden
+ *  members. Also the minimum in-band center-to-center distance (e2e's
+ *  clash check keys off this). */
+const FAN_PITCH = 20;
 const EDGE = 2;
-const LANE_GAP = 2;
-const CHIP_LANES_UP = 3;
-const CHIP_LANES_DOWN = 2;
-const TUCK_LANES = 3;
+/** Hover label height: py-0.5 (4) + leading-3 (12) + border (2) — labels
+ *  sit flush against the dot button (no gap: a gap would drop the hover
+ *  focus mid-flight and unmount the label before the pointer arrives). */
+const LABEL_HEIGHT = 18;
+/** Pinned chip height: py-0.5 (4) + h-4 icon buttons (16) + border (2). */
+const CHIP_HEIGHT = 22;
+/** Chip exit animation duration — the slot is held until the commit so
+ *  neighbors only shift after the chip is gone. */
+const CHIP_OUT_MS = 180;
+/** Key truncation budget (CSS ellipsis past this); the type never truncates
+ *  (types are short). */
+const KEY_TRUNCATE_CH = 18;
 
-/** `font-mono` 10px ≈ 6.2px/char; "key · type" + px-1.5 padding + border. */
+/** Fan-placement width estimate for a pinned chip (font-mono 10px ≈
+ *  6.2px/char + scope trigger + remove button + gaps + padding + border +
+ *  slack). Only feeds the placement pass — a few px of drift shifts
+ *  neighbors, never clips. */
 function estimateChipWidth(key: string, type: string): number {
-  return Math.min(CHIP_MAX_WIDTH, (key.length + type.length + 3) * 6.2 + 16);
-}
-
-function rectsOverlap(
-  a: { x: number; y: number; w: number; h: number },
-  b: { x: number; y: number; w: number; h: number },
-): boolean {
-  return (
-    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
-  );
-}
-
-function isContainer(spec: Spec, key: string): boolean {
-  const element = spec.elements[key];
-  return (
-    !!element &&
-    ((element.children?.length ?? 0) > 0 ||
-      Object.values(element.slots ?? {}).flat().length > 0)
+  const keyCh = Math.min(KEY_TRUNCATE_CH, key.length);
+  return Math.ceil(
+    keyCh * 6.2 + type.length * 6.2 + 6.2 + 16 + 16 + 16 + 12 + 2 + 6,
   );
 }
 
 /**
- * Identity labels for x-ray mode, tiered so the anatomy stays scannable:
- * containers get always-on `key · Type` chips (the layout skeleton), leaves
- * that self-identify (rendered text) get family-colored dots only, and quiet
- * or boxless leaves keep chips — those are the components that were
- * invisible before. Family colors (Stack/Card/Text/…) make structure
- * readable before any text is. Hovering an element focuses its subtree
- * (dim/family lights by key; the amber outline and expanded chip follow the
- * exact hovered instance — repeats share keys) — events come from the
- * canvas; the overlay stays pointer-events-none. Containment comes from the DOM wrapper
- * tree (display:contents nesting), which matches the rendered hierarchy even
- * when the model-generated spec omits child links. Permanent chips are
- * placed by a greedy hierarchy-aware lane pass (ancestors reserve first; a
- * child never sits above an ancestor's chip — up 3 lanes, one row under the
- * parent, then below-box) so nested and sibling chips never overlap and the
- * tree reads top-down, and are edge-anchored (no horizontal clamp; the
- * overlay clips at the canvas edge). Renders into a clipping overlay
- * (sibling of the scroll container) so decorations never join the scroller's
- * scrollable overflow. Measurement is event-driven (spec/toggle, passive
- * scroll + mouseover, ResizeObserver) and rAF-coalesced.
+ * X-ray markers: one family-colored dot per element at its box top-left
+ * (boxless elements keep the cascade anchor, amber dot). Near-coincident
+ * anchors fan horizontally — pinned chips occupy their estimated text
+ * width and push the rest of the row right. Hovering a dot shows a
+ * `key · Type` label and lights its subtree; clicking transforms the dot
+ * in place into an animated chip (pin — multiple allowed) that sits fully
+ * above the element's top border and outlines the element's own border.
+ * Removing (X button, chip body, Escape, canvas click) plays a shrink-out
+ * animation before the pin commits away. Every chip carries a left-side
+ * `+`/`✓` scope toggle; repeatable keys wrap it in a this-instance /
+ * all-instances dropdown (active membership removes on click), while
+ * singletons toggle scope directly (instance and template collapse to the
+ * same target there). With pick armed a dot click also selects. Events come from the dots (the overlay
+ * stays pointer-events-none otherwise); containment comes from the DOM
+ * wrapper tree (display:contents nesting matches the rendered hierarchy
+ * even when the model-generated spec omits child links). Renders into a
+ * clipping overlay (sibling of the scroll container) so decorations never
+ * join the scroller's scrollable overflow. Measurement is event-driven
+ * (spec/toggle, passive scroll, ResizeObserver) and rAF-coalesced.
  */
 export function XrayLabels({
   enabled,
   containerRef,
   spec,
-  interactive = false,
+  pickArmed = false,
+  scopeIds,
   onSelect,
   onToggleScope,
+  onRemoveScope,
 }: XrayLabelsProps) {
-  const [labels, setLabels] = useState<LabelBox[]>([]);
+  const t = useTranslations();
+  const [dots, setDots] = useState<DotBox[]>([]);
   const [parentMap, setParentMap] = useState<Record<string, string>>({});
   const [hoverKey, setHoverKey] = useState<string | null>(null);
-  // Exact hovered instance — repeat instances share keys, so the hover
-  // outline/expand must follow the wrapper, not the key.
+  // Exact hovered instance — repeat instances share keys, so the focus and
+  // label must follow the wrapper, not the key.
   const [hoverWrapper, setHoverWrapper] = useState<HTMLElement | null>(null);
+  const [pinned, setPinned] = useState<ReadonlySet<HTMLElement>>(new Set());
+  // Which chip's scope dropdown is open (wrapper identity, like pins). A
+  // controlled open lets each choice close the menu explicitly — the `+`
+  // trigger lives inside the overlay that also wraps the chip, so Radix's
+  // outside-click detection sees every trigger press as "outside" the
+  // portaled content and would snap the menu shut the instant it reopens.
+  const [scopeMenu, setScopeMenu] = useState<HTMLElement | null>(null);
+  // Canvas-click-clears-pins must not fire for the click that merely
+  // dismisses an open scope dropdown. Radix closes on pointerdown (before
+  // click) and our React state is already null by click time, so we record
+  // the close moment and ignore canvas clears for a short window after.
+  const scopeMenuClosedAtRef = useRef(0);
+  // Wrappers whose chip is mid exit-animation — kept in `pinned` (so the
+  // fan slot holds and neighbors don't jump) until the commit timer removes
+  // them. Removal is always routed through beginRemove so X, chip body,
+  // Escape, and canvas-click share one animated path.
+  const [removing, setRemoving] = useState<ReadonlySet<HTMLElement>>(new Set());
+  const removeTimersRef = useRef(
+    new Map<HTMLElement, ReturnType<typeof setTimeout>>(),
+  );
   const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  // Animated unpin: hold the chip's fan slot, play the exit keyframe, then
+  // commit (unpin + release the slot). Idempotent per wrapper — the timer
+  // map is the source of truth so double-clicks and overlapping clear-alls
+  // never stack timers. The commit also drops every prompt-scope target for
+  // the key (the chip's X removes pin + scope together) so no dangling
+  // scope lingers.
+  const beginRemove = useCallback(
+    (wrapper: HTMLElement) => {
+      if (removeTimersRef.current.has(wrapper)) return;
+      const key = wrapper.dataset.jrKey ?? "";
+      const timer = setTimeout(() => {
+        removeTimersRef.current.delete(wrapper);
+        setPinned((prev) => {
+          if (!prev.has(wrapper)) return prev;
+          const next = new Set(prev);
+          next.delete(wrapper);
+          return next;
+        });
+        setRemoving((prev) => {
+          if (!prev.has(wrapper)) return prev;
+          const next = new Set(prev);
+          next.delete(wrapper);
+          return next;
+        });
+        setScopeMenu((prev) => (prev === wrapper ? null : prev));
+        onRemoveScope?.(key);
+      }, CHIP_OUT_MS);
+      removeTimersRef.current.set(wrapper, timer);
+      setRemoving((prev) => {
+        const next = new Set(prev);
+        next.add(wrapper);
+        return next;
+      });
+    },
+    [onRemoveScope],
+  );
+
+  const beginRemoveAll = useCallback(() => {
+    for (const wrapper of pinned) beginRemove(wrapper);
+  }, [pinned, beginRemove]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -132,7 +204,7 @@ export function XrayLabels({
     const update = () => {
       raf = 0;
       const overlayRect = overlay.getBoundingClientRect();
-      const next: LabelBox[] = [];
+      const next: DotBox[] = [];
       const domParents: Record<string, string> = {};
       const nodes = container.querySelectorAll<HTMLElement>("[data-jr-key]");
       nodes.forEach((wrapper) => {
@@ -140,20 +212,12 @@ export function XrayLabels({
         const element = key ? spec.elements[key] : undefined;
         if (!key || !element) return;
 
-        // DOM-derived containment: display:contents wrappers nest exactly per
-        // the rendered tree, unlike spec fields which the model can shape
-        // arbitrarily. Key→parent feeds hover focus; the wrapper-identity
-        // ancestor set feeds placement (repeat instances share keys, so
-        // placement must never match ancestors by key).
-        const ancestorWrappers = new Set<HTMLElement>();
-        let ancestor =
+        // DOM-derived containment: display:contents wrappers nest exactly
+        // per the rendered tree, unlike spec fields which the model can
+        // shape arbitrarily. Key→parent feeds the hover focus.
+        const parent =
           wrapper.parentElement?.closest<HTMLElement>("[data-jr-key]");
-        while (ancestor) {
-          ancestorWrappers.add(ancestor);
-          ancestor =
-            ancestor.parentElement?.closest<HTMLElement>("[data-jr-key]");
-        }
-        const parentKey = [...ancestorWrappers].at(-1)?.dataset.jrKey;
+        const parentKey = parent?.dataset.jrKey;
         if (parentKey && parentKey !== key) domParents[key] = parentKey;
 
         // Union of direct element children — display:contents wrappers and
@@ -174,19 +238,15 @@ export function XrayLabels({
         let boxless = false;
         let left: number;
         let top: number;
-        let width = 0;
-        let height = 0;
         if (minX === Infinity) {
           const own = wrapper.getBoundingClientRect();
           if (own.width > 0 || own.height > 0) {
             left = own.left;
             top = own.top;
-            width = own.width;
-            height = own.height;
           } else {
-            // No measurable box: cascade from the nearest ancestor box (depth
-            // × 10px indent) so the marker is always on screen and distinct
-            // from its parent's anchor.
+            // No measurable box: cascade from the nearest ancestor box
+            // (depth × 10px indent) so the dot is always on screen and
+            // distinct from its parent's anchor.
             boxless = true;
             let depth = 0;
             let ancestor =
@@ -209,152 +269,38 @@ export function XrayLabels({
         } else {
           left = minX;
           top = minY;
-          width = maxX - minX;
-          height = maxY - minY;
         }
 
-        const quiet = boxless || (wrapper.textContent ?? "").trim() === "";
-        const x = left - overlayRect.left;
-        const y = top - overlayRect.top;
         next.push({
           key,
           type: element.type,
           family: familyFor(element.type),
-          container: isContainer(spec, key),
-          quiet,
           boxless,
-          x,
-          y,
-          width,
-          height,
-          // Defaults for hover-only chips (text leaves); permanent chips get
-          // placed by the lane pass below. Edge-anchored: chipLeft = box x,
-          // the overlay's overflow-hidden clips at the canvas edge.
-          chipLeft: x,
-          chipTop: boxless ? y - CHIP_HEIGHT / 2 : y - CHIP_HEIGHT - EDGE,
+          x: left - overlayRect.left,
+          y: top - overlayRect.top,
           wrapper,
-          ancestorWrappers,
         });
       });
 
-      // Hierarchy-aware lane stacking for permanent chips (containers +
-      // quiet leaves). Placement runs in DFS document order (the
-      // querySelectorAll collection order above) so ancestors are always
-      // placed before their descendants and each subtree stacks
-      // contiguously — a later DOM sibling (e.g. a full-bleed background
-      // image) can never reserve rows between a parent and its children
-      // (the previous global depth sort did exactly that: every depth-N
-      // chip across all instances was placed before any depth-N+1 chip, so
-      // children landed under unrelated siblings and looked like the
-      // sibling's subtree). A child never lands above an ancestor chip of
-      // the SAME INSTANCE (matched by wrapper element identity — repeat
-      // instances share keys, so key matching would cascade floors across
-      // cards) — the tree reads top-down. Candidates: above-box lanes, one
-      // row under each blocking ancestor chip, a hierarchy row, then
-      // below-box lanes; last resort accepts with a hierarchy-respecting
-      // default. Width is pre-estimated from label text — font-mono 10px
-      // metrics are stable enough, and measuring after render would
-      // flicker.
-      const placed: Array<{
-        wrapper: HTMLElement;
-        x: number;
-        y: number;
-        w: number;
-        h: number;
-      }> = [];
-      const order = next
-        .map((label, index) => ({ label, index }))
-        .filter(({ label }) => label.container || label.quiet);
-      for (const { label, index } of order) {
-        const w = estimateChipWidth(label.key, label.type);
-        const h = CHIP_HEIGHT;
-        const aboveBase = label.boxless ? label.y - h / 2 : label.y - h - EDGE;
-        const belowBase = label.boxless
-          ? label.y + h / 2 + EDGE
-          : label.y + label.height + EDGE;
-
-        // Same-instance ancestor chips bound the child from above — no x
-        // scoping (a wide row's parent chip sits at the left; right-side
-        // children must still stay below it) and no key matching (repeat
-        // instances share keys; cross-instance chips must not cascade).
-        const x2 = label.x + Math.max(label.width, w);
-        const ancestorChips = placed.filter((p) =>
-          label.ancestorWrappers.has(p.wrapper),
-        );
-        // Strictly below the lowest ancestor chip row (hierarchy reads top-down).
-        const minY = ancestorChips.reduce((m, p) => Math.max(m, p.y + p.h), 0);
-        // Tuck candidates only for ancestors that actually block this x-span.
-        const blockers = ancestorChips.filter(
-          (p) => p.x < x2 && p.x + p.w > label.x,
-        );
-
-        const candidates = [
-          ...Array.from({ length: CHIP_LANES_UP + 1 }, (_, lane) => ({
-            y: aboveBase - lane * (h + LANE_GAP),
-          })),
-          // Tuck rows stack under each blocking ancestor (same-top siblings
-          // compete for the first row; without lanes the loser falls through
-          // to below-box and drags its whole subtree to the element's bottom).
-          ...blockers.flatMap((p) =>
-            Array.from({ length: TUCK_LANES }, (_, lane) => ({
-              y: p.y + p.h + LANE_GAP + lane * (h + LANE_GAP),
-            })),
-          ),
-          ...Array.from({ length: TUCK_LANES }, (_, lane) => ({
-            y: minY + LANE_GAP + lane * (h + LANE_GAP),
-          })).filter(() => minY > 0),
-          ...Array.from({ length: CHIP_LANES_DOWN }, (_, lane) => ({
-            y: belowBase + lane * (h + LANE_GAP),
-          })),
-        ];
-        // Hierarchy-respecting fallback: overlap is tolerable, inversion is not.
-        let chosen = Math.max(aboveBase, minY + LANE_GAP);
-        for (const candidate of candidates) {
-          if (candidate.y < EDGE || candidate.y + h > overlayRect.height - EDGE)
-            continue;
-          if (candidate.y < minY) continue;
-          const rect = {
-            wrapper: label.wrapper,
-            x: label.x,
-            y: candidate.y,
-            w,
-            h,
-          };
-          if (!placed.some((p) => rectsOverlap(rect, p))) {
-            chosen = candidate.y;
-            placed.push(rect);
-            break;
-          }
-        }
-        next[index].chipTop = chosen;
-      }
-
-      setLabels(next);
+      setDots(next);
       setParentMap(domParents);
+      // Drop pins whose wrapper left the tree (spec change, unmount).
+      const alive = new Set(next.map((dot) => dot.wrapper));
+      setPinned((prev) => {
+        if (prev.size === 0) return prev;
+        const kept = [...prev].filter((wrapper) => alive.has(wrapper));
+        return kept.length === prev.size ? prev : new Set(kept);
+      });
+      setScopeMenu((prev) => (prev !== null && !alive.has(prev) ? null : prev));
+      setRemoving((prev) => {
+        if (prev.size === 0) return prev;
+        const kept = [...prev].filter((wrapper) => alive.has(wrapper));
+        return kept.length === prev.size ? prev : new Set(kept);
+      });
     };
 
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(update);
-    };
-
-    const handleMouseOver = (event: MouseEvent) => {
-      const wrapper = (event.target as Element | null)?.closest?.(
-        "[data-jr-key]",
-      );
-      setHoverKey(
-        wrapper instanceof HTMLElement ? (wrapper.dataset.jrKey ?? null) : null,
-      );
-      setHoverWrapper(wrapper instanceof HTMLElement ? wrapper : null);
-    };
-
-    const handleMouseLeave = (event: MouseEvent) => {
-      // Pointer entering a chip (a sibling overlay) keeps the hover focus —
-      // hover-only chips would otherwise unmount mid-flight and be
-      // unclickable. The chip's own leave clears the state.
-      const next = event.relatedTarget;
-      if (next instanceof Node && overlayRef.current?.contains(next)) return;
-      setHoverKey(null);
-      setHoverWrapper(null);
     };
 
     const content = container.firstElementChild;
@@ -362,25 +308,139 @@ export function XrayLabels({
     observer.observe(container);
     if (content) observer.observe(content);
     container.addEventListener("scroll", schedule, { passive: true });
-    container.addEventListener("mouseover", handleMouseOver);
-    container.addEventListener("mouseleave", handleMouseLeave);
     schedule();
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
       observer.disconnect();
       container.removeEventListener("scroll", schedule);
-      container.removeEventListener("mouseover", handleMouseOver);
-      container.removeEventListener("mouseleave", handleMouseLeave);
       setHoverKey(null);
       setHoverWrapper(null);
     };
   }, [enabled, spec, containerRef]);
 
+  // Placement: greedy horizontal fan over occupancy spans (not centers) —
+  // an unpinned dot occupies its 20px hit span; a pinned chip occupies its
+  // estimated text width from the anchor, so everything to its right in the
+  // same band shifts right. Pure over anchors + pin state; each iteration
+  // strictly increases x (the span being dodged has right > the candidate's
+  // left edge, so the candidate lands past its right edge and drops out of
+  // the next hit test).
+  const layout = useMemo<PlacedDot[]>(() => {
+    const spans: Array<{ left: number; right: number; y: number }> = [];
+    return dots.map((dot) => {
+      const isPinned = pinned.has(dot.wrapper);
+      const half = DOT_HIT / 2;
+      const width = isPinned ? estimateChipWidth(dot.key, dot.type) : DOT_HIT;
+      let x = dot.x;
+      for (;;) {
+        const left = isPinned ? x : x - half;
+        const right = isPinned ? x + width : x + half;
+        const hit = spans.filter(
+          (s) =>
+            Math.abs(s.y - dot.y) < FAN_PITCH &&
+            s.left < right &&
+            s.right > left,
+        );
+        if (hit.length === 0) {
+          spans.push({ left, right, y: dot.y });
+          break;
+        }
+        // Unpinned: center clears the rightmost span's right edge by half.
+        // Pinned: the chip's left edge starts where the span ends.
+        x = Math.max(...hit.map((s) => s.right)) + (isPinned ? 0 : half);
+      }
+      return { ...dot, placeX: x };
+    });
+  }, [dots, pinned]);
+
+  // X-ray off (or unmount): drop all interaction state. The cleanup runs
+  // on the enabled→false transition — setState in cleanup is the accepted
+  // form (the measurement effect already resets hover that way), and pins
+  // survive spec changes (the measurement pass prunes dead wrappers).
+  useEffect(() => {
+    if (!enabled) return;
+    const timers = removeTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+      setPinned(new Set());
+      setRemoving(new Set());
+      setScopeMenu(null);
+      setHoverKey(null);
+      setHoverWrapper(null);
+    };
+  }, [enabled]);
+
+  // Pin/hover highlight = the element's own border: tag the DOM wrapper
+  // (`data-xray-pinned`/`data-xray-hover`) and let CSS paint an outline on
+  // its child — declarative rules keep it above the family outlines and
+  // clipped to border-radius. Attributes die with their wrapper.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const clear = () => {
+      container
+        .querySelectorAll("[data-xray-pinned], [data-xray-hover]")
+        .forEach((el) => {
+          el.removeAttribute("data-xray-pinned");
+          el.removeAttribute("data-xray-hover");
+        });
+    };
+    clear();
+    if (!enabled) return;
+    for (const wrapper of pinned) wrapper.setAttribute("data-xray-pinned", "1");
+    if (hoverWrapper) hoverWrapper.setAttribute("data-xray-hover", "1");
+    return clear;
+  }, [enabled, pinned, hoverWrapper, containerRef]);
+
+  // Clicking the canvas must NOT remove chips. Pins/chips are managed by
+  // explicit actions only: the dot toggles pin, the chip `+`/`✓` toggles
+  // scope, and the chip's X button (or Escape) removes. A scoped chip in
+  // particular must stay on the canvas when the user clicks elsewhere.
+
+  // Escape clears pins (capture + preventDefault, so the panel and the
+  // playground cascade never see it) — cascade: pins → panel → pick. The
+  // panel keeps Escape while the key is aimed at it, so closing the panel
+  // is never "wasted" on pins. Once every pin is already mid-exit, Escape
+  // falls through to the panel instead of being swallowed again. While a
+  // scope dropdown is open, Escape belongs to the menu (Radix), not pins.
+  useEffect(() => {
+    if (!enabled) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (scopeMenu !== null) return;
+      if (pinned.size === 0 || pinned.size === removing.size) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-editor-panel]")) {
+        return;
+      }
+      event.preventDefault();
+      beginRemoveAll();
+    };
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [enabled, pinned, removing, scopeMenu, beginRemoveAll]);
+
+  const handleDotClick = (dot: DotBox) => {
+    setPinned((prev) => {
+      const next = new Set(prev);
+      if (next.has(dot.wrapper)) next.delete(dot.wrapper);
+      else next.add(dot.wrapper);
+      return next;
+    });
+    if (pickArmed && spec) {
+      const chain = computeInstanceChain(spec, dot.wrapper);
+      onSelect?.(dot.key, chain.length > 0 ? chain : null);
+    }
+  };
+
   // Hover focus (key-based, so render never touches the DOM): the hovered
-  // key, its ancestors, and its descendants stay lit; the rest fades. Repeat
-  // instances share keys, so the whole family stays lit while scanning — the
-  // hover outline and expanded chip are separately instance-scoped below.
+  // key, its ancestors, and its descendants stay lit; the rest fades.
+  // Repeat instances share keys, so the whole family stays lit while
+  // scanning — the chip and label are separately instance-scoped.
   const focusSet = useMemo(() => {
     if (!hoverKey) return null;
     const set = new Set<string>();
@@ -389,18 +449,38 @@ export function XrayLabels({
       set.add(cursor);
       cursor = parentMap[cursor];
     }
-    for (const label of labels) {
-      let ancestor: string | undefined = label.key;
+    for (const dot of dots) {
+      let ancestor: string | undefined = dot.key;
       while (ancestor) {
         if (ancestor === hoverKey) {
-          set.add(label.key);
+          set.add(dot.key);
           break;
         }
         ancestor = parentMap[ancestor];
       }
     }
     return set;
-  }, [hoverKey, parentMap, labels]);
+  }, [hoverKey, parentMap, dots]);
+
+  const closeScopeMenu = () => setScopeMenu(null);
+
+  // A key is repeatable when multiple wrappers render it — only those get
+  // the scope dropdown (instance-vs-all is meaningless for a singleton,
+  // where both targets collapse to the same id).
+  const repeatCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const dot of dots) counts[dot.key] = (counts[dot.key] ?? 0) + 1;
+    return counts;
+  }, [dots]);
+
+  const toggleInstanceScope = (dot: DotBox, instance: InstanceChain | null) => {
+    onToggleScope?.(dot.key, instance, false);
+    closeScopeMenu();
+  };
+  const toggleAllScope = (dot: DotBox, instance: InstanceChain | null) => {
+    onToggleScope?.(dot.key, instance, true);
+    closeScopeMenu();
+  };
 
   return (
     <div
@@ -409,94 +489,225 @@ export function XrayLabels({
       className="pointer-events-none absolute inset-0 z-[1000] overflow-hidden"
     >
       {enabled
-        ? labels.map((label, index) => {
-            const focused = focusSet === null || focusSet.has(label.key);
-            // Pick armed: no hover-revealed chips — the HoverBadge is the
-            // hovered label; permanent chips (containers + quiet leaves)
-            // keep their chip and their click-to-pick semantics.
-            const showChip =
-              label.container ||
-              label.quiet ||
-              (!interactive && label.wrapper === hoverWrapper);
+        ? layout.map((dot, index) => {
+            const focused = focusSet === null || focusSet.has(dot.key);
+            const isPinned = pinned.has(dot.wrapper);
+            const chain = spec ? computeInstanceChain(spec, dot.wrapper) : null;
+            const instance = chain && chain.length > 0 ? chain : null;
+            const instanceActive =
+              chain !== null &&
+              scopeIds !== undefined &&
+              scopeIds.has(scopeTargetId({ key: dot.key, chain: instance }));
+            const allActive =
+              chain !== null &&
+              scopeIds !== undefined &&
+              scopeIds.has(scopeTargetId({ key: dot.key, chain: null }));
+            const anyActive = instanceActive || allActive;
+            const isRepeatable = (repeatCounts[dot.key] ?? 0) > 1;
+            // Chip clears the element's top border entirely (flip below only
+            // when there's no room above); the opaque background keeps
+            // outlines from bleeding through.
+            const chipTop =
+              dot.y - CHIP_HEIGHT >= EDGE ? dot.y - CHIP_HEIGHT : dot.y;
+            const labelTop =
+              dot.y - DOT_HIT / 2 - LABEL_HEIGHT >= EDGE
+                ? dot.y - DOT_HIT / 2 - LABEL_HEIGHT
+                : dot.y + DOT_HIT / 2;
             return (
               <div
-                key={`${index}-${label.key}`}
+                key={`${index}-${dot.key}`}
                 className={`transition-opacity duration-150 ${
                   focused ? "" : "opacity-30"
                 }`}
+                onMouseEnter={() => {
+                  setHoverKey(dot.key);
+                  setHoverWrapper(dot.wrapper);
+                }}
+                onMouseLeave={() => {
+                  setHoverWrapper((prev) =>
+                    prev === dot.wrapper ? null : prev,
+                  );
+                  setHoverKey((prev) => (prev === dot.key ? null : prev));
+                }}
               >
-                {label.boxless ? (
+                {isPinned ? (
                   <div
-                    data-xray-marker={label.key}
-                    className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-amber-400 bg-amber-400/30"
-                    style={{ left: label.x, top: label.y }}
-                  />
-                ) : (
-                  <div
-                    data-xray-dot={label.key}
-                    className={`absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${label.family.dot}`}
-                    style={{ left: label.x, top: label.y }}
-                  />
-                )}
-                {showChip ? (
-                  <div
-                    data-xray-chip={label.key}
-                    className={`absolute max-w-[160px] truncate rounded-md border bg-zinc-950/95 px-1.5 py-0.5 font-mono text-[10px] leading-3 text-zinc-200 shadow-sm ${label.family.chip}${
-                      interactive
-                        ? " pointer-events-auto cursor-pointer select-none"
-                        : ""
+                    data-xray-chip={dot.key}
+                    data-xray-boxless={dot.boxless ? dot.key : undefined}
+                    className={`pointer-events-auto absolute flex cursor-pointer items-center gap-1 rounded-md border border-amber-400/70 bg-zinc-950 px-1.5 py-0.5 font-mono text-[10px] leading-3 text-zinc-200 shadow-sm ${
+                      removing.has(dot.wrapper)
+                        ? "jr-xray-chip-out"
+                        : "jr-xray-chip-in"
                     }`}
-                    style={{ left: label.chipLeft, top: label.chipTop }}
-                    onClick={
-                      interactive && spec
-                        ? (event) => {
-                            const chain = computeInstanceChain(
-                              spec,
-                              label.wrapper,
-                            );
-                            const instance = chain.length > 0 ? chain : null;
-                            // Same modifier mapping as the canvas pick:
-                            // shift = instance scope, shift+alt = template.
-                            if (event.shiftKey && onToggleScope) {
-                              onToggleScope(label.key, instance, event.altKey);
-                              return;
-                            }
-                            onSelect?.(label.key, instance);
-                          }
-                        : undefined
-                    }
-                    onMouseEnter={
-                      interactive
-                        ? () => {
-                            setHoverKey(label.key);
-                            setHoverWrapper(label.wrapper);
-                          }
-                        : undefined
-                    }
-                    onMouseLeave={
-                      interactive
-                        ? () => {
-                            setHoverKey(null);
-                            setHoverWrapper(null);
-                          }
-                        : undefined
-                    }
-                  >
-                    {label.key}
-                    <span className={label.family.label}> · {label.type}</span>
-                  </div>
-                ) : null}
-                {label.wrapper === hoverWrapper && !label.boxless ? (
-                  <div
-                    className="absolute rounded-[2px] border-2 border-amber-400/90"
                     style={{
-                      left: label.x,
-                      top: label.y,
-                      width: label.width,
-                      height: label.height,
+                      left: dot.placeX,
+                      top: chipTop,
                     }}
-                  />
-                ) : null}
+                    onClick={(event) => {
+                      // Clicking the chip (outside the `+`/`✓` trigger) toggles
+                      // scope — it does not remove the chip. Only the X button
+                      // (and Escape) removes. The dropdown trigger keeps its own
+                      // click for the popover.
+                      if (
+                        event.target instanceof Element &&
+                        event.target.closest("[data-xray-scope]")
+                      ) {
+                        return;
+                      }
+                      onToggleScope?.(dot.key, instance, false);
+                    }}
+                  >
+                    {(() => {
+                      // The `+`/`✓` trigger is on every chip; repeatable keys
+                      // wrap it in the instance/all dropdown, singletons
+                      // toggle scope directly (instance === template there).
+                      const scopeTrigger = (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          data-xray-scope={dot.key}
+                          data-xray-scope-state={anyActive ? "active" : "idle"}
+                          aria-label={
+                            anyActive
+                              ? t("editor.promptScope.active")
+                              : t("editor.promptScope.add")
+                          }
+                          className="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                          onClick={() => {
+                            if (isRepeatable) return; // popover trigger owns it
+                            onToggleScope?.(dot.key, instance, false);
+                          }}
+                        >
+                          {anyActive ? (
+                            <Check className="size-3" aria-hidden="true" />
+                          ) : (
+                            <Plus className="size-3" aria-hidden="true" />
+                          )}
+                        </button>
+                      );
+                      if (!isRepeatable) return scopeTrigger;
+                      return (
+                        <Popover
+                          open={scopeMenu === dot.wrapper}
+                          onOpenChange={(open) => {
+                            if (!open)
+                              scopeMenuClosedAtRef.current = Date.now();
+                            setScopeMenu(open ? dot.wrapper : null);
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            {scopeTrigger}
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="start"
+                            sideOffset={4}
+                            // The chip is a plain div (no PopoverAnchor), so
+                            // Radix measures its center once at open; as other
+                            // pins shift this chip sideways the measured
+                            // anchor no longer matches the trigger and Radix
+                            // treats the content as detached → auto-close.
+                            // Scope doesn't invalidate a pin, so keep the
+                            // content mounted across those re-renders
+                            // (outside-click and Escape still dismiss it).
+                            className="w-44 p-1"
+                          >
+                            <button
+                              type="button"
+                              className={`flex w-full items-center justify-between rounded-sm px-2 py-1 text-left text-xs hover:bg-zinc-800 ${
+                                instanceActive
+                                  ? "text-amber-300"
+                                  : "text-zinc-200"
+                              }`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                toggleInstanceScope(dot, instance);
+                              }}
+                            >
+                              {t("editor.xrayScope.instance")}
+                              {instanceActive ? (
+                                <Check className="size-3" aria-hidden="true" />
+                              ) : null}
+                            </button>
+                            <button
+                              type="button"
+                              className={`flex w-full items-center justify-between rounded-sm px-2 py-1 text-left text-xs hover:bg-zinc-800 ${
+                                allActive ? "text-amber-300" : "text-zinc-200"
+                              }`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                toggleAllScope(dot, instance);
+                              }}
+                            >
+                              {t("editor.xrayScope.all")}
+                              {allActive ? (
+                                <Check className="size-3" aria-hidden="true" />
+                              ) : null}
+                            </button>
+                          </PopoverContent>
+                        </Popover>
+                      );
+                    })()}
+                    <span className="max-w-[18ch] truncate">{dot.key}</span>
+                    <span aria-hidden="true" className="text-zinc-500">
+                      ·
+                    </span>
+                    <span className={dot.family.label}>{dot.type}</span>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      data-xray-remove={dot.key}
+                      aria-label={t("editor.xrayRemove")}
+                      className="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-red-300"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        beginRemove(dot.wrapper);
+                      }}
+                    >
+                      <X className="size-3" aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      data-xray-dot={dot.key}
+                      data-xray-boxless={dot.boxless ? dot.key : undefined}
+                      className="pointer-events-auto absolute cursor-pointer select-none rounded-full"
+                      style={{
+                        width: DOT_HIT,
+                        height: DOT_HIT,
+                        left: dot.placeX - DOT_HIT / 2,
+                        top: dot.y - DOT_HIT / 2,
+                      }}
+                      onClick={() => handleDotClick(dot)}
+                    >
+                      <span
+                        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${
+                          dot.boxless
+                            ? "border border-amber-400 bg-amber-400/40"
+                            : dot.family.dot
+                        }`}
+                        style={{ width: DOT_VISUAL, height: DOT_VISUAL }}
+                      />
+                    </button>
+                    {hoverWrapper === dot.wrapper ? (
+                      <div
+                        data-xray-label={dot.key}
+                        className="pointer-events-none absolute flex max-w-[160px] items-center gap-1 rounded-md border border-zinc-700 bg-zinc-950/95 px-1.5 py-0.5 font-mono text-[10px] leading-3 text-zinc-200 shadow-sm"
+                        style={{ left: dot.placeX - 6, top: labelTop }}
+                      >
+                        <span className="max-w-[18ch] truncate">{dot.key}</span>
+                        <span aria-hidden="true" className="text-zinc-500">
+                          ·
+                        </span>
+                        <span className={dot.family.label}>{dot.type}</span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             );
           })

@@ -118,8 +118,8 @@ export const CAROUSEL_UI_LINES: string[] = [
     },
   }),
   // Quiet leaf with a real box (button padding) at the row's top edge — its
-  // chip collides with carousel-row's chip, driving the lane-stacking
-  // overlap regression. (Whitespace-only text collapses to 0×0, hence a
+  // dot anchor collides with carousel-row's, driving the horizontal fan
+  // regression. (Whitespace-only text collapses to 0×0, hence a
   // padded Button rather than a bare Text.)
   line({
     op: PATCH_OP.add,
@@ -155,11 +155,9 @@ export const CAROUSEL_UI_LINES: string[] = [
   ]),
   // Overlay card mirroring the live Gemini carousel shape: an absolutely
   // positioned content stack (with a badge child) plus a later DOM sibling
-  // image that fills the same box. Both share the card's top edge, so the
-  // global-depth placement (all depth-N before any depth-N+1) used to put
-  // the image chip between the content chip and its badge child — the image
-  // looked like the badge's parent. DFS placement must keep the badge chip
-  // directly under the content chip, image last.
+  // image that fills the same box. All three share the card's top edge, so
+  // their dot anchors coincide — the fan must pitch them apart without
+  // dropping or hiding any of them.
   line({
     op: PATCH_OP.add,
     path: elementPath("carousel-overlay-card"),
@@ -298,8 +296,8 @@ export const STATEFUL_UI_LINES: string[] = [
  * Like STATEFUL, but the repeat's per-item child is a container
  * (`state-row` Stack wrapping the Text). The renderer repeats the
  * repeated element's children, not the element itself, so this yields six
- * per-instance container wrappers — each with a permanent x-ray chip
- * (STATEFUL's Text leaves only get hover chips, which pick mode hides).
+ * per-instance container wrappers — each instance gets its own x-ray dot
+ * (used by the fan, pin, and label-scope tests).
  */
 export const STATEFUL_ROWS_UI_LINES: string[] = [
   line({

@@ -512,12 +512,13 @@ test.describe("editor", () => {
     await expect(page.locator(".jr-dnd")).toHaveCount(0);
   });
 
-  test("x-ray outlines containers and pick hover shows a badge", async ({
+  test("x-ray dots label elements and pick hover shows a badge", async ({
     page,
   }) => {
     await generateSample(page);
 
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
+    // CSS outlines still mark containers vs leaves while the mode is on
     await expect(
       page.locator('[data-jr-key="card-1"][data-jr-container]'),
     ).toHaveCount(1);
@@ -525,19 +526,68 @@ test.describe("editor", () => {
       page.locator('[data-jr-key="heading-1"][data-jr-container]'),
     ).toHaveCount(0);
 
-    // Tiered labels: the container chip is always on…
-    await expect(page.locator('[data-xray-chip="card-1"]')).toHaveCount(1);
-    // …a text-bearing leaf is a dot only (it self-identifies)…
+    // One dot per element — containers and leaves alike
+    await expect(page.locator('[data-xray-dot="card-1"]')).toHaveCount(1);
     await expect(page.locator('[data-xray-dot="heading-1"]')).toHaveCount(1);
-    await expect(page.locator('[data-xray-chip="heading-1"]')).toHaveCount(0);
-    // …and hovering the leaf expands its chip
-    await page.getByText(UI.mockHeading).hover();
-    await expect(page.locator('[data-xray-chip="heading-1"]')).toHaveCount(1);
+
+    // Hovering a dot shows the `key · Type` label
+    await page.locator('[data-xray-dot="heading-1"]').hover();
+    const label = page.locator('[data-xray-label="heading-1"]');
+    await expect(label).toHaveCount(1);
+    await expect(label).toContainText("heading-1");
+    await expect(label).toContainText("Heading");
+
+    // Click transforms the dot in place into a chip (pin) that clears the
+    // element's top border and outlines the element itself. Singletons get
+    // the `+`/`✓` toggle directly (no dropdown); the chip body toggles
+    // scope and only the X button removes.
+    await page.locator('[data-xray-dot="heading-1"]').click();
+    const chip = page.locator('[data-xray-chip="heading-1"]');
+    await expect(chip).toHaveCount(1);
+    await expect(label).toHaveCount(0);
+    const singletonScope = chip.locator("[data-xray-scope]");
+    await expect(singletonScope).toHaveAttribute(
+      "data-xray-scope-state",
+      "idle",
+    );
+    await expect(chip.locator("[data-xray-remove]")).toHaveCount(1);
+    await expect(
+      page.locator('[data-jr-key="heading-1"][data-xray-pinned]'),
+    ).toHaveCount(1);
+
+    // The + toggles scope on, the ✓ toggles it off — no dropdown involved
+    await singletonScope.click();
+    await expect(singletonScope).toHaveAttribute(
+      "data-xray-scope-state",
+      "active",
+    );
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
+    await singletonScope.click();
+    await expect(singletonScope).toHaveAttribute(
+      "data-xray-scope-state",
+      "idle",
+    );
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(0);
+
+    // Clicking the chip body toggles scope — it does NOT remove the chip.
+    // Only the X button removes.
+    await chip.click();
+    await expect(chip).toHaveCount(1);
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
+    // The X button is the only removal path.
+    await chip.locator("[data-xray-remove]").click();
+    await expect(chip).toHaveCount(0);
+    await expect(page.locator('[data-xray-dot="heading-1"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-jr-key="heading-1"][data-xray-pinned]'),
+    ).toHaveCount(0);
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(0);
 
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
     await expect(page.locator("[data-jr-container]")).toHaveCount(0);
-    await expect(page.locator("[data-xray-chip]")).toHaveCount(0);
     await expect(page.locator("[data-xray-dot]")).toHaveCount(0);
+    await expect(page.locator("[data-xray-label]")).toHaveCount(0);
+    await expect(page.locator("[data-xray-chip]")).toHaveCount(0);
 
     await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
     await page.getByText(UI.mockHeading).hover();
@@ -546,7 +596,7 @@ test.describe("editor", () => {
     await expect(badge).toContainText("heading-1");
   });
 
-  test("x-ray labels mark boxless elements and never overflow the canvas", async ({
+  test("x-ray dots fan, mark boxless elements, and never overflow the canvas", async ({
     page,
   }) => {
     await mockGenerate(page, { lines: CAROUSEL_UI_LINES });
@@ -559,92 +609,44 @@ test.describe("editor", () => {
 
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
 
-    // Container chips cover the structure, including past the canvas column
-    await expect(page.locator('[data-xray-chip="carousel-row"]')).toHaveCount(
+    // One dot per element, including instances past the canvas column
+    await expect(page.locator('[data-xray-dot="carousel-row"]')).toHaveCount(1);
+    await expect(page.locator('[data-xray-dot="carousel-card-3"]')).toHaveCount(
       1,
     );
+    await expect(page.locator('[data-xray-dot="carousel-tabs"]')).toHaveCount(
+      1,
+    );
+
+    // Fan: dots sharing a y-band are pitched a full hit-size (20px) apart —
+    // coincident anchors (row/tabs, overlay content/badge/image, nested
+    // parent/child unions) never collapse or cover each other's centers
+    const tooClose = await page.evaluate(() => {
+      const centers = Array.from(
+        document.querySelectorAll("[data-xray-dot]"),
+      ).map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      });
+      const clashes: Array<[number, number]> = [];
+      for (let i = 0; i < centers.length; i += 1) {
+        for (let j = i + 1; j < centers.length; j += 1) {
+          const dx = Math.abs(centers[i].x - centers[j].x);
+          const dy = Math.abs(centers[i].y - centers[j].y);
+          if (dy < 16 && dx < 16) clashes.push([i, j]);
+        }
+      }
+      return clashes;
+    });
+    expect(tooClose).toEqual([]);
+
+    // The `hidden` card paints nothing → amber boxless dot at the cascade
     await expect(
-      page.locator('[data-xray-chip="carousel-card-3"]'),
+      page.locator('[data-xray-boxless="carousel-ghost"]'),
     ).toHaveCount(1);
 
-    // Lane stacking: carousel-tabs sits at the same top edge as carousel-row,
-    // so its chip must be pushed into another lane, never overlapping
-    await expect(page.locator('[data-xray-chip="carousel-tabs"]')).toHaveCount(
-      1,
-    );
-    const chipsOverlap = await page.evaluate(() => {
-      const rectOf = (selector: string) => {
-        const el = document.querySelector(selector);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { x: r.x, y: r.y, w: r.width, h: r.height };
-      };
-      const row = rectOf('[data-xray-chip="carousel-row"]');
-      const tabs = rectOf('[data-xray-chip="carousel-tabs"]');
-      if (!row || !tabs) return null;
-      return (
-        row.x < tabs.x + tabs.w &&
-        row.x + row.w > tabs.x &&
-        row.y < tabs.y + tabs.h &&
-        row.y + row.h > tabs.y
-      );
-    });
-    expect(chipsOverlap).toBe(false);
-
-    // Hierarchy: a child chip never sits above its ancestor's chip — the
-    // tree reads top-down (parent at the top)
-    const hierarchy = await page.evaluate(() => {
-      const yOf = (selector: string) =>
-        document.querySelector(selector)?.getBoundingClientRect().y ?? null;
-      return {
-        row: yOf('[data-xray-chip="carousel-row"]'),
-        tabs: yOf('[data-xray-chip="carousel-tabs"]'),
-        card: yOf('[data-xray-chip="carousel-card-1"]'),
-      };
-    });
-    if (hierarchy.row !== null && hierarchy.tabs !== null) {
-      expect(hierarchy.tabs).toBeGreaterThanOrEqual(hierarchy.row);
-    }
-    if (hierarchy.row !== null && hierarchy.card !== null) {
-      expect(hierarchy.card).toBeGreaterThanOrEqual(hierarchy.row);
-    }
-
-    // DFS placement: within the overlay card the badge chip sits in the row
-    // directly under its real parent (carousel-overlay-content). The full-
-    // bleed image — a later DOM sibling sharing the card's top edge — used
-    // to reserve rows first (global depth sort) and land between the two,
-    // making the image look like the badge's parent.
-    const adjacency = await page.evaluate(() => {
-      const yOf = (selector: string) =>
-        document.querySelector(selector)?.getBoundingClientRect().y ?? null;
-      return {
-        content: yOf('[data-xray-chip="carousel-overlay-content"]'),
-        badge: yOf('[data-xray-chip="carousel-overlay-badge"]'),
-        image: yOf('[data-xray-chip="carousel-overlay-image"]'),
-      };
-    });
-    expect(adjacency.content).not.toBeNull();
-    expect(adjacency.badge).not.toBeNull();
-    expect(adjacency.image).not.toBeNull();
-    if (
-      adjacency.content !== null &&
-      adjacency.badge !== null &&
-      adjacency.image !== null
-    ) {
-      // Directly under the parent: one chip row (CHIP_HEIGHT + LANE_GAP = 22)
-      expect(adjacency.badge - adjacency.content).toBe(22);
-      // The later sibling comes after the whole subtree, never between
-      expect(adjacency.image).toBeGreaterThan(adjacency.badge);
-    }
-
-    // The `hidden` card paints nothing → forced marker + always-on chip
-    await expect(page.locator("[data-xray-marker]")).toHaveCount(1);
-    await expect(page.locator('[data-xray-chip="carousel-ghost"]')).toHaveCount(
-      1,
-    );
-
-    // Labels are clipped to the canvas box — decorations never add scrollable
-    // overflow (same invariant as the selection-ring regression)
+    // Labels/dots are clipped to the canvas box — decorations never add
+    // scrollable overflow (same invariant as the selection-ring regression)
     const metrics = await page
       .locator("main .overflow-y-auto")
       .first()

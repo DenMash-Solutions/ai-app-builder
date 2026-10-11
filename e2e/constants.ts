@@ -120,6 +120,8 @@ export const EDITOR = {
   pick: en.editor.pick,
   dragdrop: en.editor.dragdrop,
   xray: en.editor.xray,
+  xrayScopeInstance: en.editor.xrayScope.instance,
+  xrayScopeAll: en.editor.xrayScope.all,
   panelTitle: en.editor.panelTitle,
   close: en.editor.close,
   undo: en.editor.undo,

@@ -266,54 +266,107 @@ test.describe("prompt scope chips", () => {
     await expect(page.locator("[data-jr-scope]")).toHaveCount(0);
   });
 
-  test("x-ray chips pick and scope like the canvas", async ({ page }) => {
-    // Rows fixture: the repeat's per-item child is a container, so each
-    // item carries a permanent chip (STATEFUL's Text leaves are hover-chip
-    // only, and pick mode hides those).
+  test("x-ray dots pin, reflow, and scope via the chip dropdown", async ({
+    page,
+  }) => {
+    // Rows fixture: one state-row Stack per repeat item, each with a Text
+    // child — every instance gets its own dot (six of each).
     await mockGenerate(page, { lines: STATEFUL_ROWS_UI_LINES });
     await page.goto("/");
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await page.getByRole(ROLE.button, { name: EDITOR.xray }).click();
-    await enablePick(page);
 
-    // Chips are interactive only while pick is armed. Hover-revealed chips
-    // are suppressed while armed (the picker badge owns the hovered label);
-    // permanent chips — one `state-row` Stack per item — stay clickable.
-    await page.getByText("Item B", { exact: true }).hover();
-    await expect(page.locator('[data-xray-chip="state-item"]')).toHaveCount(0);
-    await expect(page.locator("[data-editor-badge]")).toBeVisible();
+    // Dots are interactive without pick: hovering a dot shows its label.
+    const dots = page.locator('[data-xray-dot="state-row"]');
+    await expect(dots).toHaveCount(6);
+    await expect(page.locator('[data-xray-dot="state-item"]')).toHaveCount(6);
+    await dots.nth(2).hover();
+    const label = page.locator('[data-xray-label="state-row"]');
+    await expect(label).toHaveCount(1);
+    await expect(label).toContainText("state-row");
+    await expect(label).toContainText("Stack");
+
+    // Click transforms the dot in place into a chip (pin) and outlines the
+    // element's own border; the floating label is gone.
+    await dots.nth(2).click();
     const chip = page.locator('[data-xray-chip="state-row"]');
-    await expect(chip).toHaveCount(6);
-    await expect(chip.first()).toHaveCSS("pointer-events", "auto");
+    await expect(chip).toHaveCount(1);
+    await expect(label).toHaveCount(0);
+    await expect(
+      page.locator('[data-jr-key="state-row"][data-xray-pinned]'),
+    ).toHaveCount(1);
 
-    // Chip click selects the instance → editor opens for it
-    await chip.first().click();
-    const panel = page.locator("[data-editor-panel]");
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText("state-row");
-
-    // Chip shift+click scopes the clicked instance (Item C = 3rd of 6)
-    await chip.nth(2).click({ modifiers: ["Shift"] });
+    // The chip's `+` is a dropdown: scope that exact instance (Item C = 3rd
+    // of 6). Toggling membership while the menu is open must not make the
+    // menu detach — the chip is an unanchored div, and the fan reflow that
+    // happens when a *different* pin toggles would otherwise shift the chip
+    // out from under Radix's once-measured anchor and snap it shut.
+    const scopeButton = chip.locator('[data-xray-scope="state-row"]');
+    await expect(scopeButton).toHaveAttribute("data-xray-scope-state", "idle");
+    await scopeButton.click();
+    const instanceOption = page.getByRole(ROLE.button, {
+      name: EDITOR.xrayScopeInstance,
+    });
+    await instanceOption.click();
     const chips = page.getByTestId("prompt-scope");
     await expect(chips).toContainText(SCOPE.chip("state-row", "Stack", 3, 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(1);
+    await expect(scopeButton).toHaveAttribute(
+      "data-xray-scope-state",
+      "active",
+    );
 
-    // Chip shift+alt+click replaces it with the shared template
-    await chip.nth(2).click({ modifiers: ["Shift", "Alt"] });
+    // Reopen and toggle the same membership back off — the menu stays
+    // mounted across the reflow this unpin causes.
+    await scopeButton.click();
+    await instanceOption.click();
+    await expect(chips).toHaveCount(0);
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(0);
+    await expect(scopeButton).toHaveAttribute("data-xray-scope-state", "idle");
+
+    // The same dropdown scopes the shared template (all six).
+    await scopeButton.click();
+    await page.getByRole(ROLE.button, { name: EDITOR.xrayScopeAll }).click();
     await expect(chips).toContainText(SCOPE.chipAll("state-row", "Stack", 6));
     await expect(page.locator("[data-jr-scope]")).toHaveCount(6);
-    // The scope toggles never moved the editor selection
-    await expect(panel).toBeVisible();
-
-    // Pick off: hover chips return as pass-through decorations
-    await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
-    await page.getByText("Item B", { exact: true }).hover();
-    await expect(page.locator('[data-xray-chip="state-item"]')).toHaveCSS(
-      "pointer-events",
-      "none",
+    await expect(scopeButton).toHaveAttribute(
+      "data-xray-scope-state",
+      "active",
     );
+    await scopeButton.click();
+    await page.getByRole(ROLE.button, { name: EDITOR.xrayScopeAll }).click();
+    await expect(chips).toHaveCount(0);
+    await expect(page.locator("[data-jr-scope]")).toHaveCount(0);
+
+    // The X removes the chip (exit animation holds the slot, then the pin
+    // commits away).
+    await chip.locator("[data-xray-remove]").click();
+    await expect(chip).toHaveCount(0);
+    await expect(dots).toHaveCount(6);
+    await expect(
+      page.locator('[data-jr-key="state-row"][data-xray-pinned]'),
+    ).toHaveCount(0);
+
+    // Pick armed: dot click selects the instance and pins its chip;
+    // Escape clears the pin but leaves the panel open (pins → panel).
+    await enablePick(page);
+    await page.getByText("Item B", { exact: true }).hover();
+    await expect(page.locator("[data-editor-badge]")).toBeVisible();
+    await dots.first().click();
+    const panel = page.locator("[data-editor-panel]");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("state-row");
+    // Pinned chip survives the pointer leaving the dot
+    await page.mouse.move(4, 4);
+    await expect(chip).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(chip).toHaveCount(0);
+    await expect(panel).toBeVisible();
+    // Second Escape belongs to the panel
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
   });
 
   test("the drawer template toggle adds and removes all instances", async ({

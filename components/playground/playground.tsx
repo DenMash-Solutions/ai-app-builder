@@ -57,6 +57,7 @@ import {
   replaceProp,
   resolveInstanceScope,
   scopeInstruction,
+  scopeTargetId,
   scopeTargetsInstruction,
   structureRevisionLabel,
   unwrapElement,
@@ -96,11 +97,6 @@ import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
-
-/** Stable identity for a scope target: key + JSON-serialized instance chain. */
-function scopeTargetId(target: PromptScopeTarget): string {
-  return `${target.key}|${JSON.stringify(target.chain ?? [])}`;
-}
 
 const PENDING_OP_KINDS = {
   generate: "generate",
@@ -303,6 +299,12 @@ export function Playground({ initialId }: PlaygroundProps) {
         : [],
     [displayedSpec, scopeTargets],
   );
+  // Id set for the x-ray labels' ✓/`+` toggle — same identity function as
+  // the prompt bar and the selection chip, so membership can't drift.
+  const scopeIds = useMemo(
+    () => new Set(scopedTargets.map((target) => scopeTargetId(target))),
+    [scopedTargets],
+  );
   const selectionInScope =
     effectiveKey !== null &&
     scopedTargets.some((target) => {
@@ -397,6 +399,13 @@ export function Playground({ initialId }: PlaygroundProps) {
   // Shift+click (pick armed) and the drawer toggles both flip membership.
   // Per-key exclusivity: a template target and instance targets of the same
   // key contradict each other, so adding either drops the other side.
+  // Removal of an element's scope targets — the chip's X button removes the
+  // pin AND drops scope. Unlike toggle, this clears every target for the key
+  // (both the shared template `key|null` and any instance-specific `key|chain`)
+  // so no dangling scope lingers after the chip is gone.
+  const removeScope = useCallback((key: string) => {
+    setScopeTargets((prev) => prev.filter((entry) => entry.key !== key));
+  }, []);
   const handleToggleScope = useCallback(
     (key: string, chain: InstanceChain | null, template = false) => {
       setScopeTargets((prev) => {
@@ -988,11 +997,11 @@ export function Playground({ initialId }: PlaygroundProps) {
                   enabled={xrayMode && !isStreaming && displayedSpec !== null}
                   containerRef={containerRef}
                   spec={displayedSpec}
-                  interactive={
-                    pickMode && !isStreaming && displayedSpec !== null
-                  }
+                  pickArmed={pickMode && !isStreaming && displayedSpec !== null}
+                  scopeIds={scopeIds}
                   onSelect={handlePick}
                   onToggleScope={handleToggleScope}
+                  onRemoveScope={removeScope}
                 />
                 <PickOverlay
                   enabled={pickMode && !isStreaming && displayedSpec !== null}

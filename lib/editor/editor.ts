@@ -146,6 +146,11 @@ export interface PromptScopeTarget {
   chain: InstanceChain | null;
 }
 
+/** Stable identity for a scope target: key + JSON-serialized instance chain. */
+export function scopeTargetId(target: PromptScopeTarget): string {
+  return `${target.key}|${JSON.stringify(target.chain ?? [])}`;
+}
+
 function describeTarget(
   key: string,
   type: string,
