@@ -41,6 +41,22 @@
       "back": "Back to the playground"
     }
   },
+  "rename": {
+    "title": "Rename UI",
+    "name": "Name",
+    "slug": "Slug",
+    "save": "Save",
+    "cancel": "Cancel",
+    "errors": {
+      "slugRequired": "Slug is required",
+      "slugReserved": "\"ui\" is reserved — pick another slug",
+      "slugInvalid": "Use only lowercase letters, numbers and single hyphens",
+      "slugTaken": "That slug is already used by another UI"
+    }
+  },
+  "preview": {
+    "openPlayground": "Open in playground"
+  },
   "editor": {
     "pick": "Pick",
     "dragdrop": "Drag & drop",

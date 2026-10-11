@@ -59,6 +59,19 @@ export const ACTIONS = {
 
 export const SWITCHER_LABELS = LOCALE_LABELS;
 
+export const RENAME = {
+  open: en.rename.title,
+  name: en.rename.name,
+  slug: en.rename.slug,
+  save: en.rename.save,
+  slugTaken: en.rename.errors.slugTaken,
+  slugReserved: en.rename.errors.slugReserved,
+} as const;
+
+export const PREVIEW = {
+  openPlayground: en.preview.openPlayground,
+} as const;
+
 export const MOCK_ERROR_MESSAGE = "boom";
 
 export const STATE_MOCK = {

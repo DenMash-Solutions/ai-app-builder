@@ -13,15 +13,30 @@ import {
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { ModelSwitcher } from "@/components/model-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { RenamePopover } from "./rename-popover";
 
 interface TopBarProps {
   historyCount: number;
   onOpenHistory: () => void;
+  /** Active entry — null on the landing (nothing to rename). */
+  entryId?: string | null;
+  entryName?: string | null;
+  entrySlug?: string | null;
+  takenSlugs?: ReadonlySet<string>;
+  onRename?: (name: string, slug: string) => void;
 }
 
 const ROW_CLASS = "h-9 w-full justify-start gap-2 rounded-md px-2";
 
-export function TopBar({ historyCount, onOpenHistory }: TopBarProps) {
+export function TopBar({
+  historyCount,
+  onOpenHistory,
+  entryId,
+  entryName,
+  entrySlug,
+  takenSlugs,
+  onRename,
+}: TopBarProps) {
   const t = useTranslations();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -33,9 +48,32 @@ export function TopBar({ historyCount, onOpenHistory }: TopBarProps) {
   return (
     <header className="absolute inset-x-4 top-4 z-20 flex flex-wrap items-start justify-between gap-3">
       <div className="flex max-w-full items-center gap-3 rounded-full border bg-background/80 px-4 py-2 shadow-lg backdrop-blur-md">
-        <h1 className="min-w-0 truncate text-base font-semibold tracking-tight">
-          {t("playground.title")}
-        </h1>
+        {entryId != null && entryName != null && onRename ? (
+          // The title stays an h1 (first heading on the page — the route
+          // announcer and screen-reader outline depend on it); the trigger
+          // button lives inside it.
+          <h1 className="min-w-0 max-w-[16rem] truncate text-base font-semibold tracking-tight">
+            <RenamePopover
+              entryId={entryId}
+              name={entryName}
+              slug={entrySlug ?? ""}
+              takenSlugs={takenSlugs ?? new Set()}
+              onRename={onRename}
+            >
+              <button
+                type="button"
+                aria-label={t("rename.title")}
+                className="cursor-pointer hover:underline"
+              >
+                {entryName}
+              </button>
+            </RenamePopover>
+          </h1>
+        ) : (
+          <h1 className="min-w-0 truncate text-base font-semibold tracking-tight">
+            {t("playground.title")}
+          </h1>
+        )}
         <Badge variant="secondary" className="shrink-0">
           json-render
         </Badge>

@@ -67,6 +67,8 @@ export interface StoredSpec {
 
 export interface StoredEntry {
   id: string;
+  name: string;
+  slug: string;
   prompt: string;
   createdAt: number;
   spec: StoredSpec;

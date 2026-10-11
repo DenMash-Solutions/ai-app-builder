@@ -41,6 +41,22 @@
       "back": "Volver al playground"
     }
   },
+  "rename": {
+    "title": "Renombar interfaz",
+    "name": "Nombre",
+    "slug": "Slug",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "errors": {
+      "slugRequired": "El slug es obligatorio",
+      "slugReserved": "\"ui\" está reservado — elige otro slug",
+      "slugInvalid": "Usa solo letras minúsculas, números y guiones simples",
+      "slugTaken": "Ese slug ya lo usa otra interfaz"
+    }
+  },
+  "preview": {
+    "openPlayground": "Abrir en el playground"
+  },
   "editor": {
     "pick": "Seleccionar",
     "dragdrop": "Arrastrar y soltar",

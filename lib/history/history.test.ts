@@ -6,9 +6,11 @@ import {
   canUndo,
   commitRevision,
   createEntry,
+  normalizeEntry,
   redoRevision,
   undoRevision,
 } from "./history";
+import type { HistoryEntry } from "./history";
 
 const MAX_KEPT_REVISIONS = 10;
 
@@ -34,6 +36,22 @@ describe("createEntry", () => {
     expect(entry.revisions).toHaveLength(1);
     expect(entry.revisions[0].label).toBe(REVISION_LABELS.generate);
     expect(entry.prompt).toBe("draw a dashboard");
+  });
+
+  test("seeds the display name from the prompt and a unique slug", () => {
+    const entry = createEntry("Clínica Dental Sonrisas", makeSpec("v0"));
+
+    expect(entry.name).toBe("Clínica Dental Sonrisas");
+    expect(entry.slug).toBe(
+      `clinica-dental-sonrisas-${entry.id.replaceAll("-", "").slice(0, 8)}`,
+    );
+  });
+
+  test("two entries from the same prompt get distinct slugs", () => {
+    const first = createEntry("build a form", makeSpec("v0"));
+    const second = createEntry("build a form", makeSpec("v0"));
+
+    expect(first.slug).not.toBe(second.slug);
   });
 
   test("stores value-cloned snapshots immune to later mutation", () => {
@@ -137,5 +155,36 @@ describe("undo/redo", () => {
 
     const newest = commitRevision(oldest, makeSpec("v1"), "label");
     expect(redoRevision(newest)).toBe(newest);
+  });
+});
+
+describe("normalizeEntry", () => {
+  test("back-fills name from prompt and slug from id for legacy entries", () => {
+    const spec = makeSpec("v0");
+    const legacy = {
+      id: "00000000-0000-4000-8000-000000000000",
+      prompt: "draw a dashboard",
+      spec,
+      head: 0,
+      createdAt: 1,
+    } as unknown as HistoryEntry;
+
+    const normalized = normalizeEntry(legacy);
+
+    expect(normalized.name).toBe("draw a dashboard");
+    expect(normalized.slug).toBe(legacy.id);
+  });
+
+  test("keeps an existing custom name and slug", () => {
+    const entry = {
+      ...createEntry("prompt", makeSpec("v0")),
+      name: "Clinical Dental Sonrisas",
+      slug: "dental-sonrisas",
+    };
+
+    const normalized = normalizeEntry(entry);
+
+    expect(normalized.name).toBe("Clinical Dental Sonrisas");
+    expect(normalized.slug).toBe("dental-sonrisas");
   });
 });

@@ -1,4 +1,5 @@
 import type { Spec } from "@json-render/core";
+import { uniqueSlugFrom } from "@/lib/slug";
 
 export const STORAGE_KEY = "genui-playground-history";
 const MAX_ENTRIES = 50;
@@ -22,6 +23,10 @@ export interface SpecRevision {
 
 export interface HistoryEntry {
   id: string;
+  /** Human display name — seeded from the prompt, editable via rename. */
+  name: string;
+  /** URL slug for the preview route — seeded from the prompt, editable. */
+  slug: string;
   prompt: string;
   spec: Spec;
   revisions: SpecRevision[];
@@ -45,11 +50,19 @@ function isValidEntry(value: unknown): value is HistoryEntry {
 }
 
 /**
- * Entries written before the revisions model (or with corrupt revision data)
+ * Entries written before the name/slug fields get them back-filled (name ←
+ * prompt, slug ← the full id, which is already unique and slug-shaped), and
+ * entries written before the revisions model (or with corrupt revision data)
  * get a single revision from their stored spec — like git checking out a
- * branch with no history yet.
+ * branch with no history yet. Exported for unit tests.
  */
-function normalizeEntry(entry: HistoryEntry): HistoryEntry {
+export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
+  const name =
+    typeof entry.name === "string" && entry.name.trim() !== ""
+      ? entry.name
+      : entry.prompt;
+  const slug =
+    typeof entry.slug === "string" && entry.slug !== "" ? entry.slug : entry.id;
   const revisions =
     Array.isArray(entry.revisions) && entry.revisions.length > 0
       ? entry.revisions.filter(
@@ -66,6 +79,8 @@ function normalizeEntry(entry: HistoryEntry): HistoryEntry {
   if (revisions.length === 0) {
     return {
       ...entry,
+      name,
+      slug,
       revisions: [
         {
           spec: entry.spec,
@@ -84,7 +99,7 @@ function normalizeEntry(entry: HistoryEntry): HistoryEntry {
     ),
     revisions.length - 1,
   );
-  return { ...entry, revisions, head, spec: revisions[head].spec };
+  return { ...entry, name, slug, revisions, head, spec: revisions[head].spec };
 }
 
 function readFromStorage(): HistoryEntry[] {
@@ -224,8 +239,11 @@ export function canRedo(entry: HistoryEntry): boolean {
 export function createEntry(prompt: string, spec: Spec): HistoryEntry {
   const createdAt = Date.now();
   const snapshot = cloneSpec(spec);
+  const id = crypto.randomUUID();
   return {
-    id: crypto.randomUUID(),
+    id,
+    name: prompt,
+    slug: uniqueSlugFrom(prompt, id),
     prompt,
     spec: snapshot,
     revisions: [{ spec: snapshot, label: REVISION_LABELS.generate, createdAt }],

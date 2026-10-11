@@ -84,7 +84,7 @@ export function HistoryDrawer({
                       className="flex-1 cursor-pointer text-left"
                     >
                       <p className="line-clamp-2 text-sm font-medium">
-                        {entry.prompt}
+                        {entry.name}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {formatRelativeTime(entry.createdAt, t, locale)}
@@ -95,7 +95,7 @@ export function HistoryDrawer({
                       variant="ghost"
                       size="sm"
                       aria-label={t("playground.jsonExportEntry", {
-                        title: entry.prompt,
+                        title: entry.name,
                       })}
                       className="h-7 px-2 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                       onClick={() => void handleExportEntry(entry)}

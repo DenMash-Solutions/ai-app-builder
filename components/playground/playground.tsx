@@ -114,35 +114,39 @@ type PendingOp =
 type RouteStatus = "pending" | "ready" | "missing";
 
 interface PlaygroundProps {
-  /** History entry id from the `/ui/[id]` route — absent on the `/` landing. */
-  initialId?: string;
+  /** Entry ref (id or slug) from the `/ui/[ref]` route — absent on the `/` landing. */
+  initialRef?: string;
 }
 
-export function Playground({ initialId }: PlaygroundProps) {
+export function Playground({ initialRef }: PlaygroundProps) {
   const t = useTranslations();
   const router = useRouter();
-  const routeId = initialId ?? null;
+  const routeRef = initialRef ?? null;
   const history = useSyncExternalStore(
     subscribeHistory,
     getHistory,
     getServerHistory,
   );
-  // The URL owns the active UI: the entry for the `/ui/[id]` route comes
-  // straight from the history store. `undefined` = server snapshot (history
-  // is localStorage-only, unknown during SSR/hydration); React re-renders
-  // with the client snapshot after hydration, so the pending gate never
-  // mismatches. Store subscriptions also cover cross-tab updates and the
-  // revision commits below — no local activeId/restoredSpec copy to sync.
+  // The URL owns the active UI: the entry for the `/ui/[ref]` route comes
+  // straight from the history store — resolved by id first (the stable
+  // identity every pre-slug link uses), then by slug (short hand-typed
+  // URLs). `undefined` = server snapshot (history is localStorage-only,
+  // unknown during SSR/hydration); React re-renders with the client snapshot
+  // after hydration, so the pending gate never mismatches. Store
+  // subscriptions also cover cross-tab updates and the revision commits
+  // below — no local activeId/restoredSpec copy to sync.
   const routeEntry = useSyncExternalStore(
     subscribeHistory,
     () =>
-      routeId === null
+      routeRef === null
         ? null
-        : (getHistory().find((entry) => entry.id === routeId) ?? null),
+        : (getHistory().find(
+            (entry) => entry.id === routeRef || entry.slug === routeRef,
+          ) ?? null),
     () => undefined,
   );
   const routeStatus: RouteStatus =
-    routeId === null
+    routeRef === null
       ? "ready"
       : routeEntry === undefined
         ? "pending"
@@ -305,6 +309,17 @@ export function Playground({ initialId }: PlaygroundProps) {
     () => new Set(scopedTargets.map((target) => scopeTargetId(target))),
     [scopedTargets],
   );
+  // Slugs taken by *other* entries — the rename popover blocks a save that
+  // would collide with any of them.
+  const takenSlugs = useMemo(
+    () =>
+      new Set(
+        history
+          .filter((entry) => entry.id !== activeEntry?.id)
+          .map((entry) => entry.slug),
+      ),
+    [history, activeEntry],
+  );
   const selectionInScope =
     effectiveKey !== null &&
     scopedTargets.some((target) => {
@@ -359,9 +374,9 @@ export function Playground({ initialId }: PlaygroundProps) {
   // any selection tied to the previous one. Guarded render-time adjustment
   // (the react.dev "adjusting state when a prop changes" pattern): the
   // panelClosing state above must exist before this runs.
-  const [prevRouteId, setPrevRouteId] = useState(routeId);
-  if (prevRouteId !== routeId) {
-    setPrevRouteId(routeId);
+  const [prevRouteRef, setPrevRouteId] = useState(routeRef);
+  if (prevRouteRef !== routeRef) {
+    setPrevRouteId(routeRef);
     setSelectedKey(null);
     setSelectedChain(null);
     setPanelClosing(false);
@@ -446,10 +461,12 @@ export function Playground({ initialId }: PlaygroundProps) {
   // exactly the scoped elements (with their instance paths).
   const handleSend = (prompt: string) => {
     const base = displayedSpec;
-    if (base?.root && routeId) {
+    if (base?.root && activeEntry) {
       pendingOpRef.current = {
         kind: PENDING_OP_KINDS.edit,
-        entryId: routeId,
+        // The URL ref may be a slug — the revision commit looks the entry
+        // up by id, so record the stable identity.
+        entryId: activeEntry.id,
         label: promptRevisionLabel(prompt),
       };
       steerBaselineRef.current = structuredClone(base);
@@ -480,6 +497,14 @@ export function Playground({ initialId }: PlaygroundProps) {
     router.push(`/ui/${entry.id}`);
   };
 
+  // Rename the active entry (top-bar title popover). The slug feeds the
+  // preview route /{locale}/{slug} — renaming it invalidates the old URL
+  // (no redirects; a stale slug hits the not-found panel).
+  const handleRename = (name: string, slug: string) => {
+    if (!activeEntry) return;
+    updateEntry({ ...activeEntry, name, slug });
+  };
+
   // Imported JSON becomes its own history entry (steer/pick/edits all
   // require an active entry), then activates like a history selection.
   // The import lives in the history drawer, which closes once the spec
@@ -493,7 +518,7 @@ export function Playground({ initialId }: PlaygroundProps) {
 
   const handleDelete = (id: string) => {
     removeEntry(id);
-    if (routeId === id) {
+    if (activeEntry?.id === id) {
       // Deleting the open entry leaves nothing addressable — fall back to
       // the landing (navigation also drops any stale canvas state).
       router.push("/");
@@ -517,12 +542,12 @@ export function Playground({ initialId }: PlaygroundProps) {
 
   const handleAction = (instruction: string, label: string) => {
     const base = displayedSpec;
-    if (!base?.root || !selectedKey || !routeId || isStreaming) return;
+    if (!base?.root || !selectedKey || !activeEntry || isStreaming) return;
     const element = base.elements[selectedKey];
     if (!element) return;
     pendingOpRef.current = {
       kind: PENDING_OP_KINDS.edit,
-      entryId: routeId,
+      entryId: activeEntry.id,
       label,
     };
     steerBaselineRef.current = structuredClone(base);
@@ -598,7 +623,7 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   const handleInsert = (parentKey: string, type: string) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     const result = insertElement(displayedSpec, {
       parentKey,
       type,
@@ -612,7 +637,7 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   const handleRemove = (key: string) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     commitStructure(
       removeElement(displayedSpec, key),
       structureRevisionLabel(STRUCTURE_OPS.remove),
@@ -621,7 +646,7 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   const handleGroup = (key: string, containerType: string) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     const result = wrapElement(
       displayedSpec,
       key,
@@ -636,7 +661,7 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   const handleUnwrap = (key: string) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     const element = displayedSpec.elements[key];
     const firstInner = element
       ? [
@@ -652,7 +677,7 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   const handleMove = (key: string, direction: MoveDirection) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     commitStructure(
       moveSibling(displayedSpec, key, direction),
       structureRevisionLabel(STRUCTURE_OPS.move),
@@ -664,7 +689,7 @@ export function Playground({ initialId }: PlaygroundProps) {
     targetParentKey: string,
     index: number,
   ) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     commitStructure(
       moveElement(displayedSpec, { key, targetParentKey, index }),
       structureRevisionLabel(STRUCTURE_OPS.move),
@@ -672,7 +697,7 @@ export function Playground({ initialId }: PlaygroundProps) {
   };
 
   const handleDuplicate = (key: string) => {
-    if (!displayedSpec || !routeId || isStreaming) return;
+    if (!displayedSpec || !activeEntry || isStreaming) return;
     const result = duplicateElement(displayedSpec, key);
     commitStructure(
       result?.spec ?? null,
@@ -911,6 +936,11 @@ export function Playground({ initialId }: PlaygroundProps) {
                 <TopBar
                   historyCount={history.length}
                   onOpenHistory={() => setHistoryOpen(true)}
+                  entryId={activeEntry?.id ?? null}
+                  entryName={activeEntry?.name ?? null}
+                  entrySlug={activeEntry?.slug ?? null}
+                  takenSlugs={takenSlugs}
+                  onRename={handleRename}
                 />
 
                 {displayedSpec && !isStreaming && (
@@ -1135,7 +1165,7 @@ export function Playground({ initialId }: PlaygroundProps) {
                 open={historyOpen}
                 onOpenChange={setHistoryOpen}
                 entries={history}
-                activeId={routeId}
+                activeId={activeEntry?.id ?? null}
                 onSelect={handleSelect}
                 onDelete={handleDelete}
                 onClear={handleClear}
