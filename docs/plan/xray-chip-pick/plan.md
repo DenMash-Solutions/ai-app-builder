@@ -3,6 +3,12 @@
 **Status:** implemented
 **Date:** 2026-10-08
 
+> **Outcome**: superseded by `docs/plan/xray-dots/plan.md` (2026-10-10) —
+> chip click/shift-click/shift-alt-click semantics were removed with the
+> chips; dots now pin on click (+ select when pick is armed) and scope via
+> the label's `+`/`✓` toggle (instance-only; template scope stays on the
+> canvas/drawer).
+
 ## Goal
 
 Make x-ray chips clickable while the picker (select mode) is active, with the exact same semantics as clicking the canvas: click selects the element for editing, shift+click toggles that instance in the prompt scope, shift+alt+click toggles the shared template (all instances). Chips carry per-instance wrapper identity, so repeat-instance chips target the clicked instance — the same disambiguation the canvas pick provides.

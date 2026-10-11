@@ -3,6 +3,11 @@
 **Status:** implemented
 **Date:** 2026-10-08
 
+> **Outcome**: superseded by `docs/plan/xray-dots/plan.md` (2026-10-10) —
+> permanent chips, quiet/container tiering, and the marker system were
+> replaced by one family-colored dot per element with a horizontal fan;
+> hover/pin labels and the label `+` scope toggle live there.
+
 ## Goal
 
 X-ray mode today only draws outlines (solid green containers / dashed sky leaves) on the first real child of each `display: contents` wrapper — components with no box (fragments, text-only roots, `display: contents` descendants), zero-area elements (thin borders, empty placeholders), and visually quiet elements (beige-on-beige stacks) are effectively invisible, and even drawn outlines carry no identity. This feature adds always-on **key+type chips** plus forced **footprint markers** for boxless elements, so every spec element is findable in x-ray mode — the annotated-callout metaphor from the user's reference image, scoped to identity labels (not style facts).

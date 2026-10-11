@@ -3,6 +3,11 @@
 **Status:** implemented
 **Date:** 2026-10-08
 
+> **Outcome**: superseded by `docs/plan/xray-dots/plan.md` (2026-10-10) —
+> the lane-placement apparatus (and the DFS/hierarchy regressions it fixed)
+> went away with the chips; dots fan horizontally instead of stacking
+> vertically, so chips never need lane or tree-order placement.
+
 ## Goal
 
 Fix the x-ray chip stack misreading where a child's chip lands under a later sibling's chip (observed: `badge-overlay-container` stacked under `product-image`, making the background image look like the badge's parent). Chips must stack in tree (depth-first document) order within each container so vertical adjacency always implies parenthood.
