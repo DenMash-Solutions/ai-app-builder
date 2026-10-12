@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import {
   ACTIONS,
+  PATHS,
   PREVIEW,
   PROMPTS,
   RENAME,
@@ -24,7 +25,7 @@ test.describe("ui routes", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await generate(page, PROMPTS.signIn);
@@ -44,7 +45,7 @@ test.describe("ui routes", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     // Two entries: signIn first (older), revenueDashboard second (newest/active)
@@ -71,14 +72,17 @@ test.describe("ui routes", () => {
   test("a deep link to an unknown id shows the not-found panel with a way back", async ({
     page,
   }) => {
-    await page.goto("/ui/00000000-0000-4000-8000-000000000000");
+    await page.goto(`${PATHS.ui}/00000000-0000-4000-8000-000000000000`);
     await expect(
       page.getByRole(ROLE.heading, { name: UI.uiRouteNotFoundTitle }),
     ).toBeVisible();
 
     await page.getByRole(ROLE.link, { name: UI.uiRouteNotFoundBack }).click();
+    // The way back is the root — which renders the featured landing.
     await expect(page).toHaveURL(/\/(en|es)?$/);
-    await expect(page.getByText(UI.emptyState)).toBeVisible();
+    await expect(
+      page.getByRole(ROLE.heading, { name: UI.landingTitle }),
+    ).toBeVisible();
   });
 });
 
@@ -87,7 +91,7 @@ test.describe("ui rename & preview", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await generate(page, PROMPTS.signIn);
     await expect(page).toHaveURL(UI_ROUTE_URL);
@@ -130,7 +134,7 @@ test.describe("ui rename & preview", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await generate(page, PROMPTS.signIn);
     await expect(page).toHaveURL(UI_ROUTE_URL);
@@ -153,7 +157,7 @@ test.describe("ui rename & preview", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     // Two entries; try to give the second the first's slug.

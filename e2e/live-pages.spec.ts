@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import {
   AUTH,
   BANNER,
+  PATHS,
   PROMPTS,
   PUBLISH,
   RENAME,
@@ -17,7 +18,8 @@ import { mockGenerate, waitForMsw } from "./helpers";
  * Nothing here signs in (credentials never live in the repo) — the
  * authenticated half of the journey is verified via the MCP script
  * (see docs/plan/live-pages/tasks.md §7.3) and the data layer via unit
- * tests. Assumes `site_settings.featured_ui_id` is null (root fallback).
+ * tests. Assumes the landing page is featured as root (tasks.md §8), so
+ * the playground entry point for these tests is `/ui`.
  */
 
 async function generate(page: Page, prompt: string): Promise<void> {
@@ -25,17 +27,25 @@ async function generate(page: Page, prompt: string): Promise<void> {
   await expect(page.getByText(UI.mockHeading)).toBeVisible();
 }
 
-test.describe("root fallback", () => {
-  test("the root renders the playground landing when nothing is featured", async ({
-    page,
-  }) => {
-    await page.goto("/");
+test.describe("featured root", () => {
+  test("the root renders the featured landing page", async ({ page }) => {
+    await page.goto(PATHS.root);
     await expect(page).toHaveURL(/\/en$/);
     await expect(
-      page.getByRole(ROLE.heading, { name: UI.heading }),
+      page.getByRole(ROLE.heading, { name: UI.landingTitle }),
     ).toBeVisible();
-    await expect(page.getByPlaceholder(UI.promptPlaceholder)).toBeVisible();
-    await expect(page.getByText(UI.emptyState)).toBeVisible();
+    await expect(
+      page.getByRole(ROLE.link, { name: UI.landingCta }),
+    ).toHaveAttribute("href", /\/en\/ui$/);
+    await expect(
+      page.getByRole(ROLE.link, { name: UI.landingSignin }),
+    ).toHaveAttribute("href", /\/en\/login$/);
+    // The pill into the playground is present…
+    await expect(
+      page.getByRole(ROLE.link, { name: UI.landingPill }),
+    ).toHaveAttribute("href", /\/en\/ui$/);
+    // …but no playground chrome on the landing itself.
+    await expect(page.getByPlaceholder(UI.promptPlaceholder)).toHaveCount(0);
   });
 });
 
@@ -43,7 +53,7 @@ test.describe("spec-rendered auth pages", () => {
   test("login renders as a spec form and cross-links to signup", async ({
     page,
   }) => {
-    await page.goto("/en/login");
+    await page.goto(PATHS.login);
     await expect(
       page.getByRole(ROLE.heading, { name: AUTH.loginTitle }),
     ).toBeVisible();
@@ -71,24 +81,24 @@ test.describe("spec-rendered auth pages", () => {
   test("no committed page leaks the edit-in-playground affordance", async ({
     page,
   }) => {
-    await page.goto("/en/login");
+    await page.goto(PATHS.login);
     await expect(page.getByText(UI.editInPlayground)).toHaveCount(0);
-    await page.goto("/en/signup");
+    await page.goto(PATHS.signup);
     await expect(page.getByText(UI.editInPlayground)).toHaveCount(0);
   });
 });
 
 test.describe("anonymous banners", () => {
-  test("the signup banner shows on the landing with local UIs and its dismissal sticks", async ({
+  test("the signup banner shows on the playground landing with local UIs and its dismissal sticks", async ({
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await generate(page, PROMPTS.signIn);
 
     // Landing only: with an active entry the CTA would overlay the canvas.
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await expect(page.getByText(BANNER.text)).toBeVisible();
     const cta = page.getByRole(ROLE.link, { name: BANNER.cta });
     await expect(cta).toBeVisible();
@@ -105,7 +115,7 @@ test.describe("anonymous banners", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await generate(page, PROMPTS.signIn);
 
@@ -129,7 +139,7 @@ test.describe("anonymous banners", () => {
 test.describe("reserved slugs", () => {
   test("a reserved route segment blocks the rename save", async ({ page }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await generate(page, PROMPTS.signIn);
 
@@ -143,7 +153,7 @@ test.describe("reserved slugs", () => {
 
     // The stored slug is untouched.
     await page.keyboard.press("Escape");
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     const stored = await page.evaluate(() => {
       const raw = localStorage.getItem("genui-playground-history");
       return raw ? (JSON.parse(raw) as Array<{ slug: string }>) : [];

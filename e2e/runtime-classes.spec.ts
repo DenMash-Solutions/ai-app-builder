@@ -5,6 +5,7 @@ import {
   MOCK_KEYS,
   PATCH_OP,
   PATCH_PATH,
+  PATHS,
   PROMPTS,
   ROLE,
   UI,
@@ -19,7 +20,7 @@ import { mockGenerate, waitForMsw } from "./helpers";
  */
 test.describe("runtime class coverage", () => {
   test("model-favored utilities compile and apply", async ({ page }) => {
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await page.waitForLoadState("networkidle");
 
     const failures = await page.evaluate(() => {
@@ -133,7 +134,7 @@ test.describe("runtime class coverage", () => {
   test("semantic tokens and dark: variants compile and apply", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await page.waitForLoadState("networkidle");
 
     const failures = await page.evaluate(() => {
@@ -239,7 +240,7 @@ test.describe("runtime class coverage", () => {
   test("responsive, slash-opacity and typography utilities compile and apply", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await page.waitForLoadState("networkidle");
 
     const failures = await page.evaluate(() => {
@@ -367,7 +368,7 @@ test.describe("runtime class coverage", () => {
   test("single-row scrollable carousel pattern compiles and applies", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await page.waitForLoadState("networkidle");
 
     const failures = await page.evaluate(() => {
@@ -567,7 +568,7 @@ test.describe("runtime class coverage", () => {
       }),
     ];
     await mockGenerate(page, { lines: layerLines });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await expect(page.getByText(UI.mockHeading)).toBeVisible();

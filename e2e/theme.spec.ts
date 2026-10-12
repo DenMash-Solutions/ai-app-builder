@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ROLE, THEME } from "./constants";
+import { PATHS, ROLE, THEME } from "./constants";
 
 const DARK_CLASS = /(^|\s)dark(\s|$)/;
 
@@ -7,7 +7,7 @@ test.describe("theme", () => {
   test("toggles dark mode and persists it across a reload", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     const html = page.locator("html");
 
     await expect(html).not.toHaveClass(DARK_CLASS);

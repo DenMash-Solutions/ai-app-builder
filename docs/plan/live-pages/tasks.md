@@ -52,3 +52,11 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] 7.2 e2e additions (anonymous paths): root fallback, auth pages render, reserved slugs, banners *(`e2e/live-pages.spec.ts`, 6 tests ×3 repeats green; auth specs gained a real `h1` (a11y); drawer test waits for the post-generation redirect to settle — mid-navigation opens get dropped by the route remount)*
 - [x] 7.3 MCP journey: signup → confirm → publish → fresh-browser live visit → feature → root change *(signup → "check your email" screen → SQL-confirm → login → sync dot "Guardado en la cuenta" ✓; publish/live-visit/feature cycle verified earlier ✓; temp user + rows cleaned up, `featured_ui_id` left null)*
 - [x] 7.4 Secrets audit: no credentials in git; `.env.local` untracked *(only `.env.example` tracked with placeholders; `.env` + `.env.local` gitignored; no password/JWT literals in any committable file)*
+
+## Follow-up — Landing page at root *(user request; content via the publish pipeline, no new app code)*
+
+- [x] 8.1 Self-contained landing spec authored *(copy inline in `state` — published pages render with no injection; anchor CTAs — no action handlers on `LivePage`; single language: English, default locale; validated by `validateSpec`)*
+- [x] 8.2 Admin journey via MCP: logged in → imported spec in the playground → renamed *Landing page* / `landing` → published (`/landing` v1) → **Feature as root** in the admin console (badge + toast confirmed)
+- [x] 8.3 Verified: `/` → `/en` renders the landing (h1, CTAs → `/en/ui` + `/en/signup`, sign-in → `/en/login`, playground pill, no prompt chrome); `/es` renders it too; responsive classes confirmed (`grid-cols-1 … sm:grid-cols-3`)
+- [x] 8.4 e2e migration: playground entry moved from `/` to `/ui` (12 files mechanical; `locale.spec` + `live-pages.spec` root tests rewritten to the landing; `ui-routes` back-link now asserts the landing; `Clear`/`delete` in the playground now fall back to `/ui`, not the root)
+- [x] 8.5 Full gate green: format, lint, tsc, **272 unit, 70 e2e**

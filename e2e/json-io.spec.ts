@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { JSON_IO, ROLE, SLOTS, UI, historyButtonName } from "./constants";
+import {
+  JSON_IO,
+  PATHS,
+  ROLE,
+  SLOTS,
+  UI,
+  historyButtonName,
+} from "./constants";
 import { readHistoryStorage } from "./helpers";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
@@ -43,7 +50,7 @@ test.describe("json import/export", () => {
   test("import lives in the history drawer: validates, scrolls, renders, saves history; row export copies the spec", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await page.waitForLoadState("networkidle");
 
     const drawer = page.locator(SLOTS.drawer);

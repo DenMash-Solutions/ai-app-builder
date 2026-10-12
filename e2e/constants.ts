@@ -21,6 +21,16 @@ export const SLOTS = {
   dialog: '[data-slot="dialog-content"]',
 } as const;
 
+/** Route paths. `root`/`ui` are unprefixed (the locale redirect prefixes
+ *  them); auth routes pin the default locale explicitly.
+ *  The root renders the featured landing — the playground lives at /ui. */
+export const PATHS = {
+  root: "/",
+  ui: "/ui",
+  login: "/en/login",
+  signup: "/en/signup",
+} as const;
+
 export const UI = {
   heading: en.playground.title,
   subtitle: en.playground.subtitle,
@@ -37,6 +47,11 @@ export const UI = {
   uiRouteNotFoundTitle: en.uiRoute.notFound.title,
   uiRouteNotFoundBack: en.uiRoute.notFound.back,
   editInPlayground: en.specPage.editInPlayground,
+  // Featured landing copy — lives in the published spec (DB), not i18n.
+  landingTitle: "Describe your page. AI builds it.",
+  landingCta: "Create your page",
+  landingSignin: "Sign in",
+  landingPill: "Open in playground",
 } as const;
 
 export const ES_UI = {

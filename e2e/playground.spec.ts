@@ -3,6 +3,7 @@ import {
   ACTIONS,
   MOCK_ERROR_MESSAGE,
   MOCK_ROOT_KEY,
+  PATHS,
   PROMPTS,
   QUOTA,
   ROLE,
@@ -19,7 +20,7 @@ import {
 test.describe("playground", () => {
   test("renders the shell with an empty state", async ({ page }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await expect(
@@ -34,7 +35,7 @@ test.describe("playground", () => {
 
   test("renders the mocked UI from an example chip", async ({ page }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
@@ -51,7 +52,7 @@ test.describe("playground", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     const prompt = PROMPTS.customBilling;
@@ -73,7 +74,7 @@ test.describe("playground", () => {
       status: 500,
       body: { error: MOCK_ERROR_MESSAGE },
     });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();

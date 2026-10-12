@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { EDITOR, PROMPTS, ROLE, STATE_MOCK } from "./constants";
+import { EDITOR, PATHS, PROMPTS, ROLE, STATE_MOCK } from "./constants";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
 import { STATEFUL_UI_LINES } from "./msw/fixture";
 
 async function generateStateful(page: Page): Promise<void> {
   await mockGenerate(page, { lines: STATEFUL_UI_LINES });
-  await page.goto("/");
+  await page.goto(PATHS.ui);
   await waitForMsw(page);
   await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
   // Wait for the post-generation /ui/[id] remount before enabling pick

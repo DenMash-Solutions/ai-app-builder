@@ -521,19 +521,20 @@ export function Playground({ initialRef }: PlaygroundProps) {
     removeEntry(id);
     if (activeEntry?.id === id) {
       // Deleting the open entry leaves nothing addressable — fall back to
-      // the landing (navigation also drops any stale canvas state).
-      router.push("/");
+      // the playground landing (navigation also drops any stale canvas
+      // state). The root itself is featured content, not the playground.
+      router.push("/ui");
     }
   };
 
   const handleClear = () => {
     clearHistory();
-    router.push("/");
+    router.push("/ui");
   };
 
   const handleClearCurrent = () => {
     clear();
-    router.push("/");
+    router.push("/ui");
   };
 
   const handleTogglePick = () => {

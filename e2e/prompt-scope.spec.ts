@@ -5,6 +5,7 @@ import {
   EDITOR,
   PATCH_OP,
   PATCH_PATH,
+  PATHS,
   PROMPTS,
   ROLE,
   SCOPE,
@@ -35,7 +36,7 @@ async function generateStateful(
     editLines: STATEFUL_EDIT_LINES,
     ...config,
   });
-  await page.goto("/");
+  await page.goto(PATHS.ui);
   await waitForMsw(page);
   await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
   await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
@@ -272,7 +273,7 @@ test.describe("prompt scope chips", () => {
     // Rows fixture: one state-row Stack per repeat item, each with a Text
     // child — every instance gets its own dot (six of each).
     await mockGenerate(page, { lines: STATEFUL_ROWS_UI_LINES });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);

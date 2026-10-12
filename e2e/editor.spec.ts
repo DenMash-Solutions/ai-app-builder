@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import {
   EDITOR,
   MOCK_KEYS,
+  PATHS,
   PROMPTS,
   ROLE,
   UI,
@@ -20,7 +21,7 @@ import { CAROUSEL_UI_LINES } from "./msw/fixture";
 
 async function generateSample(page: Page): Promise<void> {
   await mockGenerate(page);
-  await page.goto("/");
+  await page.goto(PATHS.ui);
   await waitForMsw(page);
   await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
   await expect(page.getByText(UI.mockHeading)).toBeVisible();
@@ -600,7 +601,7 @@ test.describe("editor", () => {
     page,
   }) => {
     await mockGenerate(page, { lines: CAROUSEL_UI_LINES });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await page.setViewportSize({ width: 724, height: 900 });
@@ -661,7 +662,7 @@ test.describe("editor", () => {
     page,
   }) => {
     await mockGenerate(page, { lines: CAROUSEL_UI_LINES });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
     await page.setViewportSize({ width: 724, height: 900 });

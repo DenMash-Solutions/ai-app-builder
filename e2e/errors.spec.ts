@@ -3,6 +3,7 @@ import {
   ACTIONS,
   MOCK_KEYS,
   MODELS,
+  PATHS,
   PROMPTS,
   QUOTA,
   ROLE,
@@ -32,7 +33,7 @@ test.describe("error handling", () => {
     page,
   }) => {
     await mockGenerate(page, { status: 429, body: RATE_LIMIT_BODY });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
@@ -72,7 +73,7 @@ test.describe("error handling", () => {
     page,
   }) => {
     await mockGenerate(page, { status: 429, body: RATE_LIMIT_BODY });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
@@ -88,7 +89,7 @@ test.describe("error handling", () => {
 
   test("the selected model persists across reloads", async ({ page }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page
@@ -110,7 +111,7 @@ test.describe("error handling", () => {
     page,
   }) => {
     await mockGenerate(page, { status: 503, body: SERVICE_BODY });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
@@ -143,7 +144,7 @@ test.describe("error handling", () => {
     page,
   }) => {
     await mockGenerate(page, { status: 503, body: SERVICE_BODY });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
@@ -161,7 +162,7 @@ test.describe("error handling", () => {
     page,
   }) => {
     await mockGenerate(page, { lines: [] });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
@@ -174,7 +175,7 @@ test.describe("error handling", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();

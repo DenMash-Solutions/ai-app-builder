@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { ACTIONS, PROMPTS, ROLE, UI } from "./constants";
+import { ACTIONS, PATHS, PROMPTS, ROLE, UI } from "./constants";
 
 test.describe("responsive", () => {
   test("header actions collapse into a popover and chips fit the viewport", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 700 });
-    await page.goto("/");
+    await page.goto(PATHS.ui);
 
     const trigger = page.getByRole(ROLE.button, { name: ACTIONS.openMenu });
     await expect(trigger).toBeVisible();

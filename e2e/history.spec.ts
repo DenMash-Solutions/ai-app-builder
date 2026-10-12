@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   ACTIONS,
+  PATHS,
   PROMPTS,
   ROLE,
   UI,
@@ -19,7 +20,7 @@ test.describe("history", () => {
     page,
   }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     // Generate → auto-saved (then redirected to /ui/[id])
@@ -73,7 +74,7 @@ test.describe("history", () => {
 
   test("clears all entries at once", async ({ page }) => {
     await mockGenerate(page);
-    await page.goto("/");
+    await page.goto(PATHS.ui);
     await waitForMsw(page);
 
     await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
