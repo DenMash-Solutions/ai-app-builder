@@ -69,6 +69,7 @@ export const RENAME = {
 } as const;
 
 export const PREVIEW = {
+  open: en.preview.open,
   openPlayground: en.preview.openPlayground,
 } as const;
 

@@ -55,6 +55,7 @@
     }
   },
   "preview": {
+    "open": "Open preview",
     "openPlayground": "Open in playground"
   },
   "editor": {

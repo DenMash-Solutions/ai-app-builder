@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ellipsis, Globe, History as HistoryIcon } from "lucide-react";
+import { Ellipsis, Eye, Globe, History as HistoryIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { ModelSwitcher } from "@/components/model-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Link } from "@/lib/i18n/navigation";
 import { RenamePopover } from "./rename-popover";
 
 interface TopBarProps {
@@ -74,9 +75,19 @@ export function TopBar({
             {t("playground.title")}
           </h1>
         )}
-        <Badge variant="secondary" className="shrink-0">
-          json-render
-        </Badge>
+        {entrySlug != null && (
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            aria-label={t("preview.open")}
+            className="size-7 shrink-0"
+          >
+            <Link href={`/${entrySlug}`}>
+              <Eye aria-hidden="true" className="size-4" />
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="flex">

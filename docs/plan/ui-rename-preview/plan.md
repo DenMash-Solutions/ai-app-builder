@@ -18,8 +18,10 @@ Let every generated UI carry a human **name** and a custom **slug**: the name re
 - **Preview route** `app/[locale]/[slug]/page.tsx`: resolves entry by slug (same `useSyncExternalStore` pattern as `/ui/[id]`), renders read-only via `Renderer` + `registry` + `fixupScrollLayout` — no prompt bar, editor, tools, overlays, **background, or layout padding** (spec renders edge-to-edge; refined 2026-10-11 during implementation); floating "Open in playground" pill linking to `/ui/{slug}`; `document.title` = entry name; not-found panel for unknown slug
 - **Playground route** `app/[locale]/ui/[ref]/page.tsx` (renamed param): resolve by id, fall back to slug; existing not-found panel kept
 - History drawer rows and the empty-state display show `entry.name` (fallback: prompt)
+- **Top-bar preview link** (scope addition 2026-10-11): icon button (lucide `Eye`) immediately right of the rename title trigger, rendered only when an entry is active — a locale-aware `Link` to `/{slug}`; aria-label `preview.open` (en/es); href always uses the entry's *current* slug (active entry, so never stale)
+- **`json-render` badge removed** from the top-bar title pill (user request 2026-10-11, same commit as the preview link)
 - Post-generate redirect keeps pushing `/ui/{id}` (id = stable identity; slug is an alias)
-- e2e: rename → preview URL; slug edit → old slug not-found, new works; `/ui/{slug}` opens playground; `/ui/{uuid}` still works; duplicate/reserved slug rejected; preview has no editor chrome
+- e2e: rename → preview URL; slug edit → old slug not-found, new works; `/ui/{slug}` opens playground; `/ui/{uuid}` still works; duplicate/reserved slug rejected; preview has no editor chrome; top-bar preview button navigates `/{locale}/ui/…` → `/{locale}/{slug}`
 
 ### Out of scope
 
@@ -61,3 +63,6 @@ Let every generated UI carry a human **name** and a custom **slug**: the name re
 | 2026-10-11 | approved; implementation started |
 | 2026-10-11 | scope refined mid-implementation: preview page drops the `dot-grid` background and padded max-width wrapper — spec renders edge-to-edge, pill only (user request) |
 | 2026-10-11 | implemented — format/lint/tsc clean, 240 unit + 64 e2e pass, MCP spot-check verified (rename → preview bare surface + title → slug edit → stale slug not-found) |
+| 2026-10-11 | scope addition: top-bar preview (Eye) button playground → `/{slug}` — awaiting approval |
+| 2026-10-11 | scope addition approved + `json-render` badge removal requested in same turn |
+| 2026-10-11 | scope addition implemented — 240 unit + 64 e2e pass; MCP spot-check: badge gone, Eye link → `/es/sonrisas` bare preview with pill back to `/es/ui/sonrisas` |

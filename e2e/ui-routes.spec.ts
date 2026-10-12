@@ -108,8 +108,10 @@ test.describe("ui rename & preview", () => {
     expect(entry!.name).toBe("Clinical Dental Sonrisas");
     expect(entry!.slug).toBe("dental-sonrisas");
 
-    // Preview at /{slug}: the rendered UI with no playground chrome…
-    await page.goto("/dental-sonrisas");
+    // The top-bar preview button opens /{slug} from the playground — the
+    // preview-chrome assertions below run on that page.
+    await page.getByRole(ROLE.link, { name: PREVIEW.open }).click();
+    await expect(page).toHaveURL(/\/dental-sonrisas$/);
     await waitForMsw(page);
     await expect(page.getByText(UI.mockHeading)).toBeVisible();
     await expect(page.getByPlaceholder(UI.promptPlaceholder)).toHaveCount(0);
