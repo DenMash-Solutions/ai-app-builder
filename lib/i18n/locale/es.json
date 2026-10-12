@@ -49,7 +49,7 @@
     "cancel": "Cancelar",
     "errors": {
       "slugRequired": "El slug es obligatorio",
-      "slugReserved": "\"ui\" está reservado — elige otro slug",
+      "slugReserved": "Esa dirección está reservada — elige otro slug",
       "slugInvalid": "Usa solo letras minúsculas, números y guiones simples",
       "slugTaken": "Ese slug ya lo usa otra interfaz"
     }
@@ -57,6 +57,101 @@
   "preview": {
     "open": "Abrir vista previa",
     "openPlayground": "Abrir en el playground"
+  },
+  "specPage": {
+    "editInPlayground": "Editar en el playground",
+    "editSourceLabel": "Página importada"
+  },
+  "login": {
+    "title": "Iniciar sesión",
+    "description": "Bienvenido de nuevo — inicia sesión para guardar y sincronizar tus interfaces.",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "passwordLabel": "Contraseña",
+    "submit": "Iniciar sesión",
+    "switchText": "¿No tienes cuenta?",
+    "switchLink": "Crear una"
+  },
+  "signup": {
+    "title": "Crea tu cuenta",
+    "description": "Guarda tus interfaces generadas en tu cuenta y llévalas a producción.",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "passwordLabel": "Contraseña",
+    "confirmLabel": "Confirmar contraseña",
+    "submit": "Registrarse",
+    "switchText": "¿Ya tienes cuenta?",
+    "switchLink": "Iniciar sesión",
+    "sentText": "Revisa tu correo para confirmar tu cuenta y luego inicia sesión."
+  },
+  "auth": {
+    "checks": {
+      "emailRequired": "El correo es obligatorio",
+      "emailInvalid": "Introduce un correo válido",
+      "passwordRequired": "La contraseña es obligatoria",
+      "minLength": "Debe tener al menos 6 caracteres",
+      "passwordsMustMatch": "Las contraseñas deben coincidir"
+    },
+    "errors": {
+      "invalidCredentials": "Correo o contraseña incorrectos.",
+      "emailTaken": "Ya existe una cuenta con este correo.",
+      "weakPassword": "Elige una contraseña más segura (mínimo 6 caracteres).",
+      "generic": "Algo salió mal. Inténtalo de nuevo."
+    }
+  },
+  "sync": {
+    "status": {
+      "idle": "Sincronización con la cuenta inactiva",
+      "syncing": "Sincronizando con tu cuenta…",
+      "saved": "Guardado en la cuenta",
+      "offline": "Sin conexión — los cambios se quedan en este navegador"
+    },
+    "uploadNudge": "{count, plural, one {Encontramos # interfaz local — ¿subirla a tu cuenta?} other {Encontramos # interfaces locales — ¿subirlas a tu cuenta?}}",
+    "uploadNow": "Subir ahora",
+    "later": "Ahora no"
+  },
+  "signupBanner": {
+    "text": "Tus interfaces solo viven en este navegador.",
+    "cta": "Regístrate para conservarlas",
+    "dismiss": "Descartar"
+  },
+  "admin": {
+    "title": "Páginas en línea",
+    "description": "Cada página publicada en tu dominio. Destaca una para que sea la página raíz.",
+    "empty": "Aún no hay nada publicado — publica una interfaz desde el historial.",
+    "loading": "Cargando…",
+    "openLive": "Abrir página en línea",
+    "feature": "Destacar como raíz",
+    "unfeature": "Quitar de la raíz",
+    "featuredBadge": "Destacada en /",
+    "featuredToast": "Esta página es ahora tu página raíz.",
+    "unfeaturedToast": "Página raíz vacía — el playground vuelve a /.",
+    "failed": "No se pudo — inténtalo de nuevo."
+  },
+  "publish": {
+    "goLive": "Publicar: {name}",
+    "manageLive": "Gestionar página publicada",
+    "title": "Publicar «{name}»",
+    "description": "Elige una dirección pública — disponible como un dominio, gana quien publique primero.",
+    "slugLabel": "Dirección pública",
+    "checking": "Comprobando disponibilidad…",
+    "available": "Disponible",
+    "taken": "Ya está ocupada — prueba otra",
+    "invalid": "Usa minúsculas, números y guiones",
+    "reserved": "Dirección reservada",
+    "submit": "Publicar",
+    "update": "Publicar nueva versión",
+    "publishing": "Publicando…",
+    "published": "En línea en {url}",
+    "takenToast": "Esa dirección acaba de ocuparse — elige otra.",
+    "error": "No se pudo publicar — inténtalo de nuevo.",
+    "unpublish": "Quitar de línea",
+    "unpublishDone": "Página retirada de línea.",
+    "liveBadge": "En línea",
+    "openLive": "Abrir la página en línea de {name}",
+    "currentVersion": "En línea actualmente · v{version}",
+    "signupCta": "Regístrate para publicar",
+    "signupShort": "Registrarse"
   },
   "editor": {
     "pick": "Seleccionar",

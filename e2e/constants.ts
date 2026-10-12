@@ -36,6 +36,7 @@ export const UI = {
   uiRouteLoading: en.uiRoute.loading,
   uiRouteNotFoundTitle: en.uiRoute.notFound.title,
   uiRouteNotFoundBack: en.uiRoute.notFound.back,
+  editInPlayground: en.specPage.editInPlayground,
 } as const;
 
 export const ES_UI = {
@@ -71,6 +72,28 @@ export const RENAME = {
 export const PREVIEW = {
   open: en.preview.open,
   openPlayground: en.preview.openPlayground,
+} as const;
+
+export const AUTH = {
+  loginTitle: en.login.title,
+  signupTitle: en.signup.title,
+  email: en.login.emailLabel,
+  password: en.login.passwordLabel,
+  confirm: en.signup.confirmLabel,
+  loginSubmit: en.login.submit,
+  signupSubmit: en.signup.submit,
+  toSignup: en.login.switchLink,
+  toLogin: en.signup.switchLink,
+} as const;
+
+export const BANNER = {
+  text: en.signupBanner.text,
+  cta: en.signupBanner.cta,
+  dismiss: en.signupBanner.dismiss,
+} as const;
+
+export const PUBLISH = {
+  signupCta: en.publish.signupCta,
 } as const;
 
 export const MOCK_ERROR_MESSAGE = "boom";

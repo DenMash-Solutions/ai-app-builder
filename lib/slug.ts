@@ -1,6 +1,9 @@
 /** Reserved slug segments that collide with static route names. */
 export const RESERVED_SLUGS = {
   ui: "ui",
+  admin: "admin",
+  login: "login",
+  signup: "signup",
 } as const;
 
 export const SLUG_MAX_LENGTH = 48;

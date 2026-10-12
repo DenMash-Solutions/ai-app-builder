@@ -1,0 +1,132 @@
+{
+  "root": "page",
+  "state": {
+    "locale": "en",
+    "copy": {
+      "title": "Sign in",
+      "description": "Welcome back — sign in to save and sync your UIs.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "submit": "Sign in",
+      "switchText": "Don't have an account?",
+      "switchLink": "Create one"
+    },
+    "auth": { "email": "", "password": "", "error": "", "sent": false }
+  },
+  "elements": {
+    "page": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": "min-h-[100dvh] items-center justify-center px-6 py-12"
+      },
+      "children": ["card"]
+    },
+    "card": {
+      "type": "Card",
+      "props": {
+        "description": { "$state": "/copy/description" },
+        "className": "w-full max-w-sm"
+      },
+      "children": [
+        "heading",
+        "email",
+        "password",
+        "error",
+        "submit",
+        "switchRow"
+      ]
+    },
+    "heading": {
+      "type": "Heading",
+      "props": { "level": "h1", "text": { "$state": "/copy/title" } },
+      "children": []
+    },
+    "email": {
+      "type": "Input",
+      "props": {
+        "label": { "$state": "/copy/emailLabel" },
+        "name": "email",
+        "type": "email",
+        "placeholder": { "$state": "/copy/emailPlaceholder" },
+        "value": { "$bindState": "/auth/email" },
+        "checks": [
+          {
+            "type": "required",
+            "message": { "$state": "/checks/emailRequired" }
+          },
+          { "type": "email", "message": { "$state": "/checks/emailInvalid" } }
+        ]
+      }
+    },
+    "password": {
+      "type": "Input",
+      "props": {
+        "label": { "$state": "/copy/passwordLabel" },
+        "name": "password",
+        "type": "password",
+        "value": { "$bindState": "/auth/password" },
+        "checks": [
+          {
+            "type": "required",
+            "message": { "$state": "/checks/passwordRequired" }
+          }
+        ]
+      }
+    },
+    "error": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/auth/error" },
+        "className": "text-sm text-destructive"
+      },
+      "visible": { "$state": "/auth/error" },
+      "children": []
+    },
+    "submit": {
+      "type": "Button",
+      "props": {
+        "label": { "$state": "/copy/submit" },
+        "variant": "primary",
+        "className": "w-full"
+      },
+      "on": {
+        "press": {
+          "action": "auth.login",
+          "params": {
+            "email": { "$state": "/auth/email" },
+            "password": { "$state": "/auth/password" }
+          }
+        }
+      },
+      "children": []
+    },
+    "switchRow": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "items-center justify-center"
+      },
+      "children": ["switchText", "switchLink"]
+    },
+    "switchText": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/copy/switchText" },
+        "className": "text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "switchLink": {
+      "type": "Link",
+      "props": {
+        "label": { "$state": "/copy/switchLink" },
+        "href": { "$template": "/${/locale}/signup" }
+      },
+      "children": []
+    }
+  }
+}

@@ -2,13 +2,17 @@ import { describe, expect, test } from "bun:test";
 import type { Spec } from "@json-render/core";
 import {
   REVISION_LABELS,
+  addEntry,
   canRedo,
   canUndo,
+  clearHistory,
   commitRevision,
   createEntry,
+  getHistory,
   normalizeEntry,
   redoRevision,
   undoRevision,
+  updateEntry,
 } from "./history";
 import type { HistoryEntry } from "./history";
 
@@ -186,5 +190,53 @@ describe("normalizeEntry", () => {
 
     expect(normalized.name).toBe("Clinical Dental Sonrisas");
     expect(normalized.slug).toBe("dental-sonrisas");
+  });
+});
+
+describe("updatedAt (LWW timestamp for account sync)", () => {
+  test("createEntry stamps updatedAt from createdAt", () => {
+    const entry = createEntry("prompt", makeSpec("v0"));
+
+    expect(entry.updatedAt).toBe(entry.createdAt);
+  });
+
+  test("normalizeEntry back-fills updatedAt from createdAt for legacy entries", () => {
+    const legacy = {
+      id: "00000000-0000-4000-8000-000000000000",
+      prompt: "draw a dashboard",
+      spec: makeSpec("v0"),
+      head: 0,
+      createdAt: 1,
+    } as unknown as HistoryEntry;
+
+    expect(normalizeEntry(legacy).updatedAt).toBe(1);
+  });
+
+  test("addEntry preserves a provided updatedAt (account-synced copy)", () => {
+    clearHistory();
+    const synced = {
+      ...createEntry("synced", makeSpec("v0")),
+      updatedAt: 1234,
+    };
+
+    addEntry(synced);
+
+    expect(getHistory()[0].updatedAt).toBe(1234);
+  });
+
+  test("updateEntry stamps a fresh updatedAt on local mutation", () => {
+    clearHistory();
+    const entry = {
+      ...createEntry("local", makeSpec("v0")),
+      updatedAt: 1234,
+    };
+    addEntry(entry);
+
+    updateEntry({ ...entry, name: "renamed" });
+
+    const [stored] = getHistory();
+    expect(stored.name).toBe("renamed");
+    expect(stored.updatedAt).toBeGreaterThan(1234);
+    clearHistory();
   });
 });

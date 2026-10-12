@@ -37,6 +37,7 @@ import {
 } from "@/components/editor";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { PromptBar, ToolRail, TopBar } from "@/components/playground";
+import { SignupBanner } from "@/components/playground/signup-banner";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { FailureDialog } from "@/components/failure-dialog";
 import {
@@ -942,6 +943,9 @@ export function Playground({ initialRef }: PlaygroundProps) {
                   takenSlugs={takenSlugs}
                   onRename={handleRename}
                 />
+                {/* Landing only: while editing an entry the CTA would just
+                    overlay the canvas the user is working on. */}
+                {!activeEntry && <SignupBanner />}
 
                 {displayedSpec && !isStreaming && (
                   <ToolRail

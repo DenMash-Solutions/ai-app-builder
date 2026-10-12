@@ -4,6 +4,9 @@ import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ThemeInit } from "@/components/theme-init";
+import { AuthProvider } from "@/components/auth/auth-provider";
+import { SyncEngine } from "@/components/sync/sync-engine";
+import { UploadNudge } from "@/components/sync/upload-nudge";
 import { Toaster } from "@/components/ui/sonner";
 import { LOCALES } from "@/lib/i18n/routing";
 import "../globals.css";
@@ -51,7 +54,11 @@ export default async function LocaleLayout(props: LayoutProps<"/[locale]">) {
       </head>
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider messages={messages}>
-          {props.children}
+          <AuthProvider>
+            <SyncEngine />
+            <UploadNudge />
+            {props.children}
+          </AuthProvider>
         </NextIntlClientProvider>
         <Toaster />
       </body>

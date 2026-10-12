@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { ModelSwitcher } from "@/components/model-switcher";
+import { SyncStatusDot } from "@/components/sync/sync-status-dot";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "@/lib/i18n/navigation";
 import { RenamePopover } from "./rename-popover";
@@ -92,6 +93,7 @@ export function TopBar({
 
       <div className="flex">
         <div className="hidden items-center gap-1.5 rounded-full border bg-background/80 px-2 py-1.5 shadow-lg backdrop-blur-md sm:flex">
+          <SyncStatusDot />
           <ModelSwitcher variant="pill" />
           <LocaleSwitcher />
           <ThemeToggle />
@@ -128,6 +130,9 @@ export function TopBar({
               aria-label={t("playground.openMenu")}
               className="flex w-64 flex-col gap-1"
             >
+              <div className="flex h-9 w-full items-center gap-2 rounded-md px-2">
+                <SyncStatusDot />
+              </div>
               <div className="flex h-9 w-full items-center gap-2 rounded-md px-2">
                 <Globe aria-hidden="true" className="size-4 shrink-0" />
                 <span className="text-sm text-muted-foreground">

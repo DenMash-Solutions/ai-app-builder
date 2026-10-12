@@ -52,8 +52,11 @@ describe("isValidSlug", () => {
 });
 
 describe("isReservedSlug", () => {
-  test("reserves the static route segment", () => {
+  test("reserves the static route segments", () => {
     expect(isReservedSlug(RESERVED_SLUGS.ui)).toBe(true);
+    expect(isReservedSlug(RESERVED_SLUGS.admin)).toBe(true);
+    expect(isReservedSlug(RESERVED_SLUGS.login)).toBe(true);
+    expect(isReservedSlug(RESERVED_SLUGS.signup)).toBe(true);
     expect(isReservedSlug("dental-sonrisas")).toBe(false);
   });
 });

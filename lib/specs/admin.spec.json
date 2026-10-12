@@ -1,0 +1,54 @@
+{
+  "root": "page",
+  "state": {
+    "locale": "en",
+    "copy": {
+      "title": "Live pages",
+      "description": "Every published page on your domain. Feature one to make it the root page.",
+      "empty": "Nothing published yet — publish a UI from the history drawer."
+    },
+    "admin": {
+      "loading": true,
+      "empty": false,
+      "featured": {},
+      "notFeatured": {}
+    }
+  },
+  "elements": {
+    "page": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "mx-auto w-full max-w-5xl px-6 py-10"
+      },
+      "children": ["header", "cards", "empty"]
+    },
+    "header": {
+      "type": "Card",
+      "props": {
+        "title": { "$state": "/copy/title" },
+        "description": { "$state": "/copy/description" }
+      },
+      "children": []
+    },
+    "cards": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": "grid grid-cols-1 gap-4 md:grid-cols-2"
+      },
+      "children": []
+    },
+    "empty": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/copy/empty" },
+        "className": "text-sm text-muted-foreground"
+      },
+      "visible": { "$state": "/admin/empty" },
+      "children": []
+    }
+  }
+}

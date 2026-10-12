@@ -49,7 +49,7 @@
     "cancel": "Cancel",
     "errors": {
       "slugRequired": "Slug is required",
-      "slugReserved": "\"ui\" is reserved — pick another slug",
+      "slugReserved": "That address is reserved — pick another slug",
       "slugInvalid": "Use only lowercase letters, numbers and single hyphens",
       "slugTaken": "That slug is already used by another UI"
     }
@@ -57,6 +57,101 @@
   "preview": {
     "open": "Open preview",
     "openPlayground": "Open in playground"
+  },
+  "specPage": {
+    "editInPlayground": "Edit in playground",
+    "editSourceLabel": "Imported page"
+  },
+  "login": {
+    "title": "Sign in",
+    "description": "Welcome back — sign in to save and sync your UIs.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "submit": "Sign in",
+    "switchText": "Don't have an account?",
+    "switchLink": "Create one"
+  },
+  "signup": {
+    "title": "Create your account",
+    "description": "Save your generated UIs to your account and take them live.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "confirmLabel": "Confirm password",
+    "submit": "Sign up",
+    "switchText": "Already have an account?",
+    "switchLink": "Sign in",
+    "sentText": "Check your email to confirm your account, then sign in."
+  },
+  "auth": {
+    "checks": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Enter a valid email",
+      "passwordRequired": "Password is required",
+      "minLength": "Must be at least 6 characters",
+      "passwordsMustMatch": "Passwords must match"
+    },
+    "errors": {
+      "invalidCredentials": "Invalid email or password.",
+      "emailTaken": "An account with this email already exists.",
+      "weakPassword": "Choose a stronger password (at least 6 characters).",
+      "generic": "Something went wrong. Try again."
+    }
+  },
+  "sync": {
+    "status": {
+      "idle": "Account sync idle",
+      "syncing": "Syncing to your account…",
+      "saved": "Saved to account",
+      "offline": "Offline — changes stay in this browser"
+    },
+    "uploadNudge": "{count, plural, one {We found # local UI — upload it to your account?} other {We found # local UIs — upload them to your account?}}",
+    "uploadNow": "Upload now",
+    "later": "Not now"
+  },
+  "signupBanner": {
+    "text": "Your UIs live only in this browser.",
+    "cta": "Sign up to keep them",
+    "dismiss": "Dismiss"
+  },
+  "admin": {
+    "title": "Live pages",
+    "description": "Every published page on your domain. Feature one to make it the root page.",
+    "empty": "Nothing published yet — publish a UI from the history drawer.",
+    "loading": "Loading…",
+    "openLive": "Open live page",
+    "feature": "Feature as root",
+    "unfeature": "Remove from root",
+    "featuredBadge": "Featured on /",
+    "featuredToast": "This page is now your root page.",
+    "unfeaturedToast": "Root page cleared — the playground is back on /.",
+    "failed": "That didn't work — try again."
+  },
+  "publish": {
+    "goLive": "Go live: {name}",
+    "manageLive": "Manage live page",
+    "title": "Take “{name}” live",
+    "description": "Pick a public address — available like a domain, first to publish wins.",
+    "slugLabel": "Public address",
+    "checking": "Checking availability…",
+    "available": "Available",
+    "taken": "Already taken — try another",
+    "invalid": "Use lowercase letters, numbers and dashes",
+    "reserved": "Reserved address",
+    "submit": "Publish",
+    "update": "Publish new version",
+    "publishing": "Publishing…",
+    "published": "Live at {url}",
+    "takenToast": "That address was just taken — pick another.",
+    "error": "Could not publish — try again.",
+    "unpublish": "Take offline",
+    "unpublishDone": "Page taken offline.",
+    "liveBadge": "Live",
+    "openLive": "Open the live page of {name}",
+    "currentVersion": "Currently live · v{version}",
+    "signupCta": "Sign up to go live",
+    "signupShort": "Sign up"
   },
   "editor": {
     "pick": "Pick",

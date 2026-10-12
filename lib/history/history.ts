@@ -32,6 +32,8 @@ export interface HistoryEntry {
   revisions: SpecRevision[];
   head: number;
   createdAt: number;
+  /** Last local mutation — the LWW tie-breaker for account sync. */
+  updatedAt: number;
 }
 
 let cache: HistoryEntry[] | null = null;
@@ -63,6 +65,8 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
       : entry.prompt;
   const slug =
     typeof entry.slug === "string" && entry.slug !== "" ? entry.slug : entry.id;
+  const updatedAt =
+    typeof entry.updatedAt === "number" ? entry.updatedAt : entry.createdAt;
   const revisions =
     Array.isArray(entry.revisions) && entry.revisions.length > 0
       ? entry.revisions.filter(
@@ -81,6 +85,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
       ...entry,
       name,
       slug,
+      updatedAt,
       revisions: [
         {
           spec: entry.spec,
@@ -99,7 +104,15 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
     ),
     revisions.length - 1,
   );
-  return { ...entry, name, slug, revisions, head, spec: revisions[head].spec };
+  return {
+    ...entry,
+    name,
+    slug,
+    updatedAt,
+    revisions,
+    head,
+    spec: revisions[head].spec,
+  };
 }
 
 function readFromStorage(): HistoryEntry[] {
@@ -140,12 +153,20 @@ export function getServerHistory(): HistoryEntry[] {
 
 export function subscribeHistory(listener: () => void): () => void {
   listeners.add(listener);
-  if (listeners.size === 1) {
+  if (
+    listeners.size === 1 &&
+    typeof window !== "undefined" &&
+    typeof window.addEventListener === "function"
+  ) {
     window.addEventListener("storage", handleStorageEvent);
   }
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0) {
+    if (
+      listeners.size === 0 &&
+      typeof window !== "undefined" &&
+      typeof window.removeEventListener === "function"
+    ) {
       window.removeEventListener("storage", handleStorageEvent);
     }
   };
@@ -162,7 +183,14 @@ function commit(entries: HistoryEntry[]): void {
 }
 
 export function addEntry(entry: HistoryEntry): void {
-  commit([entry, ...getHistory()].slice(0, MAX_ENTRIES));
+  // A provided updatedAt belongs to an account-synced copy — keep it so the
+  // merge sees the original write time; local creations carry their own now.
+  const stamped: HistoryEntry = {
+    ...entry,
+    updatedAt:
+      typeof entry.updatedAt === "number" ? entry.updatedAt : Date.now(),
+  };
+  commit([stamped, ...getHistory()].slice(0, MAX_ENTRIES));
 }
 
 export function removeEntry(id: string): void {
@@ -174,9 +202,26 @@ export function clearHistory(): void {
 }
 
 export function updateEntry(updated: HistoryEntry): void {
+  // Local mutation: stamp now — this is the LWW timestamp sync compares.
   commit(
-    getHistory().map((entry) => (entry.id === updated.id ? updated : entry)),
+    getHistory().map((entry) =>
+      entry.id === updated.id ? { ...updated, updatedAt: Date.now() } : entry,
+    ),
   );
+}
+
+/**
+ * Insert-or-replace preserving the entry's own `updatedAt` — the account-sync
+ * write path. Unlike `updateEntry` it never re-stamps: the remote write time
+ * is the whole point (LWW decides which copy survives on the next push).
+ */
+export function applyRemoteEntry(remote: HistoryEntry): void {
+  const history = getHistory();
+  const exists = history.some((entry) => entry.id === remote.id);
+  const next = exists
+    ? history.map((entry) => (entry.id === remote.id ? remote : entry))
+    : [remote, ...history];
+  commit(next.slice(0, MAX_ENTRIES));
 }
 
 /**
@@ -249,6 +294,7 @@ export function createEntry(prompt: string, spec: Spec): HistoryEntry {
     revisions: [{ spec: snapshot, label: REVISION_LABELS.generate, createdAt }],
     head: 0,
     createdAt,
+    updatedAt: createdAt,
   };
 }
 
