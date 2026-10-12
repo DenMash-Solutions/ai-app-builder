@@ -776,8 +776,8 @@ test.describe("editor", () => {
       .toBe(700);
     const flexDirection = () =>
       page.evaluate(() => {
-        const main = document.querySelector("main");
-        return main ? getComputedStyle(main).flexDirection : null;
+        const canvas = document.querySelector("[data-canvas]");
+        return canvas ? getComputedStyle(canvas).flexDirection : null;
       });
     expect(await flexDirection()).toBe("column");
 

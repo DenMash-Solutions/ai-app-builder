@@ -8,6 +8,7 @@ export const ROLE = {
   button: "button",
   heading: "heading",
   link: "link",
+  navigation: "navigation",
   tab: "tab",
   combobox: "combobox",
   option: "option",
@@ -29,6 +30,7 @@ export const PATHS = {
   ui: "/ui",
   login: "/en/login",
   signup: "/en/signup",
+  admin: "/en/admin",
 } as const;
 
 export const UI = {
@@ -99,6 +101,24 @@ export const AUTH = {
   signupSubmit: en.signup.submit,
   toSignup: en.login.switchLink,
   toLogin: en.signup.switchLink,
+} as const;
+
+/** App-shell chrome (sidebar + account menu). No auth-state strings —
+ *  sign-in/sign-out flows live in the authenticated e2e suites. */
+export const SHELL = {
+  playgroundNav: en.shell.nav.playground,
+  livePagesNav: en.shell.nav.livePages,
+  navLabel: en.shell.nav.primary,
+  openMenu: en.shell.nav.openMenu,
+  closeMenu: en.shell.nav.closeMenu,
+  signIn: en.shell.account.signIn,
+  signOut: en.shell.account.signOut,
+  accountMenu: en.shell.account.menu,
+  roleAdmin: en.shell.account.roleAdmin,
+  roleMember: en.shell.account.roleMember,
+  esNavLabel: es.shell.nav.primary,
+  esSignIn: es.shell.account.signIn,
+  esLivePagesNav: es.shell.nav.livePages,
 } as const;
 
 export const BANNER = {

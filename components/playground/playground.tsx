@@ -898,14 +898,14 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // transition into the playground stays visually continuous.
   if (routeStatus === "pending") {
     return (
-      <main className="dot-grid flex h-[100dvh] w-full items-center justify-center">
+      <div className="dot-grid flex h-[100dvh] w-full items-center justify-center">
         <p className="text-sm text-muted-foreground">{t("uiRoute.loading")}</p>
-      </main>
+      </div>
     );
   }
   if (routeStatus === "missing") {
     return (
-      <main className="dot-grid flex h-[100dvh] w-full items-center justify-center px-6">
+      <div className="dot-grid flex h-[100dvh] w-full items-center justify-center px-6">
         <div className="w-full max-w-md space-y-4 text-center">
           <h1 className="text-xl font-semibold">
             {t("uiRoute.notFound.title")}
@@ -917,7 +917,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
             <Link href="/">{t("uiRoute.notFound.back")}</Link>
           </Button>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -926,7 +926,10 @@ export function Playground({ initialRef }: PlaygroundProps) {
       <VisibilityProvider>
         <ActionProvider handlers={{}}>
           <ValidationProvider customFunctions={{}}>
-            <main className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row">
+            <div
+              data-canvas
+              className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row"
+            >
               {/* Stage: holds all chrome and the canvas; shrinks when the
                   edit panel docks (right on desktop, bottom on mobile) so the
                   rail, prompt bar, and top bar are never covered. `isolate`
@@ -1176,7 +1179,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
                 onClear={handleClear}
                 onImportJson={handleImportSpec}
               />
-            </main>
+            </div>
           </ValidationProvider>
         </ActionProvider>
       </VisibilityProvider>

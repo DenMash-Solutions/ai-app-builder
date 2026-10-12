@@ -208,4 +208,17 @@ describe("sync", () => {
     expect(getSyncStatus()).toBe("saved");
     stop();
   });
+
+  test("stopping mid-debounce (sign-out) cancels the pending push and settles to idle", async () => {
+    const stop = startSync(makeClient(state), "owner-1", { debounceMs: 20 });
+    await sleep(20);
+
+    addEntry(createEntry("typed right before sign-out", makeSpec("v1")));
+    await sleep(1); // within the debounce window
+    stop(); // SyncEngine cleanup when the session goes away
+
+    await sleep(40); // past the debounce — the push must never fire
+    expect(state.upserts.flat()).toHaveLength(0);
+    expect(getSyncStatus()).toBe("idle");
+  });
 });

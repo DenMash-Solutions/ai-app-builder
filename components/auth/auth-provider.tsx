@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
@@ -11,12 +18,15 @@ interface AuthContextValue {
   user: User | null;
   role: UserRole | null;
   loading: boolean;
+  /** Ends the Supabase session (local history is never touched). */
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   role: null,
   loading: true,
+  signOut: async () => {},
 });
 
 /**
@@ -71,7 +81,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase, user]);
 
-  const value = useMemo(() => ({ user, role, loading }), [user, role, loading]);
+  const signOut = useCallback(async () => {
+    // Session only — local history lives in this browser and is never
+    // deleted on sign-out (shared machines keep their drafts).
+    await supabase.auth.signOut();
+  }, [supabase]);
+
+  const value = useMemo(
+    () => ({ user, role, loading, signOut }),
+    [user, role, loading, signOut],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

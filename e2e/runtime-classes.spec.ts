@@ -589,10 +589,12 @@ test.describe("runtime class coverage", () => {
     await expect(page.locator("[data-editor-panel]")).toBeVisible();
 
     const layout = await page.evaluate(() => {
-      const main = document.querySelector("main");
-      const scroller = document.querySelector("main .overflow-y-auto");
+      // Scoped to the canvas: the app shell puts its own `<main>` (the
+      // sidebar's SidebarInset) above the playground.
+      const canvas = document.querySelector("[data-canvas]");
+      const scroller = document.querySelector("[data-canvas] .overflow-y-auto");
       return {
-        direction: main ? getComputedStyle(main).flexDirection : null,
+        direction: canvas ? getComputedStyle(canvas).flexDirection : null,
         scrollerHeight: scroller ? scroller.getBoundingClientRect().height : 0,
       };
     });

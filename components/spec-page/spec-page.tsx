@@ -61,10 +61,14 @@ export function SpecPage({
   spec,
   extraState,
   children,
+  main = true,
 }: {
   spec: Spec;
   extraState?: Record<string, unknown>;
   children?: React.ReactNode;
+  /** Renders the page root as `<main>`; disable when a layout above already
+   *  provides the landmark (e.g. the app shell's `SidebarInset`). */
+  main?: boolean;
 }) {
   // Checks carry { $state } messages the engine doesn't deep-resolve; the
   // localized spec swaps them for the injected copy.
@@ -85,9 +89,15 @@ export function SpecPage({
       <VisibilityProvider>
         <ActionProvider handlers={{}}>
           <ValidationProvider customFunctions={{}}>
-            <main className="relative w-full">
-              <Renderer spec={localized} registry={registry} />
-            </main>
+            {main ? (
+              <main className="relative w-full">
+                <Renderer spec={localized} registry={registry} />
+              </main>
+            ) : (
+              <div className="relative w-full">
+                <Renderer spec={localized} registry={registry} />
+              </div>
+            )}
             {children}
           </ValidationProvider>
         </ActionProvider>

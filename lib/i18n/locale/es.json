@@ -3,6 +3,24 @@
     "title": "GenUI Playground",
     "description": "POC: interfaz generada por IA con json-render, shadcn/ui y Gemini"
   },
+  "shell": {
+    "nav": {
+      "openMenu": "Abrir navegación",
+      "closeMenu": "Cerrar navegación",
+      "collapseSidebar": "Contraer barra lateral",
+      "expandSidebar": "Expandir barra lateral",
+      "primary": "Navegación principal",
+      "playground": "Playground",
+      "livePages": "Páginas en vivo"
+    },
+    "account": {
+      "signIn": "Iniciar sesión",
+      "signOut": "Cerrar sesión",
+      "menu": "Menú de la cuenta ({email})",
+      "roleAdmin": "Admin",
+      "roleMember": "Miembro"
+    }
+  },
   "playground": {
     "title": "GenUI Playground",
     "subtitle": "Describe una interfaz — el modelo transmite una especificación JSONL que se renderiza con el catálogo shadcn.",
@@ -85,6 +103,7 @@
     "sentText": "Revisa tu correo para confirmar tu cuenta y luego inicia sesión."
   },
   "auth": {
+    "loading": "Cargando…",
     "checks": {
       "emailRequired": "El correo es obligatorio",
       "emailInvalid": "Introduce un correo válido",

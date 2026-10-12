@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Spec } from "@json-render/core";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -29,6 +29,7 @@ export default function AdminPage() {
   const t = useTranslations();
   const { locale } = useParams<{ locale: string }>();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, role, loading } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
@@ -39,8 +40,15 @@ export default function AdminPage() {
   const denied = !loading && (user === null || role === "user");
 
   useEffect(() => {
-    if (denied) router.replace(`/${locale}`);
-  }, [denied, router, locale]);
+    if (!denied) return;
+    // Anonymous visitors go to sign-in with a return path (instead of the
+    // old silent bounce to the root); signed-in non-admins go home.
+    if (user === null) {
+      router.replace(`/${locale}/login?next=${encodeURIComponent(pathname)}`);
+    } else {
+      router.replace(`/${locale}`);
+    }
+  }, [denied, user, router, locale, pathname]);
 
   useEffect(() => {
     if (role !== "admin") return;
@@ -65,14 +73,17 @@ export default function AdminPage() {
 
   if (loading || role !== "admin") {
     return (
-      <main className="flex h-[100dvh] w-full items-center justify-center">
+      // Not a `<main>`: the admin route sits inside the app shell, whose
+      // `SidebarInset` provides the landmark.
+      <div className="flex h-[100dvh] w-full items-center justify-center">
         <p className="text-sm text-muted-foreground">{t("admin.loading")}</p>
-      </main>
+      </div>
     );
   }
 
   return (
     <SpecPage
+      main={false}
       spec={spec}
       extraState={{
         locale,

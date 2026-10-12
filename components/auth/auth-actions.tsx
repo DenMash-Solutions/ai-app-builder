@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useActions, useStateStore } from "@json-render/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { safeNextPath } from "@/lib/auth/next-path";
 import { createClient } from "@/lib/supabase/client";
 
 type Translate = (key: string) => string;
@@ -56,7 +57,7 @@ export function AuthActions() {
         store.set("/auth/error", authErrorMessage(t, error.message));
         return;
       }
-      router.push(`/${locale}/ui`);
+      router.push(safeNextPath() ?? `/${locale}/ui`);
     });
 
     registerHandler("auth.signup", async (params) => {
@@ -77,7 +78,7 @@ export function AuthActions() {
       }
       if (data.session) {
         // Email confirmation disabled on this project — straight in.
-        router.push(`/${locale}/ui`);
+        router.push(safeNextPath() ?? `/${locale}/ui`);
         return;
       }
       store.set("/auth/sent", true);
