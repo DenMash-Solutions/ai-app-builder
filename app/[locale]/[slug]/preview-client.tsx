@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
-import { useParams } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
-import { JSONUIProvider, Renderer } from "@json-render/react";
-import { ArrowUpRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
-import { Link } from "@/lib/i18n/navigation";
+import { Button } from "@/components/ui/button";
+import { appDirectives } from "@/lib/computed/directives";
+import type { HistoryEntry } from "@/lib/history";
 import { getHistory, subscribeHistory } from "@/lib/history";
+import { Link } from "@/lib/i18n/navigation";
 import { mergeI18n } from "@/lib/i18n/spec-languages";
 import { registry } from "@/lib/playground/registry";
-import { appDirectives } from "@/lib/computed/directives";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
-import { localizeSpec } from "@/lib/specs/localize";
-import type { HistoryEntry } from "@/lib/history";
 import type { LivePageData } from "@/lib/publish/featured";
+import { localizeSpec } from "@/lib/specs/localize";
+import { JSONUIProvider, Renderer } from "@json-render/react";
+import { ArrowUpRight } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { useParams } from "next/navigation";
+import { useSyncExternalStore } from "react";
 
 /**
  * Read-only preview at /{locale}/{slug}: the entry's spec rendered with the
@@ -44,23 +44,6 @@ export default function PreviewPage({
     // Server snapshot = pending (history is localStorage-only).
     () => undefined,
   );
-  const entryName = entry?.name ?? published?.name;
-
-  useEffect(() => {
-    if (!entryName) return;
-    const apply = () => {
-      if (document.title !== entryName) document.title = entryName;
-    };
-    // The layout's metadata title is applied by Next's head manager at the
-    // end of hydration — AFTER this page's effects, so a plain assignment
-    // gets clobbered. The manager mutates the <title> element; watch for it
-    // and re-assert. (Our own assignment re-triggers the observer, but the
-    // guard makes that a no-op — no loop.)
-    const observer = new MutationObserver(apply);
-    observer.observe(document.head, { childList: true, subtree: true });
-    apply();
-    return () => observer.disconnect();
-  }, [entryName]);
 
   // Runtime classes: spec classNames exist only at runtime — compile any not
   // yet covered via /api/tailwind (same no-op-on-failure behavior as the
