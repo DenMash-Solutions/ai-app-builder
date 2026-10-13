@@ -68,6 +68,53 @@ export const MOCK_EDIT_LINES: string[] = [
 ];
 
 /**
+ * In-spec language fixture: a seed copy (`state.copy`) plus a partial Spanish
+ * overlay (`state.i18n.es` — `title` translated, `subtitle` missing so the
+ * fallback chain and the untranslated badge are both exercised). The heading
+ * and subtitle bind to `/copy/*` refs, so the content-language toggle merges
+ * the active layer over the seed and copy edits redirect by language.
+ */
+export const I18N_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: {
+      locale: "en",
+      copy: { title: "Hello", subtitle: "Welcome" },
+      i18n: { es: { title: "Hola" } },
+    },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "i18n-card" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("i18n-card"),
+    value: {
+      type: COMPONENT.card,
+      props: {},
+      children: ["i18n-heading", "i18n-subtitle"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("i18n-heading"),
+    value: {
+      type: COMPONENT.heading,
+      props: { text: { $state: "/copy/title" }, level: "h1" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("i18n-subtitle"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: { $state: "/copy/subtitle" } },
+      children: [],
+    },
+  }),
+];
+
+/**
  * Horizontal carousel whose row is wider than a narrow canvas column: the
  * fixup (`fixupScrollLayout`) pins width + kills wrap at render time, so the
  * row scrolls internally. Picking a card past the column edge exercises the

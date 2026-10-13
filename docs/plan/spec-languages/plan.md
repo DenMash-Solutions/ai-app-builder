@@ -1,6 +1,6 @@
 # Spec Languages — In-Spec Translations & Server-Baked Live Pages — Implementation Plan
 
-**Status:** draft
+**Status:** in progress
 **Date:** 2026-10-12
 
 ## Goal
@@ -23,7 +23,7 @@ One spec carries any number of languages: `state.copy` is the single-language se
 3. **Generation contract** — generator prompt/schema requires stable `/copy` keys + translations for requested languages (default: app pair en/es when the prompt names none); ingest validates non-blockingly and flags missing translations.
 4. **Renderer merge** — `LivePage` (featured root + live URL) and the preview route merge copy for the **route locale**; `state.locale` stays the app locale so `$template` hrefs (`/${/locale}/ui`) keep following app routing.
 5. **Editor content-language toggle** — playground top bar control; options derived from the spec (`seed ∪ keys(i18n)`) + "Add language…"; canvas re-binds via the same merge; selection persisted device-locally (`genui-editor-lang:<entryId>` + global default `genui-content-lang`), resolved synchronously before mount; edits while a non-seed language is active write to `i18n.<tag>` (create-if-missing) with revert-to-source; untranslated-key badges + model-driven **Translate missing** / **Add language** actions.
-6. **Static live rendering** — publish-time bake per tag: `renderToStaticMarkup` + `buildForCandidates` (in-process, no HTTP hop) → HTML + CSS stored with the snapshot; invalidation on publish/unpublish/feature; serving maps route locale → artifact (fallback chain); specs classified at bake: content-only → static 0-JS, stateful (editable state/inputs) → server-rendered HTML + hydration. Fixes the existing FOUC.
+6. **Static live rendering** — publish-time bake per tag: HTML via `renderToStaticMarkup` (client-side — RSC route layer can't render the json-render client providers) + CSS via `/api/tailwind`; artifacts stored with the snapshot (`published_pages.artifacts` jsonb); invalidation on publish/unpublish/feature; serving maps route locale → artifact (fallback chain); specs classified at bake: content-only → static 0-JS, stateful (editable state/inputs) → server-injected baked CSS + client render (FOUC-free; full hydration deferred). Fixes the existing FOUC.
 7. **Content** — republish the landing with `i18n.es` (verify `/es`); demo an extra language end-to-end (e.g. `fr`) via "Add language…".
 8. **Tests** — unit (merge, normalizer, validator, write redirection); e2e (toggle persists across reload; wrong-layer-write guard; missing-tag fallback; `/es` live content; JS-disabled live page for content-only specs).
 
@@ -44,7 +44,7 @@ One spec carries any number of languages: `state.copy` is the single-language se
 4. **Merge-at-render via shared helper** (`mergeI18n`, used by bake, editor, preview) — rejected: `$cond`-per-string (editor-hostile), engine changes (unnecessary; merge runs before `StateProvider`).
 5. **Route locale = content language on live pages; no `?lang=`; app locale ≠ content language** — rejected: query-param serving and on-page pickers (user directive 2026-10-12); featured-per-locale schema (superseded).
 6. **Editor toggle is canvas-local with device persistence and pre-mount synchronous resolution** — rejected: URL state; storing language on the entry (sync conflict surface for view state); effect-based switching (canvas flash + a fast click can write to the wrong language layer).
-7. **Publish-time bake per tag; static-by-default with hydrate-if-stateful** — rejected: build-time HTML files (feature/unfeature is runtime), pure static for all specs (breaks stateful specs like forms/todos), client-only rendering (ships the engine for static content and keeps the FOUC).
+7. **Publish-time bake per tag; static-for-content, client+baked-CSS-for-stateful** — rejected: build-time HTML files (feature/unfeature is runtime), pure static for all specs (breaks stateful specs like forms/todos), full React hydration of baked stateful markup (hydration-match fragility for no user gain — the page is interactive either way), client-only rendering (ships the engine for static content and keeps the FOUC).
 8. **Untranslated keys render the seed (WYSIWYG) + badges** — rejected: raw-key display.
 9. **Generation-time contract + ingest normalization, not schema trust** — models drift; the normalizer lifts inline strings via the catalog's copy-prop whitelist and reports coverage.
 

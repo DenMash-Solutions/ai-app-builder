@@ -8,6 +8,7 @@
         "@ai-sdk/google": "^4.0.87",
         "@base-ui/react": "^1.8.0",
         "@json-render/core": "^0.21.0",
+        "@json-render/directives": "^0.21.0",
         "@json-render/react": "^0.21.0",
         "@json-render/shadcn": "^0.21.0",
         "@supabase/ssr": "^0.12.7",
@@ -258,6 +259,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@json-render/core": ["@json-render/core@0.21.0", "", { "dependencies": { "zod": "^4.3.6" } }, "sha512-vysEbTjO1y8mEgAsp0tztRyaWCkNsBrG8MhAqbndGK3qmMXjMRdCNtk21+AQRNKdRelFGVAwBgtUNW8tfjQlsw=="],
+
+    "@json-render/directives": ["@json-render/directives@0.21.0", "", { "dependencies": { "@json-render/core": "0.21.0" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-dplsE3R+JWjBTzsR00ifGae17kogEnX148+qDiyIUOpR4uEfasNrksGRSUvhsRHIpneHDGtdz0Ukx3IDEmmS8A=="],
 
     "@json-render/react": ["@json-render/react@0.21.0", "", { "dependencies": { "@json-render/core": "0.21.0" }, "peerDependencies": { "react": "^19.2.3" } }, "sha512-z/fZg0L8fJe2dnnQjWkmMw409iBclSWcOqdjoBy8eLHeBr/7F7VipzkY1CfgA2Fa5uW+zxZ54OvWMtdDcsp/yg=="],
 

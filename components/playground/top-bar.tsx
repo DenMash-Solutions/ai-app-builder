@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/popover";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { ModelSwitcher } from "@/components/model-switcher";
+import { ContentLanguageSwitcher } from "@/components/content-language-switcher";
+import type { ContentLanguageSwitcherProps } from "@/components/content-language-switcher";
 import { SyncStatusDot } from "@/components/sync/sync-status-dot";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "@/lib/i18n/navigation";
@@ -26,6 +28,8 @@ interface TopBarProps {
   entrySlug?: string | null;
   takenSlugs?: ReadonlySet<string>;
   onRename?: (name: string, slug: string) => void;
+  /** Content-language toggle — present only when a spec with copy is loaded. */
+  contentLang?: ContentLanguageSwitcherProps | null;
 }
 
 const ROW_CLASS = "h-9 w-full justify-start gap-2 rounded-md px-2";
@@ -38,6 +42,7 @@ export function TopBar({
   entrySlug,
   takenSlugs,
   onRename,
+  contentLang,
 }: TopBarProps) {
   const t = useTranslations();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -95,6 +100,9 @@ export function TopBar({
         <div className="hidden items-center gap-1.5 rounded-full border bg-background/80 px-2 py-1.5 shadow-lg backdrop-blur-md sm:flex">
           <SyncStatusDot />
           <ModelSwitcher variant="pill" />
+          {contentLang && (
+            <ContentLanguageSwitcher {...contentLang} variant="pill" />
+          )}
           <LocaleSwitcher />
           <ThemeToggle />
           <Button
@@ -144,6 +152,9 @@ export function TopBar({
               </div>
               <ThemeToggle showLabel />
               <ModelSwitcher variant="row" />
+              {contentLang && (
+                <ContentLanguageSwitcher {...contentLang} variant="row" />
+              )}
               <Button
                 type="button"
                 variant="ghost"

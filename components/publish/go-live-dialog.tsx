@@ -23,6 +23,7 @@ import {
   publishEntry,
   unpublishEntry,
 } from "@/lib/publish/publish";
+import { bakeAndPersistArtifacts } from "@/lib/publish/bake-client";
 import type { PublishedPage } from "@/lib/publish/publish";
 
 interface GoLiveDialogProps {
@@ -135,6 +136,15 @@ function GoLiveContent({
       t("publish.published", {
         url: `${window.location.origin}/${locale}/${result.slug}`,
       }),
+    );
+    // Best-effort per-language bake (plan §5): static HTML per language is
+    // rendered client-side, CSS compiled via /api/tailwind, artifacts persisted
+    // by /api/publish-artifacts. Serving falls back to client rendering until
+    // it lands, so a failed bake never blocks the publish.
+    void bakeAndPersistArtifacts(
+      entry.id,
+      entry.spec,
+      result.version ?? (published?.version ?? 0) + 1,
     );
     onPublished({
       uiId: entry.id,

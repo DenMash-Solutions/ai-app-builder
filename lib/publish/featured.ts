@@ -1,5 +1,7 @@
 import type { Spec } from "@json-render/core";
 import { createClient } from "@/lib/supabase/server";
+import { parseArtifacts } from "@/lib/publish/artifacts";
+import type { BakedArtifact } from "@/lib/publish/artifacts";
 
 /**
  * Server-side reads of the public projection: the featured root page
@@ -13,6 +15,8 @@ export interface LivePageData {
   name: string;
   version: number;
   spec: Spec;
+  /** Baked per-language artifacts (null on pre-bake pages — serve client). */
+  artifacts: Record<string, BakedArtifact> | null;
 }
 
 function toLivePage(row: Record<string, unknown> | null): LivePageData | null {
@@ -24,6 +28,7 @@ function toLivePage(row: Record<string, unknown> | null): LivePageData | null {
     name: typeof row.name === "string" ? row.name : row.slug,
     version: typeof row.version === "number" ? row.version : 1,
     spec: row.spec as Spec,
+    artifacts: parseArtifacts(row.artifacts),
   };
 }
 
@@ -39,7 +44,7 @@ export async function getFeaturedPage(): Promise<LivePageData | null> {
 
   const { data: page } = await supabase
     .from("published_pages")
-    .select("slug, name, version, spec")
+    .select("slug, name, version, spec, artifacts")
     .eq("ui_id", settings.featured_ui_id)
     .maybeSingle();
   return toLivePage(page);
@@ -52,7 +57,7 @@ export async function getPublishedPageBySlug(
   const supabase = await createClient();
   const { data: page } = await supabase
     .from("published_pages")
-    .select("slug, name, version, spec")
+    .select("slug, name, version, spec, artifacts")
     .eq("slug", slug)
     .maybeSingle();
   return toLivePage(page);

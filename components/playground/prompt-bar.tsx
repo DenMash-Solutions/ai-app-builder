@@ -336,8 +336,7 @@ export function PromptBar({
               <div
                 ref={mirrorRef}
                 data-testid="prompt-mirror"
-                className={`text-foreground ${FIELD_TEXT}`}
-                style={{ minHeight: "100%" }}
+                className={`h-full overflow-hidden text-foreground ${FIELD_TEXT}`}
               >
                 {mirrorNodes}
                 {"\n"}

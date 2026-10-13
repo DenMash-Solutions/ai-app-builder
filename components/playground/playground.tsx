@@ -6,14 +6,7 @@ import {
   markDevtoolsActive,
   setByPath,
 } from "@json-render/core";
-import {
-  ActionProvider,
-  Renderer,
-  StateProvider,
-  ValidationProvider,
-  VisibilityProvider,
-  useUIStream,
-} from "@json-render/react";
+import { JSONUIProvider, Renderer, useUIStream } from "@json-render/react";
 import {
   useCallback,
   useEffect,
@@ -22,8 +15,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/lib/i18n/navigation";
+import { appDirectives } from "@/lib/computed/directives";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +42,7 @@ import {
   describeInstanceText,
   duplicateElement,
   findParentKey,
+  freeformRevisionLabel,
   getAncestorPath,
   insertElement,
   moveElement,
@@ -93,9 +88,27 @@ import {
   undoRevision,
   updateEntry,
 } from "@/lib/history";
+import { normalizeSpecCopy } from "@/lib/i18n/spec-normalize";
 import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
+import {
+  availableLanguages,
+  getCopy,
+  mergeI18n,
+  seedLocale,
+} from "@/lib/i18n/spec-languages";
+import { validateSpecI18n } from "@/lib/i18n/spec-coverage";
+import {
+  copyWriteTarget,
+  hasOverlayLayer,
+  resolveContentLang,
+  writeContentLang,
+} from "@/lib/i18n/content-lang";
+import type { ContentLanguageSwitcherProps } from "@/components/content-language-switcher";
+
+/** Demo pool for "Add language…" — the next tag not already on the spec. */
+const ADD_LANG_POOL = ["fr", "de", "it", "pt"];
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
 
@@ -121,6 +134,7 @@ interface PlaygroundProps {
 
 export function Playground({ initialRef }: PlaygroundProps) {
   const t = useTranslations();
+  const locale = useLocale();
   const router = useRouter();
   const routeRef = initialRef ?? null;
   const history = useSyncExternalStore(
@@ -166,6 +180,10 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // as removable chips in the prompt bar, highlighted on the canvas. Deduped
   // by key + instance chain; cleared on route change (entry-scoped).
   const [scopeTargets, setScopeTargets] = useState<PromptScopeTarget[]>([]);
+  // Content-language selection (session override). Null = fall through to the
+  // device-persisted choice, then the spec's seed — resolved synchronously in
+  // the memo below (no effect round-trip, no seed flash).
+  const [langOverride, setLangOverride] = useState<string | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab>(PANEL_TABS.properties);
   const pendingOpRef = useRef<PendingOp | null>(null);
   const [failure, setFailure] = useState<{
@@ -241,8 +259,13 @@ export function Playground({ initialRef }: PlaygroundProps) {
       }
       pendingOpRef.current = null;
 
+      // Ingest seam (generate, steer, import): lift stray inline copy into
+      // state.copy — non-blocking by design, the coverage flag rides on the
+      // entry (createEntry/commitRevision recompute it).
+      const { spec: normalizedSpec } = normalizeSpecCopy(completedSpec);
+
       if (op.kind === PENDING_OP_KINDS.generate) {
-        const entry = createEntry(op.prompt, completedSpec);
+        const entry = createEntry(op.prompt, normalizedSpec);
         addEntry(entry);
         // The URL owns the active UI: the landing streams the generation,
         // then the committed entry takes over at /ui/[id] (the destination
@@ -255,7 +278,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
         (candidate) => candidate.id === op.entryId,
       );
       if (!entry) return;
-      const updated = commitRevision(entry, completedSpec, op.label);
+      const updated = commitRevision(entry, normalizedSpec, op.label);
       updateEntry(updated);
     },
   });
@@ -268,7 +291,9 @@ export function Playground({ initialRef }: PlaygroundProps) {
     context: Record<string, unknown> = {},
   ): void => {
     lastRequestRef.current = { prompt, context };
-    void send(prompt, { ...context, model: getModel() });
+    // The route locale seeds the generation contract: copy is written in
+    // this language, translations ship under state.i18n.<tag>.
+    void send(prompt, { ...context, model: getModel(), locale });
   };
 
   // While a stream runs (generate on the landing, steer on /ui/[id]) the
@@ -283,6 +308,41 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // width-definite ancestors (see scroll-layout-fixup) without mutating what
   // the model produced or what editing/history operate on.
   const renderSpec = displayedSpec ? fixupScrollLayout(displayedSpec) : null;
+
+  // Content language (playground editor): the active tag drives the canvas
+  // merge, the EditPanel's resolved values, and where copy edits are written.
+  const hasCopy = Object.keys(getCopy(displayedSpec?.state)).length > 0;
+  const seedLang = seedLocale(displayedSpec?.state);
+  const languages = useMemo(
+    () => (displayedSpec ? availableLanguages(displayedSpec) : [seedLang]),
+    [displayedSpec, seedLang],
+  );
+  const contentLang = useMemo(
+    () =>
+      resolveContentLang(displayedSpec, activeEntry?.id ?? null, langOverride),
+    [displayedSpec, activeEntry, langOverride],
+  );
+  // The canvas renders the merged language over the seed copy.
+  const canvasState = useMemo(
+    () =>
+      displayedSpec ? (mergeI18n(displayedSpec.state, contentLang) ?? {}) : {},
+    [displayedSpec, contentLang],
+  );
+  const missingByTag = useMemo(() => {
+    const counts = new Map<string, number>();
+    const report = validateSpecI18n(displayedSpec?.state);
+    for (const tag of report.tags) {
+      if (tag.valid && !tag.redundant && tag.missing.length > 0) {
+        counts.set(tag.tag, tag.missing.length);
+      }
+    }
+    return counts;
+  }, [displayedSpec]);
+  // "Revert to source" only when the active (non-seed) language has an overlay.
+  const canRevert =
+    contentLang !== seedLang &&
+    hasOverlayLayer(displayedSpec?.state, contentLang);
+
   // Derived selection: stale keys (removed by a patch/undo) simply read as
   // unselected — no effect round trip needed.
   const effectiveKey =
@@ -358,7 +418,9 @@ export function Playground({ initialRef }: PlaygroundProps) {
     selectedElement &&
     (pickMode || panelClosing)
       ? {
-          spec: displayedSpec,
+          // The panel resolves bindings against the merged language so the
+          // fields show (and target) the active content language, not the seed.
+          spec: { ...displayedSpec, state: canvasState },
           elementKey: effectiveKey,
           element: selectedElement,
         }
@@ -511,7 +573,8 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // The import lives in the history drawer, which closes once the spec
   // is on canvas.
   const handleImportSpec = (importedSpec: Spec) => {
-    const entry = createEntry(t("playground.importedEntry"), importedSpec);
+    const { spec: normalized } = normalizeSpecCopy(importedSpec);
+    const entry = createEntry(t("playground.importedEntry"), normalized);
     addEntry(entry);
     setHistoryOpen(false);
     router.push(`/ui/${entry.id}`);
@@ -566,6 +629,59 @@ export function Playground({ initialRef }: PlaygroundProps) {
     );
   };
 
+  // Whole-spec steer (no element scope) — the translation actions patch every
+  // language layer at once, so they must not be scoped to a selected element.
+  const steerWholeSpec = (instruction: string, label: string) => {
+    const base = displayedSpec;
+    if (!base?.root || !activeEntry || isStreaming) return;
+    pendingOpRef.current = {
+      kind: PENDING_OP_KINDS.edit,
+      entryId: activeEntry.id,
+      label,
+    };
+    steerBaselineRef.current = structuredClone(base);
+    sendNow(instruction, { previousSpec: structuredClone(base) });
+  };
+
+  // Model action: translate the whole spec into a brand-new language, then
+  // switch the canvas to it once the layer lands.
+  const handleAddLanguage = () => {
+    const tag =
+      ADD_LANG_POOL.find((candidate) => !languages.includes(candidate)) ??
+      ADD_LANG_POOL[0];
+    setLangOverride(tag);
+    if (activeEntry) writeContentLang(activeEntry.id, tag);
+    steerWholeSpec(
+      `Add a full translation of this spec into the language with BCP-47 tag "${tag}". For every key in state.copy, add a translated value under state.i18n.${tag} with the identical key, keeping every $state reference unchanged. Do not modify state.copy or any other language.`,
+      freeformRevisionLabel(`add ${tag}`),
+    );
+  };
+
+  // Model action: fill the active language's missing translations only.
+  const handleTranslateMissing = () => {
+    steerWholeSpec(
+      `For the content language with tag "${contentLang}", add a translated value under state.i18n.${contentLang} for every state.copy key that does not already have one. Do not change state.copy, other languages, or any $state reference.`,
+      freeformRevisionLabel(`translate ${contentLang}`),
+    );
+  };
+
+  // Local op: drop the active language's overlay layer → seed fallback.
+  const handleRevertToSource = () => {
+    if (!displayedSpec || !routeEntry || isStreaming) return;
+    const next = structuredClone(displayedSpec);
+    const i18n = next.state?.i18n;
+    if (i18n && typeof i18n === "object") {
+      delete (i18n as Record<string, unknown>)[contentLang];
+      if (Object.keys(i18n).length === 0 && next.state) delete next.state.i18n;
+    }
+    const updated = commitRevision(
+      routeEntry,
+      next,
+      freeformRevisionLabel(`revert ${contentLang}`),
+    );
+    updateEntry(updated);
+  };
+
   const handleFailureConfirm = (model: ModelId) => {
     setModel(model);
     setFailure(null);
@@ -592,10 +708,16 @@ export function Playground({ initialRef }: PlaygroundProps) {
     let next: Spec;
     if (dataPath !== null) {
       // Data-bound prop: write the instance's state path — the template prop
-      // keeps its expression and other items stay untouched.
+      // keeps its expression and other items stay untouched. A `/copy/*` edit
+      // while a NON-seed language is active is redirected to that language's
+      // i18n overlay (create-if-missing), leaving the seed copy intact.
       next = structuredClone(displayedSpec);
       next.state = next.state ?? {};
-      setByPath(next.state, dataPath, value);
+      setByPath(
+        next.state,
+        copyWriteTarget(dataPath, contentLang, seedLang),
+        value,
+      );
     } else {
       next = replaceProp(displayedSpec, selectedKey, prop, value);
     }
@@ -921,109 +1043,129 @@ export function Playground({ initialRef }: PlaygroundProps) {
     );
   }
 
+  // Content-language toggle: only shown when the spec has translatable copy.
+  // Copy edits redirect per copyWriteTarget; add/translate are model steers;
+  // revert drops the active overlay layer back to the seed.
+  const contentLangProps: ContentLanguageSwitcherProps | null = hasCopy
+    ? {
+        languages,
+        value: contentLang,
+        seed: seedLang,
+        missingByTag,
+        onChange: (tag: string) => {
+          setLangOverride(tag);
+          writeContentLang(activeEntry?.id ?? null, tag);
+        },
+        onAddLanguage: handleAddLanguage,
+        onTranslateMissing: handleTranslateMissing,
+        onRevertToSource: handleRevertToSource,
+        canRevert,
+      }
+    : null;
+
   return (
-    <StateProvider initialState={displayedSpec?.state ?? {}}>
-      <VisibilityProvider>
-        <ActionProvider handlers={{}}>
-          <ValidationProvider customFunctions={{}}>
-            <div
-              data-canvas
-              className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row"
-            >
-              {/* Stage: holds all chrome and the canvas; shrinks when the
+    <JSONUIProvider
+      registry={registry}
+      initialState={canvasState}
+      handlers={{}}
+      validationFunctions={{}}
+      directives={appDirectives}
+    >
+      <div
+        data-canvas
+        className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row"
+      >
+        {/* Stage: holds all chrome and the canvas; shrinks when the
                   edit panel docks (right on desktop, bottom on mobile) so the
                   rail, prompt bar, and top bar are never covered. `isolate`
                   scopes the overlays' z-[1000] to this stage: x-ray/pick
                   decorations beat all canvas chrome (top bar, rail, prompt
                   bar) while dialogs outside the stage (z-50) still open
                   above them. */}
-              <div className="relative isolate min-h-0 min-w-0 flex-1">
-                <TopBar
-                  historyCount={history.length}
-                  onOpenHistory={() => setHistoryOpen(true)}
-                  entryId={activeEntry?.id ?? null}
-                  entryName={activeEntry?.name ?? null}
-                  entrySlug={activeEntry?.slug ?? null}
-                  takenSlugs={takenSlugs}
-                  onRename={handleRename}
-                />
-                {/* Landing only: while editing an entry the CTA would just
+        <div className="relative isolate min-h-0 min-w-0 flex-1">
+          <TopBar
+            historyCount={history.length}
+            onOpenHistory={() => setHistoryOpen(true)}
+            entryId={activeEntry?.id ?? null}
+            entryName={activeEntry?.name ?? null}
+            entrySlug={activeEntry?.slug ?? null}
+            takenSlugs={takenSlugs}
+            onRename={handleRename}
+            contentLang={contentLangProps}
+          />
+          {/* Landing only: while editing an entry the CTA would just
                     overlay the canvas the user is working on. */}
-                {!activeEntry && <SignupBanner />}
+          {!activeEntry && <SignupBanner />}
 
-                {displayedSpec && !isStreaming && (
-                  <ToolRail
-                    pickMode={pickMode}
-                    dndMode={dndMode}
-                    xrayMode={xrayMode}
-                    onTogglePick={handleTogglePick}
-                    onToggleDnd={() => setDndMode((prev) => !prev)}
-                    onToggleXray={() => setXrayMode((prev) => !prev)}
-                    onClear={handleClearCurrent}
-                  />
-                )}
+          {displayedSpec && !isStreaming && (
+            <ToolRail
+              pickMode={pickMode}
+              dndMode={dndMode}
+              xrayMode={xrayMode}
+              onTogglePick={handleTogglePick}
+              onToggleDnd={() => setDndMode((prev) => !prev)}
+              onToggleXray={() => setXrayMode((prev) => !prev)}
+              onClear={handleClearCurrent}
+            />
+          )}
 
-                <div
-                  ref={containerRef}
-                  className={`absolute inset-0 overflow-y-auto ${
-                    pickMode ? "jr-pick-enabled" : ""
-                  } ${xrayMode ? "jr-xray" : ""} ${
-                    dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
-                  }`}
-                >
-                  <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
-                    {!displayedSpec && !isStreaming && (
-                      <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
-                        <div className="w-full max-w-xl space-y-3">
-                          <p className="text-balance text-muted-foreground">
-                            {t("playground.subtitle")}
-                          </p>
-                          <p className="text-sm text-muted-foreground/80">
-                            {t("playground.emptyState")}
-                          </p>
-                        </div>
-                        <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
-                          {EXAMPLE_PROMPT_LIST.map((example) => (
-                            <Button
-                              key={example}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="max-w-full h-auto whitespace-normal break-words py-1.5"
-                              onClick={() => handleGenerate(example)}
-                            >
-                              {example}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <Renderer
-                      spec={renderSpec}
-                      registry={registry}
-                      loading={isStreaming}
-                    />
-                    {/* Before PickOverlay: both attach capture listeners on the
-              container, and listener order follows render order. */}
-                    <CanvasDnd
-                      enabled={
-                        dndMode && displayedSpec !== null && !isStreaming
-                      }
-                      containerRef={containerRef}
-                      spec={displayedSpec}
-                      onMoveTo={handleMoveTo}
-                    />
-                    <HoverBadge
-                      enabled={
-                        pickMode && !isStreaming && displayedSpec !== null
-                      }
-                      containerRef={containerRef}
-                      spec={displayedSpec}
-                    />
+          <div
+            ref={containerRef}
+            className={`absolute inset-0 overflow-y-auto ${
+              pickMode ? "jr-pick-enabled" : ""
+            } ${xrayMode ? "jr-xray" : ""} ${
+              dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
+            }`}
+          >
+            <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
+              {!displayedSpec && !isStreaming && (
+                <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+                  <div className="w-full max-w-xl space-y-3">
+                    <p className="text-balance text-muted-foreground">
+                      {t("playground.subtitle")}
+                    </p>
+                    <p className="text-sm text-muted-foreground/80">
+                      {t("playground.emptyState")}
+                    </p>
+                  </div>
+                  <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
+                    {EXAMPLE_PROMPT_LIST.map((example) => (
+                      <Button
+                        key={example}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="max-w-full h-auto whitespace-normal break-words py-1.5"
+                        onClick={() => handleGenerate(example)}
+                      >
+                        {example}
+                      </Button>
+                    ))}
                   </div>
                 </div>
+              )}
+              <Renderer
+                spec={renderSpec}
+                registry={registry}
+                loading={isStreaming}
+              />
+              {/* Before PickOverlay: both attach capture listeners on the
+              container, and listener order follows render order. */}
+              <CanvasDnd
+                enabled={dndMode && displayedSpec !== null && !isStreaming}
+                containerRef={containerRef}
+                spec={displayedSpec}
+                onMoveTo={handleMoveTo}
+              />
+              <HoverBadge
+                enabled={pickMode && !isStreaming && displayedSpec !== null}
+                containerRef={containerRef}
+                spec={displayedSpec}
+              />
+            </div>
+          </div>
 
-                {/* Both overlays mount after the scroll container, not inside
+          {/* Both overlays mount after the scroll container, not inside
               it: absolutely-positioned decorations must not join the
               scroller's scrollable overflow (the selection ring used to
               inflate scrollWidth — a phantom horizontal scrollbar). Each is
@@ -1031,158 +1173,155 @@ export function Playground({ initialRef }: PlaygroundProps) {
               to the canvas box; trackers follow viewport rects, so scroll
               tracking is unchanged. XrayLabels renders under PickOverlay so
               the selection ring wins when both modes are on. */}
-                <XrayLabels
-                  enabled={xrayMode && !isStreaming && displayedSpec !== null}
-                  containerRef={containerRef}
-                  spec={displayedSpec}
-                  pickArmed={pickMode && !isStreaming && displayedSpec !== null}
-                  scopeIds={scopeIds}
-                  onSelect={handlePick}
-                  onToggleScope={handleToggleScope}
-                  onRemoveScope={removeScope}
-                />
-                <PickOverlay
-                  enabled={pickMode && !isStreaming && displayedSpec !== null}
-                  containerRef={containerRef}
-                  spec={displayedSpec}
-                  selectedKey={effectiveKey}
-                  selectedChain={selectedChain}
-                  onSelect={handlePick}
-                  onActivate={isStreaming ? undefined : handleActivate}
-                  onToggleScope={handleToggleScope}
-                  scopeTargets={scopedTargets.map((target) => ({
-                    ...target,
-                    id: scopeTargetId(target),
-                    count:
-                      (target.chain?.length ?? 0) === 0 && displayedSpec
-                        ? countKeyInstances(displayedSpec, target.key)
-                        : undefined,
-                  }))}
-                  scopeLoading={isStreaming}
-                />
+          <XrayLabels
+            enabled={xrayMode && !isStreaming && displayedSpec !== null}
+            containerRef={containerRef}
+            spec={displayedSpec}
+            pickArmed={pickMode && !isStreaming && displayedSpec !== null}
+            scopeIds={scopeIds}
+            onSelect={handlePick}
+            onToggleScope={handleToggleScope}
+            onRemoveScope={removeScope}
+          />
+          <PickOverlay
+            enabled={pickMode && !isStreaming && displayedSpec !== null}
+            containerRef={containerRef}
+            spec={displayedSpec}
+            selectedKey={effectiveKey}
+            selectedChain={selectedChain}
+            onSelect={handlePick}
+            onActivate={isStreaming ? undefined : handleActivate}
+            onToggleScope={handleToggleScope}
+            scopeTargets={scopedTargets.map((target) => ({
+              ...target,
+              id: scopeTargetId(target),
+              count:
+                (target.chain?.length ?? 0) === 0 && displayedSpec
+                  ? countKeyInstances(displayedSpec, target.key)
+                  : undefined,
+            }))}
+            scopeLoading={isStreaming}
+          />
 
-                {failure && (
-                  <FailureDialog
-                    kind={failure.kind}
-                    onOpenChange={handleFailureOpenChange}
-                    onConfirm={handleFailureConfirm}
-                  />
-                )}
+          {failure && (
+            <FailureDialog
+              kind={failure.kind}
+              onOpenChange={handleFailureOpenChange}
+              onConfirm={handleFailureConfirm}
+            />
+          )}
 
-                <PromptBar
-                  isStreaming={isStreaming}
-                  hasSpec={displayedSpec !== null}
-                  onSend={handleSend}
-                  scope={scopedTargets.map((target) => {
-                    const type =
-                      displayedSpec?.elements[target.key]?.type ?? target.key;
-                    const isTemplate = (target.chain?.length ?? 0) === 0;
-                    const count = displayedSpec
-                      ? countKeyInstances(displayedSpec, target.key)
-                      : 1;
-                    const instance =
-                      !isTemplate && displayedSpec
-                        ? resolveInstanceScope(
-                            displayedSpec,
-                            displayedSpec.state ?? {},
-                            target.chain ?? [],
-                          )
-                        : null;
-                    return {
-                      id: scopeTargetId(target),
+          <PromptBar
+            isStreaming={isStreaming}
+            hasSpec={displayedSpec !== null}
+            onSend={handleSend}
+            scope={scopedTargets.map((target) => {
+              const type =
+                displayedSpec?.elements[target.key]?.type ?? target.key;
+              const isTemplate = (target.chain?.length ?? 0) === 0;
+              const count = displayedSpec
+                ? countKeyInstances(displayedSpec, target.key)
+                : 1;
+              const instance =
+                !isTemplate && displayedSpec
+                  ? resolveInstanceScope(
+                      displayedSpec,
+                      displayedSpec.state ?? {},
+                      target.chain ?? [],
+                    )
+                  : null;
+              return {
+                id: scopeTargetId(target),
+                key: target.key,
+                type,
+                detail:
+                  instance && displayedSpec
+                    ? describeInstanceText(
+                        displayedSpec,
+                        target.key,
+                        target.chain ?? [],
+                      )
+                    : null,
+                instanceIndex: instance ? instance.itemIndex + 1 : null,
+                label: instance
+                  ? t("playground.scopeChipInstance", {
                       key: target.key,
                       type,
-                      detail:
-                        instance && displayedSpec
-                          ? describeInstanceText(
-                              displayedSpec,
-                              target.key,
-                              target.chain ?? [],
-                            )
-                          : null,
-                      instanceIndex: instance ? instance.itemIndex + 1 : null,
-                      label: instance
-                        ? t("playground.scopeChipInstance", {
-                            key: target.key,
-                            type,
-                            index: instance.itemIndex + 1,
-                            count: instance.count,
-                          })
-                        : isTemplate && count > 1
-                          ? t("playground.scopeChipAll", {
-                              key: target.key,
-                              type,
-                              count,
-                            })
-                          : t("playground.scopeChip", {
-                              key: target.key,
-                              type,
-                            }),
-                    };
-                  })}
-                  onRemoveScope={(id) =>
-                    setScopeTargets((prev) =>
-                      prev.filter((target) => scopeTargetId(target) !== id),
-                    )
-                  }
-                />
-              </div>
+                      index: instance.itemIndex + 1,
+                      count: instance.count,
+                    })
+                  : isTemplate && count > 1
+                    ? t("playground.scopeChipAll", {
+                        key: target.key,
+                        type,
+                        count,
+                      })
+                    : t("playground.scopeChip", {
+                        key: target.key,
+                        type,
+                      }),
+              };
+            })}
+            onRemoveScope={(id) =>
+              setScopeTargets((prev) =>
+                prev.filter((target) => scopeTargetId(target) !== id),
+              )
+            }
+          />
+        </div>
 
-              {panelTarget && (
-                <EditPanel
-                  closing={panelClosing}
-                  onExited={clearSelection}
-                  spec={panelTarget.spec}
-                  elementKey={panelTarget.elementKey}
-                  element={panelTarget.element}
-                  ancestors={ancestors}
-                  tab={panelTab}
-                  onTabChange={setPanelTab}
-                  canUndo={activeEntry !== null && canUndo(activeEntry)}
-                  canRedo={activeEntry !== null && canRedo(activeEntry)}
-                  onUndo={handleUndo}
-                  onRedo={handleRedo}
-                  onClose={beginPanelClose}
-                  onSelectKey={handleSelectKey}
-                  instanceChain={selectedChain}
-                  onPropChange={handlePropChange}
-                  onAction={handleAction}
-                  onInsert={handleInsert}
-                  onRemove={handleRemove}
-                  onGroup={handleGroup}
-                  onUnwrap={handleUnwrap}
-                  onMove={handleMove}
-                  onDuplicate={handleDuplicate}
-                  inPromptScope={selectionInScope}
-                  onTogglePromptScope={() => {
-                    if (effectiveKey) {
-                      handleToggleScope(effectiveKey, selectedChain, false);
-                    }
-                  }}
-                  promptScopeInstanceCount={selectedInstanceCount}
-                  inPromptScopeTemplate={templateInScope}
-                  onTogglePromptScopeTemplate={() => {
-                    if (effectiveKey) {
-                      handleToggleScope(effectiveKey, null, true);
-                    }
-                  }}
-                />
-              )}
+        {panelTarget && (
+          <EditPanel
+            closing={panelClosing}
+            onExited={clearSelection}
+            spec={panelTarget.spec}
+            elementKey={panelTarget.elementKey}
+            element={panelTarget.element}
+            ancestors={ancestors}
+            tab={panelTab}
+            onTabChange={setPanelTab}
+            canUndo={activeEntry !== null && canUndo(activeEntry)}
+            canRedo={activeEntry !== null && canRedo(activeEntry)}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClose={beginPanelClose}
+            onSelectKey={handleSelectKey}
+            instanceChain={selectedChain}
+            onPropChange={handlePropChange}
+            onAction={handleAction}
+            onInsert={handleInsert}
+            onRemove={handleRemove}
+            onGroup={handleGroup}
+            onUnwrap={handleUnwrap}
+            onMove={handleMove}
+            onDuplicate={handleDuplicate}
+            inPromptScope={selectionInScope}
+            onTogglePromptScope={() => {
+              if (effectiveKey) {
+                handleToggleScope(effectiveKey, selectedChain, false);
+              }
+            }}
+            promptScopeInstanceCount={selectedInstanceCount}
+            inPromptScopeTemplate={templateInScope}
+            onTogglePromptScopeTemplate={() => {
+              if (effectiveKey) {
+                handleToggleScope(effectiveKey, null, true);
+              }
+            }}
+          />
+        )}
 
-              <HistoryDrawer
-                open={historyOpen}
-                onOpenChange={setHistoryOpen}
-                entries={history}
-                activeId={activeEntry?.id ?? null}
-                onSelect={handleSelect}
-                onDelete={handleDelete}
-                onClear={handleClear}
-                onImportJson={handleImportSpec}
-              />
-            </div>
-          </ValidationProvider>
-        </ActionProvider>
-      </VisibilityProvider>
-    </StateProvider>
+        <HistoryDrawer
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          entries={history}
+          activeId={activeEntry?.id ?? null}
+          onSelect={handleSelect}
+          onDelete={handleDelete}
+          onClear={handleClear}
+          onImportJson={handleImportSpec}
+        />
+      </div>
+    </JSONUIProvider>
   );
 }

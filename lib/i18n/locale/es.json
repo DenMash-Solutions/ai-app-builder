@@ -257,6 +257,15 @@
       "colorize": "Mejora el tratamiento del color de este elemento para que encaje en una paleta coherente.",
       "distill": "Condensa este elemento a su mensaje esencial — texto más corto y directo.",
       "layout": "Mejora la composición, el espaciado y la alineación de este elemento para lograr más equilibrio."
+    },
+    "contentLang": {
+      "label": "Contenido",
+      "title": "Idioma del contenido",
+      "add": "Añadir idioma…",
+      "translateMissing": "Traducir faltantes",
+      "missingBadge": "{count} sin traducir",
+      "revert": "Revertir al original",
+      "source": "Original"
     }
   },
   "historyDrawer": {

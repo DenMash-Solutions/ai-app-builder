@@ -2,21 +2,18 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useParams } from "next/navigation";
-import { useTranslations } from "next-intl";
-import {
-  ActionProvider,
-  Renderer,
-  StateProvider,
-  ValidationProvider,
-  VisibilityProvider,
-} from "@json-render/react";
+import { useLocale, useTranslations } from "next-intl";
+import { JSONUIProvider, Renderer } from "@json-render/react";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { Link } from "@/lib/i18n/navigation";
 import { getHistory, subscribeHistory } from "@/lib/history";
+import { mergeI18n } from "@/lib/i18n/spec-languages";
 import { registry } from "@/lib/playground/registry";
+import { appDirectives } from "@/lib/computed/directives";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
+import { localizeSpec } from "@/lib/specs/localize";
 import type { HistoryEntry } from "@/lib/history";
 import type { LivePageData } from "@/lib/publish/featured";
 
@@ -32,11 +29,15 @@ import type { LivePageData } from "@/lib/publish/featured";
  */
 export default function PreviewPage({
   published,
+  bakedCss,
 }: {
   published: LivePageData | null;
+  /** Publish-baked stylesheet for the published spec — kills the FOUC. */
+  bakedCss?: string | null;
 }) {
   const { slug } = useParams<{ slug: string }>();
   const t = useTranslations();
+  const locale = useLocale();
   const entry = useSyncExternalStore<HistoryEntry | null | undefined>(
     subscribeHistory,
     () => getHistory().find((candidate) => candidate.slug === slug) ?? null,
@@ -95,27 +96,32 @@ export default function PreviewPage({
   const spec = entry?.spec ?? published?.spec;
   if (!spec) return null;
 
+  // Route locale = content language (same merge as the live page).
+  const state = mergeI18n(spec.state, locale) ?? {};
+  const localized = localizeSpec(spec, state);
+
   return (
-    <StateProvider initialState={spec.state ?? {}}>
-      <VisibilityProvider>
-        <ActionProvider handlers={{}}>
-          <ValidationProvider customFunctions={{}}>
-            {/* Bare surface: no background, chrome, or layout padding — the
+    <JSONUIProvider
+      registry={registry}
+      initialState={state}
+      handlers={{}}
+      validationFunctions={{}}
+      directives={appDirectives}
+    >
+      {/* Bare surface: no background, chrome, or layout padding — the
                 spec renders as-is; only the floating pill sits on top. */}
-            <main className="relative w-full">
-              <Renderer spec={fixupScrollLayout(spec)} registry={registry} />
-              <Button asChild className="fixed bottom-4 right-4 z-50 shadow-lg">
-                {/* The owner's local copy opens in their playground; a purely
+      <main className="relative w-full">
+        {bakedCss ? <style>{bakedCss}</style> : null}
+        <Renderer spec={fixupScrollLayout(localized)} registry={registry} />
+        <Button asChild className="fixed bottom-4 right-4 z-50 shadow-lg">
+          {/* The owner's local copy opens in their playground; a purely
                     public visit lands on the playground landing instead. */}
-                <Link href={entry ? `/ui/${entry.slug}` : "/ui"}>
-                  <ArrowUpRight aria-hidden="true" className="size-4" />
-                  {t("preview.openPlayground")}
-                </Link>
-              </Button>
-            </main>
-          </ValidationProvider>
-        </ActionProvider>
-      </VisibilityProvider>
-    </StateProvider>
+          <Link href={entry ? `/ui/${entry.slug}` : "/ui"}>
+            <ArrowUpRight aria-hidden="true" className="size-4" />
+            {t("preview.openPlayground")}
+          </Link>
+        </Button>
+      </main>
+    </JSONUIProvider>
   );
 }

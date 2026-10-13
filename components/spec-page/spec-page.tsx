@@ -1,13 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  ActionProvider,
-  Renderer,
-  StateProvider,
-  ValidationProvider,
-  VisibilityProvider,
-} from "@json-render/react";
+import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 import { useLocale, useTranslations } from "next-intl";
 import { PenLine } from "lucide-react";
@@ -17,6 +11,7 @@ import { addEntry, createEntry } from "@/lib/history";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { localizeSpec } from "@/lib/specs/localize";
 import { registry } from "@/lib/playground/registry";
+import { appDirectives } from "@/lib/computed/directives";
 
 /**
  * Imports the page's committed spec into the local playground as an editable
@@ -85,23 +80,23 @@ export function SpecPage({
   useRuntimeClasses(localized);
 
   return (
-    <StateProvider initialState={initialState}>
-      <VisibilityProvider>
-        <ActionProvider handlers={{}}>
-          <ValidationProvider customFunctions={{}}>
-            {main ? (
-              <main className="relative w-full">
-                <Renderer spec={localized} registry={registry} />
-              </main>
-            ) : (
-              <div className="relative w-full">
-                <Renderer spec={localized} registry={registry} />
-              </div>
-            )}
-            {children}
-          </ValidationProvider>
-        </ActionProvider>
-      </VisibilityProvider>
-    </StateProvider>
+    <JSONUIProvider
+      registry={registry}
+      initialState={initialState}
+      handlers={{}}
+      validationFunctions={{}}
+      directives={appDirectives}
+    >
+      {main ? (
+        <main className="relative w-full">
+          <Renderer spec={localized} registry={registry} />
+        </main>
+      ) : (
+        <div className="relative w-full">
+          <Renderer spec={localized} registry={registry} />
+        </div>
+      )}
+      {children}
+    </JSONUIProvider>
   );
 }

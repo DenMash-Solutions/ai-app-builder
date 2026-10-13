@@ -257,6 +257,15 @@
       "colorize": "Improve the color treatment of this element so it fits a cohesive palette.",
       "distill": "Condense this element to its essential message — shorter, tighter copy.",
       "layout": "Improve the layout, spacing, and alignment around this element for better balance."
+    },
+    "contentLang": {
+      "label": "Content",
+      "title": "Content language",
+      "add": "Add language…",
+      "translateMissing": "Translate missing",
+      "missingBadge": "{count} untranslated",
+      "revert": "Revert to source",
+      "source": "Source"
     }
   },
   "historyDrawer": {

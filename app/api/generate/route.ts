@@ -2,6 +2,8 @@ import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
 import { playgroundCatalog } from "@/lib/playground/catalog";
+import { appDirectives } from "@/lib/computed/directives";
+import { i18nRules } from "@/lib/playground/i18n-rules";
 import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
 import { validatePatchText } from "@/lib/playground/patch-text";
 import { STYLING_RULES } from "@/lib/playground/styling-rules";
@@ -24,7 +26,7 @@ Additional rules:
 interface GenerateBody {
   prompt?: unknown;
   currentSpec?: unknown;
-  context?: { model?: unknown } | null;
+  context?: { model?: unknown; locale?: unknown } | null;
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -96,6 +98,8 @@ export async function POST(req: Request) {
   }
 
   const model = resolveModel(context?.model ?? process.env.GEMINI_MODEL);
+  const locale =
+    typeof context?.locale === "string" ? context.locale : undefined;
   const spec = isNonEmptySpec(currentSpec) ? currentSpec : null;
   const isEdit = spec !== null;
 
@@ -110,9 +114,14 @@ export async function POST(req: Request) {
 
   // Edit mode documents JSONL patch semantics; completeness rules only apply
   // to fresh generations (a patch never needs to "finish every section").
+  // The language contract applies to both — edits add copy too.
   const systemPrompt =
-    playgroundCatalog.prompt({ editModes: ["patch"] }) +
+    playgroundCatalog.prompt({
+      editModes: ["patch"],
+      directives: appDirectives,
+    }) +
     STYLING_RULES +
+    i18nRules(locale) +
     (isEdit ? "" : COMPLETENESS_RULES);
 
   const userPrompt = buildUserPrompt({

@@ -133,6 +133,24 @@ export const PUBLISH = {
 
 export const MOCK_ERROR_MESSAGE = "boom";
 
+/** Content-language toggle + in-spec translation (see lib/i18n). */
+export const I18N = {
+  seedTitle: "Hello",
+  seedSubtitle: "Welcome",
+  esTitle: "Hola",
+  edited: "Bonjour",
+  langTitle: en.editor.contentLang.title,
+  source: en.editor.contentLang.source,
+  missingBadge: (count: number): string =>
+    en.editor.contentLang.missingBadge.replace("{count}", String(count)),
+} as const;
+
+/** Device-local content-language keys (global default + per-entry override). */
+export const CONTENT_LANG = {
+  global: "genui-content-lang",
+  perEntry: (entryId: string): string => `genui-editor-lang:${entryId}`,
+} as const;
+
 export const STATE_MOCK = {
   title: "Seeded title",
   reveal: "Reveal",

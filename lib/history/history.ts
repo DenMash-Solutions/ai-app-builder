@@ -1,4 +1,5 @@
 import type { Spec } from "@json-render/core";
+import { i18nMissingTags } from "@/lib/i18n/spec-coverage";
 import { uniqueSlugFrom } from "@/lib/slug";
 
 export const STORAGE_KEY = "genui-playground-history";
@@ -34,6 +35,11 @@ export interface HistoryEntry {
   createdAt: number;
   /** Last local mutation — the LWW tie-breaker for account sync. */
   updatedAt: number;
+  /**
+   * Tags with missing translations at the last spec write — a non-blocking
+   * ingest flag (device-local: the `uis` sync rows don't carry it).
+   */
+  i18nMissing?: string[];
 }
 
 let cache: HistoryEntry[] | null = null;
@@ -58,6 +64,18 @@ function isValidEntry(value: unknown): value is HistoryEntry {
  * get a single revision from their stored spec — like git checking out a
  * branch with no history yet. Exported for unit tests.
  */
+/**
+ * Refresh the non-blocking translation flag after every spec write: the
+ * tags with missing translations, absent when coverage is complete.
+ */
+function withCoverageFlag(entry: HistoryEntry): HistoryEntry {
+  const missing = i18nMissingTags(entry.spec.state);
+  const next = { ...entry };
+  if (missing.length > 0) next.i18nMissing = missing;
+  else delete next.i18nMissing;
+  return next;
+}
+
 export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
   const name =
     typeof entry.name === "string" && entry.name.trim() !== ""
@@ -81,7 +99,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
       : [];
 
   if (revisions.length === 0) {
-    return {
+    return withCoverageFlag({
       ...entry,
       name,
       slug,
@@ -94,7 +112,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
         },
       ],
       head: 0,
-    };
+    });
   }
 
   const head = Math.min(
@@ -104,7 +122,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
     ),
     revisions.length - 1,
   );
-  return {
+  return withCoverageFlag({
     ...entry,
     name,
     slug,
@@ -112,7 +130,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
     revisions,
     head,
     spec: revisions[head].spec,
-  };
+  });
 }
 
 function readFromStorage(): HistoryEntry[] {
@@ -248,7 +266,12 @@ export function commitRevision(
     ...kept,
     { spec: snapshot, label, createdAt: Date.now() },
   ].slice(-MAX_REVISIONS);
-  return { ...entry, revisions, head: revisions.length - 1, spec: snapshot };
+  return withCoverageFlag({
+    ...entry,
+    revisions,
+    head: revisions.length - 1,
+    spec: snapshot,
+  });
 }
 
 /**
@@ -258,7 +281,11 @@ export function commitRevision(
 export function undoRevision(entry: HistoryEntry): HistoryEntry {
   if (!canUndo(entry)) return entry;
   const head = entry.head - 1;
-  return { ...entry, head, spec: entry.revisions[head].spec };
+  return withCoverageFlag({
+    ...entry,
+    head,
+    spec: entry.revisions[head].spec,
+  });
 }
 
 /**
@@ -268,7 +295,11 @@ export function undoRevision(entry: HistoryEntry): HistoryEntry {
 export function redoRevision(entry: HistoryEntry): HistoryEntry {
   if (!canRedo(entry)) return entry;
   const head = entry.head + 1;
-  return { ...entry, head, spec: entry.revisions[head].spec };
+  return withCoverageFlag({
+    ...entry,
+    head,
+    spec: entry.revisions[head].spec,
+  });
 }
 
 /** Whether an older revision can be checked out. */
@@ -285,7 +316,7 @@ export function createEntry(prompt: string, spec: Spec): HistoryEntry {
   const createdAt = Date.now();
   const snapshot = cloneSpec(spec);
   const id = crypto.randomUUID();
-  return {
+  return withCoverageFlag({
     id,
     name: prompt,
     slug: uniqueSlugFrom(prompt, id),
@@ -295,7 +326,7 @@ export function createEntry(prompt: string, spec: Spec): HistoryEntry {
     head: 0,
     createdAt,
     updatedAt: createdAt,
-  };
+  });
 }
 
 export type TranslateFn = (
