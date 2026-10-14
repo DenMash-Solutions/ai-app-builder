@@ -1,6 +1,6 @@
 # RLS Audit — Adversarial Review & Fixes — Implementation Plan
 
-**Status:** draft
+**Status:** implemented
 **Date:** 2026-10-12
 
 ## Goal
@@ -43,13 +43,15 @@ Formally review the Row Level Security policies written in the live-pages Phase 
 
 ## Verification
 
-- [ ] Full adversarial battery re-run post-fix: every item passes or is documented as intended behavior
-- [ ] Advisories reviewed, zero unresolved high/medium findings
-- [ ] `docs/security/rls-audit.md` committed with per-finding verification queries
-- [ ] `bun run test` (data-layer unit tests unaffected) + existing e2e green
+- [x] Full adversarial battery re-run post-fix: every item passes or is documented as intended behavior
+- [x] Advisories reviewed, zero unresolved high/medium findings
+- [x] `docs/security/rls-audit.md` committed with per-finding verification queries
+- [x] `bun run test` (data-layer unit tests unaffected) + existing e2e green
 
 ## Status log
 
 | Date | Event |
 | ---- | ----- |
 | 2026-10-12 | plan drafted |
+| 2026-10-13 | implemented — battery run as real roles; F1–F7 found & fixed (migration `rls_audit_hardening`: grants + ui-ownership `WITH CHECK`es + admin update fix; app fix in `lib/history/sync.ts` for the sync ownership takeover); post-fix re-run clean; report at `docs/security/rls-audit.md` |
+| 2026-10-13 | added `db/` setup scripts (full schema recreation: 6 ordered re-runnable SQL files + README); each validated against the live project in a rolled-back transaction |
