@@ -83,6 +83,14 @@ export default function PreviewPage({
   const state = mergeI18n(spec.state, locale) ?? {};
   const localized = localizeSpec(spec, state);
 
+  // Tab title from the resolved name. React 19 hoists this client-rendered
+  // <title> into <head> and lets it win over the layout's metadata title —
+  // declaratively, so it can't fight the head manager the way the old
+  // imperative `document.title` + head MutationObserver did (that observer
+  // watched <head> subtree and wrote back into it, wedging the main thread
+  // in a synchronous loop on some entries).
+  const entryName = entry?.name ?? published?.name;
+
   return (
     <JSONUIProvider
       registry={registry}
@@ -94,6 +102,7 @@ export default function PreviewPage({
       {/* Bare surface: no background, chrome, or layout padding — the
                 spec renders as-is; only the floating pill sits on top. */}
       <main className="relative w-full">
+        {entryName ? <title>{entryName}</title> : null}
         {bakedCss ? <style>{bakedCss}</style> : null}
         <Renderer spec={fixupScrollLayout(localized)} registry={registry} />
         <Button asChild className="fixed bottom-4 right-4 z-50 shadow-lg">
