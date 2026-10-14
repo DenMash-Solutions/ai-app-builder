@@ -34,13 +34,8 @@ test.describe("featured root", () => {
     await expect(
       page.getByRole(ROLE.heading, { name: UI.landingTitle }),
     ).toBeVisible();
-    await expect(
-      page.getByRole(ROLE.link, { name: UI.landingCta }),
-    ).toHaveAttribute("href", /\/en\/ui$/);
-    await expect(
-      page.getByRole(ROLE.link, { name: UI.landingSignin }),
-    ).toHaveAttribute("href", /\/en\/login$/);
-    // The pill into the playground is present…
+    // The way into the playground — the landing is spec-driven (featured
+    // page), so the floating pill is the entry point it guarantees.
     await expect(
       page.getByRole(ROLE.link, { name: UI.landingPill }),
     ).toHaveAttribute("href", /\/en\/ui$/);

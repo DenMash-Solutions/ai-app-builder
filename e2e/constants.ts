@@ -50,9 +50,7 @@ export const UI = {
   uiRouteNotFoundBack: en.uiRoute.notFound.back,
   editInPlayground: en.specPage.editInPlayground,
   // Featured landing copy — lives in the published spec (DB), not i18n.
-  landingTitle: "Describe your page. AI builds it.",
-  landingCta: "Create your page",
-  landingSignin: "Sign in",
+  landingTitle: "Describe it. See it. Perfect it.",
   landingPill: "Open in playground",
 } as const;
 
