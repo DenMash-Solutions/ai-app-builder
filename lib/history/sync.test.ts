@@ -221,4 +221,61 @@ describe("sync", () => {
     expect(state.upserts.flat()).toHaveLength(0);
     expect(getSyncStatus()).toBe("idle");
   });
+
+  test("pull never adopts rows owned by another account (admin see-all)", async () => {
+    // RLS audit F7: an admin's SELECT returns every uis row — without the
+    // owner guard the pull would copy a foreign draft into local history
+    // and the next push would re-upsert it with owner_id = admin.
+    const foreignId = "55555555-5555-4555-8555-555555555555";
+    const ownId = "66666666-6666-4666-8666-666666666666";
+    state.rows.push({
+      ...remoteRow(foreignId, { name: "victim draft" }),
+      owner_id: "someone-else",
+    });
+    state.rows.push(remoteRow(ownId, { name: "own draft" }));
+
+    const stop = startSync(makeClient(state), "owner-1", { debounceMs: 1 });
+    await sleep(20);
+
+    const ids = getHistory().map((entry) => entry.id);
+    expect(ids).toContain(ownId);
+    expect(ids).not.toContain(foreignId);
+    // …and nothing re-upserted the foreign row.
+    expect(
+      state.upserts.flat().find((row) => row.id === foreignId),
+    ).toBeUndefined();
+    stop();
+  });
+
+  test("push never overwrites or re-owns a row another account owns", async () => {
+    // Belt to pull's braces: a stale/polluted local copy of a foreign id
+    // must not upsert (owner_id would be stamped to us) …
+    const foreignId = "77777777-7777-4777-8777-777777777777";
+    addEntry({
+      ...createEntry("polluted local copy", makeSpec("v0")),
+      id: foreignId,
+      updatedAt: 9000, // newer than the remote — LWW alone would win
+    });
+    state.rows.push({
+      ...remoteRow(foreignId, { name: "victim draft" }),
+      owner_id: "someone-else",
+    });
+
+    const stop = startSync(makeClient(state), "owner-1", { debounceMs: 1 });
+    await sleep(20);
+
+    expect(
+      state.upserts.flat().find((row) => row.id === foreignId),
+    ).toBeUndefined();
+    const row = state.rows.find((r) => r.id === foreignId);
+    expect(row?.owner_id).toBe("someone-else");
+    expect(row?.name).toBe("victim draft");
+
+    // …and deleting the stale local copy must not delete the foreign row.
+    removeEntry(foreignId);
+    await sleep(30);
+    expect(state.deletes.flat()).not.toContain(foreignId);
+    expect(state.rows.find((r) => r.id === foreignId)).toBeDefined();
+    stop();
+  });
 });

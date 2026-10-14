@@ -58,6 +58,7 @@ function setStatus(next: SyncStatus): void {
 
 interface UisRow {
   id: string;
+  owner_id: string;
   name: string;
   slug: string;
   prompt: string | null;
@@ -72,6 +73,7 @@ function isUisRow(value: unknown): value is UisRow {
   const row = value as Partial<UisRow>;
   return (
     typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
     typeof row.name === "string" &&
     typeof row.slug === "string" &&
     typeof row.created_at === "string" &&
@@ -141,6 +143,13 @@ export function startSync(
     if (stopped || error) return;
     for (const raw of data ?? []) {
       if (!isUisRow(raw)) continue;
+      // Never adopt rows owned by another account. Admins see every `uis`
+      // row (`is_admin()` in the SELECT policy), so without this guard an
+      // admin's pull would copy other users' drafts into local history and
+      // the next push would re-upsert them with `owner_id = admin` — a
+      // silent ownership transfer (RLS can't block it: writing owner_id =
+      // self passes WITH CHECK for an admin). RLS audit finding F7.
+      if (raw.owner_id !== ownerId) continue;
       const remote = rowToEntry(raw);
       const local = getHistory().find((entry) => entry.id === remote.id);
       if (!local || remote.updatedAt > local.updatedAt) {
@@ -173,6 +182,9 @@ export function startSync(
     const payload = local
       .filter((entry) => {
         const remote = remoteById.get(entry.id);
+        // Belt to pull's braces: never overwrite a row another account
+        // owns — the upsert stamps owner_id = us and would steal it (F7).
+        if (remote && remote.owner_id !== ownerId) return false;
         // Missing remotely, or local write not older than the remote copy —
         // never clobber a fresher write from another device.
         return !remote || entry.updatedAt >= Date.parse(remote.updated_at);
@@ -188,7 +200,12 @@ export function startSync(
       }
     }
 
-    const removed = [...syncedIds].filter((id) => !localIds.has(id));
+    const removed = [...syncedIds].filter((id) => {
+      if (localIds.has(id)) return false;
+      // A stale local copy of another account's row must not delete it.
+      const remote = remoteById.get(id);
+      return !remote || remote.owner_id === ownerId;
+    });
     if (removed.length > 0) {
       const { error: deleteError } = await client
         .from("uis")
