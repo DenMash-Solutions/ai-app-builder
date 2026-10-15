@@ -2,6 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { validateSpec } from "@json-render/core";
 import type { Spec } from "@json-render/core";
 import { localizeSpec } from "./localize";
+import {
+  availableLanguages,
+  mergeI18n,
+  seedLocale,
+} from "../i18n/spec-languages";
 import loginSpecJson from "./login.spec.json";
 import signupSpecJson from "./signup.spec.json";
 import adminSpecJson from "./admin.spec.json";
@@ -54,5 +59,20 @@ describe("committed page specs", () => {
         password: { $state: "/auth/password" },
       },
     });
+  });
+
+  // Regression (plan: spec-languages, task 3.3): the committed pages keep
+  // their route-injected bundles — the renderer merge must be a no-op on
+  // specs that carry no `i18n` layers, and ingest normalization never sees
+  // them (committed specs are read at runtime, never ingested).
+  it("i18n machinery leaves committed specs untouched (no layers → identity merge)", () => {
+    for (const [, spec] of specs) {
+      for (const tag of ["en", "es", "fr"]) {
+        // Identity: without an `i18n` namespace the state object passes
+        // through unchanged — no copy bag is rebuilt or rewritten.
+        expect(mergeI18n(spec.state, tag)).toBe(spec.state);
+      }
+      expect(availableLanguages(spec)).toEqual([seedLocale(spec.state)]);
+    }
   });
 });
