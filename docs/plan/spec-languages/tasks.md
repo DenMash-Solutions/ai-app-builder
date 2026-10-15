@@ -32,7 +32,7 @@ Dependency order: 1 → (2, 3) → 4 → 5 → 6 → 7. Phases 2 and 3 are paral
 - [x] 4.1 Toggle in the playground top bar: options = `availableLanguages(spec)` + "Add language…"; canvas re-binds via `mergeI18n` (same helper as render)
 - [x] 4.2 Persistence: `genui-editor-lang:<entryId>` + global `genui-content-lang`; resolved synchronously while computing the initial state (no seed flash, no effect-based switch); stale tag (absent from spec) falls through the chain
 - [x] 4.3 Write redirection: state-data edits to `/copy/*` while a non-seed language is active write to `i18n.<tag>.<key>` (create-if-missing); "Revert to source" deletes the key → seed fallback
-- [x] 4.4 Untranslated-key badges (per-tag diff) + model actions: **Translate missing** (fill gaps in active language), **Add language…** (translate whole spec into a new tag)
+- [x] 4.4 Untranslated-key badges (per-tag diff) + model actions: **Translate missing** (fill gaps in active language), **Add language…** (searchable picker over all ISO 639-1 tags + common variants — names derived via `Intl.DisplayNames` in the app locale, free-text BCP-47 tag fallback restricted to real code shapes), and per-language **remove** (drops the overlay layer; seed never removable; confirm dialog also guards Revert to source; add streams with live feedback — pill spinner + loading/success/failure toasts) — user directives 2026-10-14, no demo pool
 - [x] 4.5 e2e: toggle survives reload (localStorage round-trip); edit-in-es mutates `i18n.es`, seed untouched (wrong-layer-write guard); stored tag absent → clean fallback
 
 ## Phase 5 — Static live rendering (bake)
