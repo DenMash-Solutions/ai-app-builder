@@ -133,7 +133,7 @@ export const I18N_UI_LINES: string[] = [
     value: {
       type: COMPONENT.card,
       props: {},
-      children: ["i18n-heading", "i18n-subtitle"],
+      children: ["i18n-heading", "i18n-subtitle", "lang-toggle"],
     },
   }),
   line({
@@ -151,6 +151,23 @@ export const I18N_UI_LINES: string[] = [
     value: {
       type: COMPONENT.text,
       props: { text: { $state: "/copy/subtitle" } },
+      children: [],
+    },
+  }),
+  // The design's own language switcher: its options must keep pace with the
+  // languages the spec carries (added on add-language, dropped on removal).
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("lang-toggle"),
+    value: {
+      type: COMPONENT.buttonGroup,
+      props: {
+        buttons: [
+          { label: "ES", value: "es" },
+          { label: "EN", value: "en" },
+        ],
+        selected: { $bindState: "/locale" },
+      },
       children: [],
     },
   }),

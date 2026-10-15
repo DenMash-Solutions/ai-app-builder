@@ -199,6 +199,8 @@ export const I18N = {
   },
   missingBadge: (count: number): string =>
     en.editor.contentLang.missingBadge.replace("{count}", String(count)),
+  /** Labels of the design's own switcher (uppercased tags, per fixture). */
+  switcher: { es: "ES", en: "EN", ptBr: "PT-BR" },
 } as const;
 
 /** Device-local content-language keys (global default + per-entry override). */
@@ -249,6 +251,7 @@ export const COMPONENT = {
   text: "Text",
   stack: "Stack",
   button: "Button",
+  buttonGroup: "ButtonGroup",
 } as const;
 
 export const PATCH_OP = {

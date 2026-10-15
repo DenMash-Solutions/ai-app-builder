@@ -89,12 +89,17 @@ import {
   updateEntry,
 } from "@/lib/history";
 import { languageName } from "@/lib/i18n/languages";
+import {
+  hasLanguageSwitcher,
+  withLanguageSwitcherOption,
+} from "@/lib/i18n/language-switcher";
 import { normalizeSpecCopy } from "@/lib/i18n/spec-normalize";
 import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import { AddLanguageDialog } from "@/components/playground/add-language-dialog";
 import {
+  SPEC_STATE_KEYS,
   availableLanguages,
   getCopy,
   mergeI18n,
@@ -324,7 +329,14 @@ export function Playground({ initialRef }: PlaygroundProps) {
         }
         return;
       }
-      const updated = commitRevision(entry, normalizedSpec, op.label);
+      // An add-language steer owns the design's own switcher too: the model
+      // was told to offer the new option — this fix-up guarantees it even if
+      // the stream missed the element change (pure, so it no-ops when the
+      // model already did it).
+      const specToCommit = pendingLang
+        ? withLanguageSwitcherOption(normalizedSpec, pendingLang, true)
+        : normalizedSpec;
+      const updated = commitRevision(entry, specToCommit, op.label);
       updateEntry(updated);
       if (pendingLang) {
         // The layer committed — resolve the loading toast and stop the
@@ -381,11 +393,34 @@ export function Playground({ initialRef }: PlaygroundProps) {
     [displayedSpec, activeEntry, langOverride],
   );
   // The canvas renders the merged language over the seed copy.
-  const canvasState = useMemo(
-    () =>
-      displayedSpec ? (mergeI18n(displayedSpec.state, contentLang) ?? {}) : {},
-    [displayedSpec, contentLang],
-  );
+  const canvasState = useMemo(() => {
+    if (!displayedSpec) return {};
+    const merged = mergeI18n(displayedSpec.state, contentLang) ?? {};
+    // The design's language switcher highlights state.locale — keep it on
+    // the language the canvas actually renders (the provider diffs this
+    // into its runtime state; the stored spec is never touched).
+    return SPEC_STATE_KEYS.locale in merged
+      ? { ...merged, [SPEC_STATE_KEYS.locale]: contentLang }
+      : merged;
+  }, [displayedSpec, contentLang]);
+  // The design's own switcher writes state.locale at runtime — treat that as
+  // a content-language selection so canvas and pill always agree (the pill's
+  // onChange does the same in reverse). Only real tags the spec carries
+  // count; every other state change is view noise and ignored.
+  const handleCanvasStateChange = (
+    changes: Array<{ path: string; value: unknown }>,
+  ) => {
+    const change = changes.find(
+      (candidate) =>
+        candidate.path.replace(/^\//, "") === SPEC_STATE_KEYS.locale,
+    );
+    if (!change) return;
+    const tag = change.value;
+    if (typeof tag !== "string" || tag === contentLang || isStreaming) return;
+    if (!languages.includes(tag)) return;
+    setLangOverride(tag);
+    writeContentLang(activeEntry?.id ?? null, tag);
+  };
   const missingByTag = useMemo(() => {
     const counts = new Map<string, number>();
     const report = validateSpecI18n(displayedSpec?.state);
@@ -711,8 +746,15 @@ export function Playground({ initialRef }: PlaygroundProps) {
     setLangOverride(tag);
     if (activeEntry) writeContentLang(activeEntry.id, tag);
     if (languages.includes(tag)) return;
+    // The design's own language switcher (a ButtonGroup of language codes)
+    // must offer the new language as well — the completion fix-up enforces
+    // it, but asking the model keeps the whole change in one revision.
+    const switcherHint =
+      displayedSpec && hasLanguageSwitcher(displayedSpec)
+        ? ` Also update the design's language-switcher ButtonGroup: append {"label": "${tag.toUpperCase()}", "value": "${tag}"} to its props.buttons, keeping every existing button exactly as it is.`
+        : "";
     const started = steerWholeSpec(
-      `Add a full translation of this spec into the language with BCP-47 tag "${tag}". For every key in state.copy, add a translated value under state.i18n.${tag} with the identical key, keeping every $state reference unchanged. Do not modify state.copy or any other language.`,
+      `Add a full translation of this spec into the language with BCP-47 tag "${tag}". For every key in state.copy, add a translated value under state.i18n.${tag} with the identical key, keeping every $state reference unchanged. Do not modify state.copy or any other language.${switcherHint}`,
       freeformRevisionLabel(`add ${tag}`),
     );
     if (!started) return;
@@ -743,9 +785,15 @@ export function Playground({ initialRef }: PlaygroundProps) {
       delete (i18n as Record<string, unknown>)[contentLang];
       if (Object.keys(i18n).length === 0 && next.state) delete next.state.i18n;
     }
+    // A language that no longer exists must not stay offered by the design's
+    // own switcher (the seed button never goes anywhere).
+    const synced =
+      contentLang === seedLang
+        ? next
+        : withLanguageSwitcherOption(next, contentLang, false);
     const updated = commitRevision(
       routeEntry,
-      next,
+      synced,
       freeformRevisionLabel(`revert ${contentLang}`),
     );
     updateEntry(updated);
@@ -753,7 +801,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   // Local op: remove a language entirely (any row, not just the active one).
   // The seed is never removable — it IS the copy; removing the active layer
-  // falls back to it.
+  // falls back to it. The design's own switcher loses the option with it.
   const handleRemoveLanguage = (tag: string) => {
     if (!displayedSpec || !routeEntry || isStreaming || tag === seedLang)
       return;
@@ -765,7 +813,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
     }
     const updated = commitRevision(
       routeEntry,
-      next,
+      withLanguageSwitcherOption(next, tag, false),
       freeformRevisionLabel(`remove ${tag}`),
     );
     updateEntry(updated);
@@ -1185,6 +1233,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
     <JSONUIProvider
       registry={registry}
       initialState={canvasState}
+      onStateChange={handleCanvasStateChange}
       handlers={{}}
       validationFunctions={{}}
       directives={appDirectives}
