@@ -44,6 +44,25 @@ test.describe("featured root", () => {
   });
 });
 
+test.describe("product smoke — DenMash", () => {
+  test("the real DenMash live page renders the intended production copy", async ({
+    page,
+  }) => {
+    // Decision (e2e-hardening): two independent contracts. The root test
+    // above holds for whatever is legitimately featured — the seeded fixture
+    // and denmash both carry the same headline, each written separately.
+    // This one pins the PRODUCT's public landing directly, so copy drift
+    // fails loudly here instead of setup + assertion passing in lockstep.
+    await page.goto("/en/denmash");
+    await expect(
+      page.getByRole(ROLE.heading, { name: UI.landingTitle }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole(ROLE.link, { name: UI.landingPill }),
+    ).toHaveAttribute("href", /\/en\/ui$/);
+  });
+});
+
 test.describe("spec-rendered auth pages", () => {
   test("login renders as a spec form and cross-links to signup", async ({
     page,

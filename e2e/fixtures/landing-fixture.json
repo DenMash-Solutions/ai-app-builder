@@ -1,0 +1,26 @@
+{
+  "root": "landing",
+  "elements": {
+    "landing": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "lg" },
+      "children": ["headline", "tagline"]
+    },
+    "headline": {
+      "type": "Heading",
+      "props": {
+        "text": "Describe it. See it. Perfect it.",
+        "level": "h1"
+      },
+      "children": []
+    },
+    "tagline": {
+      "type": "Text",
+      "props": {
+        "text": "Generate, refine, and take UIs live."
+      },
+      "children": []
+    }
+  },
+  "state": {}
+}

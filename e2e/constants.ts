@@ -11,6 +11,7 @@ export const ROLE = {
   navigation: "navigation",
   tab: "tab",
   combobox: "combobox",
+  menuitem: "menuitem",
   option: "option",
   textbox: "textbox",
 } as const;
@@ -127,6 +128,48 @@ export const BANNER = {
 
 export const PUBLISH = {
   signupCta: en.publish.signupCta,
+  slugLabel: en.publish.slugLabel,
+  checking: en.publish.checking,
+  available: en.publish.available,
+  submit: en.publish.submit,
+  update: en.publish.update,
+  unpublish: en.publish.unpublish,
+  unpublishDone: en.publish.unpublishDone,
+  liveBadge: en.publish.liveBadge,
+  /** Row affordances + toasts — name/URL interpolated for locators. */
+  goLive: (name: string): string => en.publish.goLive.replace("{name}", name),
+  manageLive: en.publish.manageLive,
+  openLive: (name: string): string =>
+    en.publish.openLive.replace("{name}", name),
+  published: (url: string): string =>
+    en.publish.published.replace("{url}", url),
+} as const;
+
+/** Admin console (feature/unfeature journey in the authed suite). */
+export const ADMIN = {
+  title: en.admin.title,
+  loading: en.admin.loading,
+  empty: en.admin.empty,
+  feature: en.admin.feature,
+  unfeature: en.admin.unfeature,
+  featuredBadge: en.admin.featuredBadge,
+  featuredToast: en.admin.featuredToast,
+  unfeaturedToast: en.admin.unfeaturedToast,
+  openLive: en.admin.openLive,
+} as const;
+
+/** Sync status dot — `role="status"` with the status text as aria-label. */
+export const SYNC = {
+  idle: en.sync.status.idle,
+  syncing: en.sync.status.syncing,
+  saved: en.sync.status.saved,
+  offline: en.sync.status.offline,
+} as const;
+
+/** First-login upload nudge (bottom-left pill — overlaps the account menu). */
+export const NUDGE = {
+  uploadNow: en.sync.uploadNow,
+  later: en.sync.later,
 } as const;
 
 export const MOCK_ERROR_MESSAGE = "boom";
@@ -283,6 +326,13 @@ export const SERVICE = {
 
 export const historyButtonName = (count?: number): string =>
   count === undefined ? ACTIONS.history : `${ACTIONS.history} ${count}`;
+
+/**
+ * The account-menu trigger is labelled `Account menu ({email})` — the
+ * authed suites address it by the dedicated identity's interpolated label.
+ */
+export const accountMenuLabel = (email: string): string =>
+  SHELL.accountMenu.replace("{email}", email);
 
 /**
  * Row select-button locator for a history entry. Anchored with `^` so it

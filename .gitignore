@@ -15,6 +15,7 @@
 /test-results/
 /playwright-report/
 e2e/msw/init.generated.js
+e2e/.state/
 
 # next.js
 /.next/
