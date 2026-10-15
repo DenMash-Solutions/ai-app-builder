@@ -88,10 +88,12 @@ import {
   undoRevision,
   updateEntry,
 } from "@/lib/history";
+import { languageName } from "@/lib/i18n/languages";
 import { normalizeSpecCopy } from "@/lib/i18n/spec-normalize";
 import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
+import { AddLanguageDialog } from "@/components/playground/add-language-dialog";
 import {
   availableLanguages,
   getCopy,
@@ -107,9 +109,6 @@ import {
 } from "@/lib/i18n/content-lang";
 import type { ContentLanguageSwitcherProps } from "@/components/content-language-switcher";
 
-/** Demo pool for "Add language…" — the next tag not already on the spec. */
-const ADD_LANG_POOL = ["fr", "de", "it", "pt"];
-
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
 
 const PENDING_OP_KINDS = {
@@ -124,6 +123,10 @@ type PendingOp =
       entryId: string;
       label: string;
     };
+
+// Add-language toast id per target tag — loading, success, and failure all
+// update the same toast entry instead of stacking.
+const langToastId = (tag: string): string => `add-lang-${tag}`;
 
 type RouteStatus = "pending" | "ready" | "missing";
 
@@ -184,6 +187,15 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // device-persisted choice, then the spec's seed — resolved synchronously in
   // the memo below (no effect round-trip, no seed flash).
   const [langOverride, setLangOverride] = useState<string | null>(null);
+  // "Add language…" collects the target tag in a dialog (any BCP-47 tag —
+  // the ask feeds the model steer, never a hardcoded demo pool).
+  const [addLangOpen, setAddLangOpen] = useState(false);
+  // Add-language feedback: the model steer takes seconds while the canvas
+  // still shows the seed (the layer doesn't exist yet) — track the in-flight
+  // tag so the switcher pill can spin and the toasts can announce progress,
+  // completion, and failure. Resolved in onComplete/onError and the failure
+  // dialog's retry/dismiss handlers.
+  const [pendingLang, setPendingLang] = useState<string | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab>(PANEL_TABS.properties);
   const pendingOpRef = useRef<PendingOp | null>(null);
   const [failure, setFailure] = useState<{
@@ -213,11 +225,28 @@ export function Playground({ initialRef }: PlaygroundProps) {
       if (!lastRequestRef.current?.context.previousSpec) clear();
       const message = streamError.message;
       if (RATE_LIMIT_PATTERN.test(message)) {
+        // The dialog owns feedback here, and its retry replays the add —
+        // drop the loading toast but keep pendingLang armed for the retry.
+        if (pendingLang) toast.dismiss(langToastId(pendingLang));
         setFailure({ kind: "quota", message });
         return;
       }
       if (SERVICE_UNAVAILABLE_PATTERN.test(message)) {
+        if (pendingLang) toast.dismiss(langToastId(pendingLang));
         setFailure({ kind: "service", message });
+        return;
+      }
+      if (pendingLang) {
+        // The in-flight op is the add (steers can't overlap) — announce the
+        // language-specific failure instead of the generic one.
+        const tag = pendingLang;
+        toast.error(
+          t("playground.langAddFailed", {
+            name: languageName(tag, locale) ?? tag,
+          }),
+          { id: langToastId(tag), description: message },
+        );
+        setPendingLang(null);
         return;
       }
       toast.error(t("playground.generationFailed"), {
@@ -254,6 +283,9 @@ export function Playground({ initialRef }: PlaygroundProps) {
         isNonEmptySpec(baseline) &&
         specsEqual(completedSpec, baseline)
       ) {
+        // Same treatment as the quota/service failures: the dialog speaks
+        // (and its retry replays the add), pendingLang stays armed.
+        if (pendingLang) toast.dismiss(langToastId(pendingLang));
         setFailure({ kind: "service", message: t("service.noChanges") });
         return;
       }
@@ -277,9 +309,35 @@ export function Playground({ initialRef }: PlaygroundProps) {
       const entry = getHistory().find(
         (candidate) => candidate.id === op.entryId,
       );
-      if (!entry) return;
+      if (!entry) {
+        // Revision target vanished mid-stream — the add can't land; fail
+        // loudly rather than leaving the loading toast and spinner hanging.
+        if (pendingLang) {
+          const tag = pendingLang;
+          toast.error(
+            t("playground.langAddFailed", {
+              name: languageName(tag, locale) ?? tag,
+            }),
+            { id: langToastId(tag) },
+          );
+          setPendingLang(null);
+        }
+        return;
+      }
       const updated = commitRevision(entry, normalizedSpec, op.label);
       updateEntry(updated);
+      if (pendingLang) {
+        // The layer committed — resolve the loading toast and stop the
+        // switcher's pill spinner.
+        const tag = pendingLang;
+        toast.success(
+          t("playground.langAdded", {
+            name: languageName(tag, locale) ?? tag,
+          }),
+          { id: langToastId(tag) },
+        );
+        setPendingLang(null);
+      }
     },
   });
 
@@ -631,9 +689,10 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   // Whole-spec steer (no element scope) — the translation actions patch every
   // language layer at once, so they must not be scoped to a selected element.
-  const steerWholeSpec = (instruction: string, label: string) => {
+  // Returns whether the stream actually started (guards may refuse it).
+  const steerWholeSpec = (instruction: string, label: string): boolean => {
     const base = displayedSpec;
-    if (!base?.root || !activeEntry || isStreaming) return;
+    if (!base?.root || !activeEntry || isStreaming) return false;
     pendingOpRef.current = {
       kind: PENDING_OP_KINDS.edit,
       entryId: activeEntry.id,
@@ -641,20 +700,30 @@ export function Playground({ initialRef }: PlaygroundProps) {
     };
     steerBaselineRef.current = structuredClone(base);
     sendNow(instruction, { previousSpec: structuredClone(base) });
+    return true;
   };
 
-  // Model action: translate the whole spec into a brand-new language, then
-  // switch the canvas to it once the layer lands.
-  const handleAddLanguage = () => {
-    const tag =
-      ADD_LANG_POOL.find((candidate) => !languages.includes(candidate)) ??
-      ADD_LANG_POOL[0];
+  // Model action: translate the whole spec into the language the user asked
+  // for (the dialog hands over the canonical tag), then switch the canvas to
+  // it once the layer lands. A tag the spec already carries just switches —
+  // nothing to translate.
+  const handleAddLanguage = (tag: string) => {
     setLangOverride(tag);
     if (activeEntry) writeContentLang(activeEntry.id, tag);
-    steerWholeSpec(
+    if (languages.includes(tag)) return;
+    const started = steerWholeSpec(
       `Add a full translation of this spec into the language with BCP-47 tag "${tag}". For every key in state.copy, add a translated value under state.i18n.${tag} with the identical key, keeping every $state reference unchanged. Do not modify state.copy or any other language.`,
       freeformRevisionLabel(`add ${tag}`),
     );
+    if (!started) return;
+    // Feedback for the seconds the model needs: a loading toast plus the
+    // switcher's pill spinner (pendingTag) until the completion/error
+    // handlers resolve it.
+    const name = languageName(tag, locale) ?? tag;
+    setPendingLang(tag);
+    toast.loading(t("playground.addingLang", { name }), {
+      id: langToastId(tag),
+    });
   };
 
   // Model action: fill the active language's missing translations only.
@@ -682,9 +751,42 @@ export function Playground({ initialRef }: PlaygroundProps) {
     updateEntry(updated);
   };
 
+  // Local op: remove a language entirely (any row, not just the active one).
+  // The seed is never removable — it IS the copy; removing the active layer
+  // falls back to it.
+  const handleRemoveLanguage = (tag: string) => {
+    if (!displayedSpec || !routeEntry || isStreaming || tag === seedLang)
+      return;
+    const next = structuredClone(displayedSpec);
+    const i18n = next.state?.i18n;
+    if (i18n && typeof i18n === "object") {
+      delete (i18n as Record<string, unknown>)[tag];
+      if (Object.keys(i18n).length === 0 && next.state) delete next.state.i18n;
+    }
+    const updated = commitRevision(
+      routeEntry,
+      next,
+      freeformRevisionLabel(`remove ${tag}`),
+    );
+    updateEntry(updated);
+    if (contentLang === tag) {
+      setLangOverride(seedLang);
+      if (activeEntry) writeContentLang(activeEntry.id, seedLang);
+    }
+  };
+
   const handleFailureConfirm = (model: ModelId) => {
     setModel(model);
     setFailure(null);
+    // A retried add re-arms its loading toast (the error path dismissed it).
+    if (pendingLang) {
+      toast.loading(
+        t("playground.addingLang", {
+          name: languageName(pendingLang, locale) ?? pendingLang,
+        }),
+        { id: langToastId(pendingLang) },
+      );
+    }
     const last = lastRequestRef.current;
     if (last) sendNow(last.prompt, last.context);
   };
@@ -692,9 +794,22 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // Dismissing without retrying surfaces the original failure as a toast.
   const handleFailureOpenChange = (open: boolean) => {
     if (!open) {
-      toast.error(t("playground.generationFailed"), {
-        description: failure?.message ?? "",
-      });
+      if (pendingLang) {
+        // The add will never land — its own failure copy, and the pending
+        // state clears so the pill spinner stops.
+        const tag = pendingLang;
+        toast.error(
+          t("playground.langAddFailed", {
+            name: languageName(tag, locale) ?? tag,
+          }),
+          { id: langToastId(tag), description: failure?.message ?? "" },
+        );
+        setPendingLang(null);
+      } else {
+        toast.error(t("playground.generationFailed"), {
+          description: failure?.message ?? "",
+        });
+      }
       setFailure(null);
     }
   };
@@ -1044,19 +1159,22 @@ export function Playground({ initialRef }: PlaygroundProps) {
   }
 
   // Content-language toggle: only shown when the spec has translatable copy.
-  // Copy edits redirect per copyWriteTarget; add/translate are model steers;
-  // revert drops the active overlay layer back to the seed.
+  // Copy edits redirect per copyWriteTarget; add/translate are model steers
+  // (add collects the target tag in a dialog); revert drops the active
+  // overlay layer back to the seed.
   const contentLangProps: ContentLanguageSwitcherProps | null = hasCopy
     ? {
         languages,
         value: contentLang,
         seed: seedLang,
+        pendingTag: pendingLang,
         missingByTag,
         onChange: (tag: string) => {
           setLangOverride(tag);
           writeContentLang(activeEntry?.id ?? null, tag);
         },
-        onAddLanguage: handleAddLanguage,
+        onAddLanguage: () => setAddLangOpen(true),
+        onRemoveLanguage: handleRemoveLanguage,
         onTranslateMissing: handleTranslateMissing,
         onRevertToSource: handleRevertToSource,
         canRevert,
@@ -1210,6 +1328,12 @@ export function Playground({ initialRef }: PlaygroundProps) {
               onConfirm={handleFailureConfirm}
             />
           )}
+
+          <AddLanguageDialog
+            open={addLangOpen}
+            onOpenChange={setAddLangOpen}
+            onAdd={handleAddLanguage}
+          />
 
           <PromptBar
             isStreaming={isStreaming}

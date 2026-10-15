@@ -1,11 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Languages, Plus, RotateCcw } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { Check, Languages, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { languageName } from "@/lib/i18n/languages";
 import {
   Popover,
   PopoverContent,
@@ -22,11 +32,18 @@ export interface ContentLanguageSwitcherProps {
   /** Per-tag untranslated-key count (only tags with gaps are listed). */
   missingByTag: ReadonlyMap<string, number>;
   onChange: (tag: string) => void;
-  /** Model action: translate the whole spec into a brand-new language. */
+  /** Opens the "Add language…" dialog — the tag the user names feeds the model action. */
   onAddLanguage: () => void;
   /** Model action: fill the active language's missing keys. */
   onTranslateMissing: () => void;
-  /** Model action: delete the active overlay key → seed fallback. */
+  /** Tag whose translation is streaming in — spins the pill until it lands. */
+  pendingTag?: string | null;
+  /** Local op: drop a non-seed language's overlay layer (fires only after
+   *  the user confirms in the remove dialog). */
+  onRemoveLanguage?: (tag: string) => void;
+  /** Model action: delete the active overlay key → seed fallback. Only used
+   *  when no remove handler is wired — otherwise "Revert to source" confirms
+   *  and removes through it (same destructive operation). */
   onRevertToSource: () => void;
   /** Whether the active (non-seed) language has an overlay to revert. */
   canRevert: boolean;
@@ -36,13 +53,10 @@ export interface ContentLanguageSwitcherProps {
 
 const ROW_CLASS = "h-9 w-full justify-start gap-2 rounded-md px-2";
 
-function languageLabel(tag: string): string {
-  try {
-    const display = new Intl.DisplayNames(undefined, { type: "language" });
-    return display.of(tag) ?? tag;
-  } catch {
-    return tag;
-  }
+// Language names follow the APP locale (en/es selector), not the browser's —
+// every name derives from the tag, nothing is stored or translated.
+function languageLabel(tag: string, locale: string): string {
+  return languageName(tag, locale) ?? tag;
 }
 
 export function ContentLanguageSwitcher({
@@ -53,13 +67,19 @@ export function ContentLanguageSwitcher({
   onChange,
   onAddLanguage,
   onTranslateMissing,
+  pendingTag,
+  onRemoveLanguage,
   onRevertToSource,
   canRevert,
   variant = "pill",
   className,
 }: ContentLanguageSwitcherProps) {
   const t = useTranslations();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
+  // A remove request awaits confirmation — dropping a language's whole
+  // translation layer must never happen on a mis-click.
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const missing = missingByTag.get(value) ?? 0;
 
   const select = (tag: string) => {
@@ -72,37 +92,60 @@ export function ContentLanguageSwitcher({
       {languages.map((tag) => {
         const count = missingByTag.get(tag) ?? 0;
         const active = tag === value;
+        const isSeed = tag === seed;
         return (
-          <button
+          <div
             key={tag}
-            type="button"
-            onClick={() => select(tag)}
             className={cn(
-              "flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-accent",
+              "flex h-9 items-center gap-1 rounded-md pl-2 pr-1 hover:bg-accent",
               active && "bg-accent",
             )}
           >
-            <span className="font-medium uppercase">{tag}</span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {languageLabel(tag)}
-            </span>
-            {count > 0 && (
-              <Badge
-                variant="secondary"
-                className="ml-auto shrink-0 tabular-nums"
-              >
-                {count}
-              </Badge>
-            )}
-            {active && count === 0 && (
-              <Check aria-hidden="true" className="ml-auto size-4 shrink-0" />
-            )}
-            {tag === seed && (
-              <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                {t("editor.contentLang.source")}
+            <button
+              type="button"
+              onClick={() => select(tag)}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
+            >
+              <span className="font-medium uppercase">{tag}</span>
+              <span className="min-w-0 truncate text-muted-foreground">
+                {languageLabel(tag, locale)}
               </span>
+              {count > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-auto shrink-0 tabular-nums"
+                >
+                  {count}
+                </Badge>
+              )}
+              {active && count === 0 && (
+                <Check aria-hidden="true" className="ml-auto size-4 shrink-0" />
+              )}
+              {isSeed && (
+                <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {t("editor.contentLang.source")}
+                </span>
+              )}
+            </button>
+            {!isSeed && onRemoveLanguage && (
+              <button
+                type="button"
+                aria-label={t("editor.contentLang.remove", {
+                  name: languageLabel(tag, locale),
+                })}
+                onClick={() => {
+                  // Close the popover first — the confirm dialog portals at
+                  // the root, and a dialog stacked on a popover fights for
+                  // focus.
+                  setOpen(false);
+                  setPendingRemove(tag);
+                }}
+                className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X aria-hidden="true" className="size-3.5" />
+              </button>
             )}
-          </button>
+          </div>
         );
       })}
 
@@ -143,7 +186,14 @@ export function ContentLanguageSwitcher({
           className={ROW_CLASS}
           onClick={() => {
             setOpen(false);
-            onRevertToSource();
+            if (onRemoveLanguage) {
+              // Reverting IS removing the active language's layer — route it
+              // through the same confirmation (falls back to the raw op only
+              // when no remove handler is wired).
+              setPendingRemove(value);
+            } else {
+              onRevertToSource();
+            }
           }}
         >
           <RotateCcw aria-hidden="true" className="size-4 shrink-0" />
@@ -153,64 +203,123 @@ export function ContentLanguageSwitcher({
     </div>
   );
 
+  // Destructive-action confirm (repo pattern: plain dialog + footer buttons,
+  // as in failure-dialog). Rendered for both variants.
+  const confirmDialog = (
+    <Dialog
+      open={pendingRemove !== null}
+      onOpenChange={(next) => {
+        if (!next) setPendingRemove(null);
+      }}
+    >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>
+            {t("editor.contentLang.removeConfirm.title", {
+              name: pendingRemove ? languageLabel(pendingRemove, locale) : "",
+            })}
+          </DialogTitle>
+          <DialogDescription>
+            {t("editor.contentLang.removeConfirm.description")}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              {t("editor.contentLang.removeConfirm.cancel")}
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              if (pendingRemove) onRemoveLanguage?.(pendingRemove);
+              setPendingRemove(null);
+            }}
+          >
+            {t("editor.contentLang.removeConfirm.confirm")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (variant === "row") {
     return (
+      <>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className={cn(ROW_CLASS, className)}
+            >
+              <Languages aria-hidden="true" className="size-4 shrink-0" />
+              <span>{t("editor.contentLang.label")}</span>
+              <span className="ml-auto max-w-24 truncate text-xs text-muted-foreground uppercase">
+                {value}
+              </span>
+              {pendingTag === value && (
+                <Loader2
+                  aria-hidden="true"
+                  className="ml-auto size-4 shrink-0 animate-spin"
+                />
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="start"
+            aria-label={t("editor.contentLang.title")}
+            className="w-72 p-1"
+          >
+            {rows}
+          </PopoverContent>
+        </Popover>
+        {confirmDialog}
+      </>
+    );
+  }
+
+  return (
+    <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
-            variant="ghost"
-            className={cn(ROW_CLASS, className)}
+            variant="outline"
+            size="sm"
+            aria-label={t("editor.contentLang.title")}
+            className={cn("h-7 gap-1.5 px-2 text-xs", className)}
           >
-            <Languages aria-hidden="true" className="size-4 shrink-0" />
-            <span>{t("editor.contentLang.label")}</span>
-            <span className="ml-auto max-w-24 truncate text-xs text-muted-foreground uppercase">
-              {value}
-            </span>
+            <Languages aria-hidden="true" className="size-3.5" />
+            <span className="max-w-20 truncate uppercase">{value}</span>
+            {pendingTag === value && (
+              <Loader2
+                aria-hidden="true"
+                className="size-3.5 shrink-0 animate-spin"
+              />
+            )}
+            {missing > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-0.5 shrink-0 tabular-nums"
+                title={t("editor.contentLang.missingBadge", { count: missing })}
+              >
+                {missing}
+              </Badge>
+            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          side="top"
-          align="start"
+          align="end"
           aria-label={t("editor.contentLang.title")}
           className="w-72 p-1"
         >
           {rows}
         </PopoverContent>
       </Popover>
-    );
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={t("editor.contentLang.title")}
-          className={cn("h-7 gap-1.5 px-2 text-xs", className)}
-        >
-          <Languages aria-hidden="true" className="size-3.5" />
-          <span className="max-w-20 truncate uppercase">{value}</span>
-          {missing > 0 && (
-            <Badge
-              variant="secondary"
-              className="ml-0.5 shrink-0 tabular-nums"
-              title={t("editor.contentLang.missingBadge", { count: missing })}
-            >
-              {missing}
-            </Badge>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        aria-label={t("editor.contentLang.title")}
-        className="w-72 p-1"
-      >
-        {rows}
-      </PopoverContent>
-    </Popover>
+      {confirmDialog}
+    </>
   );
 }

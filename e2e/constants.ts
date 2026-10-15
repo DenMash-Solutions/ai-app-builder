@@ -14,6 +14,7 @@ export const ROLE = {
   menuitem: "menuitem",
   option: "option",
   textbox: "textbox",
+  alert: "alert",
 } as const;
 
 /** shadcn/vaul internal slots — the history drawer and the JSON dialog are
@@ -180,8 +181,22 @@ export const I18N = {
   seedSubtitle: "Welcome",
   esTitle: "Hola",
   edited: "Bonjour",
+  ptTitle: "Olá",
   langTitle: en.editor.contentLang.title,
   source: en.editor.contentLang.source,
+  addLang: en.editor.contentLang.add,
+  addDialog: {
+    filterLabel: en.editor.contentLang.addDialog.label,
+    noMatch: en.editor.contentLang.addDialog.noMatch,
+  },
+  addedLang: (name: string): string =>
+    en.playground.langAdded.replace("{name}", name),
+  removeLang: (name: string): string =>
+    en.editor.contentLang.remove.replace("{name}", name),
+  removeConfirm: {
+    cancel: en.editor.contentLang.removeConfirm.cancel,
+    confirm: en.editor.contentLang.removeConfirm.confirm,
+  },
   missingBadge: (count: number): string =>
     en.editor.contentLang.missingBadge.replace("{count}", String(count)),
 } as const;

@@ -31,6 +31,9 @@
     "clear": "Clear",
     "history": "History",
     "generationFailed": "Generation failed",
+    "addingLang": "Adding {name}…",
+    "langAdded": "{name} is now in your design",
+    "langAddFailed": "Couldn't add {name}",
     "emptyState": "The generated UI will render here.",
     "openMenu": "Open menu",
     "importJson": "Import JSON",
@@ -262,9 +265,24 @@
       "label": "Content",
       "title": "Content language",
       "add": "Add language…",
+      "addDialog": {
+        "title": "Add a language",
+        "description": "Pick the language to translate your design into — you can also type any language name or code.",
+        "label": "Search languages",
+        "placeholder": "French, chino, pt-BR…",
+        "noMatch": "No match — try a language code, like yue for Cantonese",
+        "custom": "Add this language"
+      },
       "translateMissing": "Translate missing",
       "missingBadge": "{count} untranslated",
       "revert": "Revert to source",
+      "remove": "Remove {name}",
+      "removeConfirm": {
+        "title": "Remove {name}?",
+        "description": "Its translations are dropped from this design. You can add the language again at any time.",
+        "cancel": "Cancel",
+        "confirm": "Remove"
+      },
       "source": "Source"
     }
   },

@@ -31,6 +31,9 @@
     "clear": "Limpiar",
     "history": "Historial",
     "generationFailed": "Error al generar",
+    "addingLang": "Añadiendo {name}…",
+    "langAdded": "Ya tienes {name} en tu diseño",
+    "langAddFailed": "No se pudo añadir {name}",
     "emptyState": "La interfaz generada se mostrará aquí.",
     "openMenu": "Abrir menú",
     "importJson": "Importar JSON",
@@ -262,9 +265,24 @@
       "label": "Contenido",
       "title": "Idioma del contenido",
       "add": "Añadir idioma…",
+      "addDialog": {
+        "title": "Añadir un idioma",
+        "description": "Elige el idioma al que traducir tu diseño — también puedes escribir cualquier nombre o código de idioma.",
+        "label": "Buscar idiomas",
+        "placeholder": "French, chino, pt-BR…",
+        "noMatch": "Sin coincidencias — prueba con un código de idioma, como yue (cantonés)",
+        "custom": "Añadir este idioma"
+      },
       "translateMissing": "Traducir faltantes",
       "missingBadge": "{count} sin traducir",
       "revert": "Revertir al original",
+      "remove": "Quitar {name}",
+      "removeConfirm": {
+        "title": "¿Quitar {name}?",
+        "description": "Se eliminarán sus traducciones de este diseño. Puedes volver a añadir el idioma cuando quieras.",
+        "cancel": "Cancelar",
+        "confirm": "Quitar"
+      },
       "source": "Original"
     }
   },
