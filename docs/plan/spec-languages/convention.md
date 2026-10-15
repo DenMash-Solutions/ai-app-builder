@@ -39,7 +39,10 @@ Rules:
    is a convenience, not a limit.
 4. **App locale ≠ content language** — `state.locale` always keeps following
    app routing; the *viewed* language comes from the route (live pages) or
-   the editor toggle.
+   the editor toggle. On live/preview the renderer's **runtime**
+   `state.locale` is diffed to the route tag (stored spec untouched) so the
+   design's own switcher highlights — and, via `onStateChange`, *navigates*
+   to — the language actually served.
 
 ## Merge & fallback chain
 
@@ -66,10 +69,20 @@ toggle's option list and the bake's per-tag loop.
 | Surface | Language source | Merge point |
 | --- | --- | --- |
 | Live/featured (`/{locale}`, `/{locale}/{slug}`) | route locale | server, before render/bake lookup |
-| Preview route (`/ui/{ref}` preview pill target) | route locale | client, same helper |
+| Preview route (`/ui/{ref}` preview pill target) | route locale | client, same helper; its `state.locale` diff + `onStateChange` make the design's switcher navigate `/{tag}/{slug}` |
 | Playground canvas | editor content-language toggle | `initialState` of the canvas `StateProvider` |
 | Committed specs (login/signup/admin) | route-injected bundles | unchanged — route already injects locale-correct `copy` via `extraState` |
 | Published pages | baked per tag at publish | artifact lookup uses the same chain (exact → base → seed) |
+
+Serving routes (decision 11, 2026-10-15): **any canonical BCP-47 tag** may
+lead a content path. The proxy passes `/{tag}/{slug}` through untouched when
+`tag` is not an app locale (next-intl routing would rewrite it into a dead
+three-segment URL), the root `[locale]` layout 404s non-canonical tags, and
+the `request.ts` config reuses the default message catalog for content-only
+locales (their pages render baked content; only shell strings leak through).
+App surfaces (`/`, `/ui`, `/admin`, `/login`, `/signup`) sit behind a strict
+`hasLocale` gate in `(app)/layout` — `/fr/denmash` serves, `/fr/ui` is a 404.
+The preview pill pins its link to an app locale so it never points into one.
 
 ## Generation contract
 
