@@ -15,6 +15,8 @@ export interface AdminPageSummary {
   version: number;
   ownerEmail: string | null;
   featured: boolean;
+  /** Baked language tags (published artifact keys, sorted) — coverage badges. */
+  languages: string[];
 }
 
 export interface AdminSpecCopy {
@@ -57,11 +59,25 @@ export function buildAdminSpec(
         className: "flex-wrap items-center",
       },
       children: [
+        ...page.languages.map((_tag, index) => `${id}-lang-${index}`),
         `${id}-badge`,
         `${id}-live`,
         page.featured ? `${id}-unfeature` : `${id}-feature`,
       ],
     };
+    // Coverage badges: one per baked language tag (uppercase, like the
+    // design's own switcher — EN / ES / FR chips, always visible).
+    page.languages.forEach((tag, index) => {
+      cards[`${id}-lang-${index}`] = {
+        type: "Badge",
+        props: {
+          variant: "outline",
+          text: tag.toUpperCase(),
+          className: "uppercase",
+        },
+        children: [],
+      };
+    });
     // shadcn's Badge renders props.text (not spec children) — engine quirk.
     cards[`${id}-badge`] = {
       type: "Badge",

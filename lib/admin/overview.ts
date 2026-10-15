@@ -16,7 +16,10 @@ export async function loadOverview(client: unknown): Promise<AdminOverview> {
   const [pagesRes, profilesRes, settingsRes] = await Promise.all([
     db
       .from("published_pages")
-      .select("ui_id, name, slug, version, owner_id")
+      // `artifacts` rides along only to derive its keys (the coverage tag
+      // badges) — PostgREST can't project jsonb keys, and this projection is
+      // admin-only and loaded once per console visit.
+      .select("ui_id, name, slug, version, owner_id, artifacts")
       .order("published_at", { ascending: false }),
     db.from("profiles").select("id, email"),
     db
@@ -49,9 +52,22 @@ export async function loadOverview(client: unknown): Promise<AdminOverview> {
       version: Number(row.version ?? 1),
       ownerEmail: emailById.get(String(row.owner_id)) ?? null,
       featured: String(row.ui_id) === featuredUiId,
+      languages: artifactLanguages(row.artifacts),
     }));
 
   return { pages, featuredUiId };
+}
+
+/** Sorted language tags baked into a page's artifact map (bad shape → none). */
+function artifactLanguages(artifacts: unknown): string[] {
+  if (
+    typeof artifacts !== "object" ||
+    artifacts === null ||
+    Array.isArray(artifacts)
+  ) {
+    return [];
+  }
+  return Object.keys(artifacts).sort();
 }
 
 /** Feature/unfeature the root page (site_settings singleton, admin-only RLS). */

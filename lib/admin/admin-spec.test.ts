@@ -22,6 +22,7 @@ const PAGES: AdminPageSummary[] = [
     version: 2,
     ownerEmail: "mario@denmash.com",
     featured: true,
+    languages: ["en", "es", "fr"],
   },
   {
     uiId: "ui-b",
@@ -30,6 +31,7 @@ const PAGES: AdminPageSummary[] = [
     version: 1,
     ownerEmail: null,
     featured: false,
+    languages: ["en"],
   },
 ];
 
@@ -87,6 +89,28 @@ describe("buildAdminSpec", () => {
     expect(built.elements["ui-b-badge"].visible).toEqual({
       $state: "/admin/featured/ui-b",
     });
+  });
+
+  test("coverage badges list every baked tag, uppercase, ahead of the actions", () => {
+    expect(built.elements["ui-a-row"].children).toEqual([
+      "ui-a-lang-0",
+      "ui-a-lang-1",
+      "ui-a-lang-2",
+      "ui-a-badge",
+      "ui-a-live",
+      "ui-a-unfeature",
+    ]);
+    expect(built.elements["ui-a-lang-0"].props).toMatchObject({
+      text: "EN",
+      variant: "outline",
+    });
+    expect(built.elements["ui-a-lang-2"].props).toMatchObject({ text: "FR" });
+    // A single-language page gets exactly one badge, never a stale gap.
+    expect(built.elements["ui-b-row"].children?.slice(0, 2)).toEqual([
+      "ui-b-lang-0",
+      "ui-b-badge",
+    ]);
+    expect(built.elements["ui-b-lang-0"].props).toMatchObject({ text: "EN" });
   });
 
   test("empty overview keeps the frame and flags the empty state", () => {
