@@ -13,6 +13,7 @@ import {
   entryRowName,
 } from "./constants";
 import { historyRow, generateUnique, openHistory } from "./authed-helpers";
+import { PUBLISH_HEADING_CLASS, PUBLISH_UI_LINES } from "./msw/fixture";
 import {
   captureFeatured,
   deleteTestRow,
@@ -115,12 +116,16 @@ test.describe("authenticated — admin identity", () => {
     }
   });
 
-  test("publishes an entry and serves its live URL", async ({ page }) => {
+  test("publishes an entry and serves its live URL", async ({
+    page,
+    browser,
+    baseURL,
+  }) => {
     const prompt = `${TEST_PROMPT_PREFIX}publish journey ${randomUUID()}`;
     const slug = `e2e-${randomUUID()}`;
     let entryId: string | undefined;
     try {
-      entryId = await generateUnique(page, prompt);
+      entryId = await generateUnique(page, prompt, PUBLISH_UI_LINES);
       await publishOpenEntry(page, prompt, slug);
 
       // The row now shows the Live badge…
@@ -138,6 +143,41 @@ test.describe("authenticated — admin identity", () => {
       await expect(
         page.getByRole(ROLE.link, { name: UI.landingPill }),
       ).toHaveAttribute("href", /\/en\/ui$/);
+
+      // Plan (spec-languages, task 5.4): the baked `content` artifact serves
+      // the page with zero JavaScript — static HTML + the compiled stylesheet
+      // in the served markup, so it paints without the client engine.
+      const noJs = await browser.newContext({
+        baseURL,
+        javaScriptEnabled: false,
+      });
+      const noJsPage = await noJs.newPage();
+      try {
+        // The bake lands right after publish (best-effort, async) — early
+        // navigations may still get the client-render fallback, which needs
+        // JS; retry until the static artifact is what's served.
+        await expect(async () => {
+          await noJsPage.goto(`/en/${slug}`);
+          await expect(
+            noJsPage.getByRole(ROLE.heading, { name: UI.mockHeading }),
+          ).toBeVisible({ timeout: 1000 });
+        }).toPass({ timeout: 20000 });
+
+        // The baked heading carries its class tokens, and the compiled CSS
+        // for them is inline in the served HTML (the FOUC-free contract).
+        const classTokens = PUBLISH_HEADING_CLASS.split(" ");
+        await expect(
+          noJsPage.getByRole(ROLE.heading, { name: UI.mockHeading }),
+        ).toHaveClass(new RegExp(`\\b${classTokens[0]}\\b`));
+        const inlineCss = (
+          await noJsPage.locator("style").allTextContents()
+        ).join("\n");
+        for (const token of classTokens) {
+          expect(inlineCss).toContain(token);
+        }
+      } finally {
+        await noJs.close();
+      }
 
       // Cleanup: manage → take offline → delete the entry.
       await page.goto(PATHS.ui);

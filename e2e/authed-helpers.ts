@@ -56,8 +56,9 @@ export async function dismissUploadNudge(page: Page): Promise<void> {
 export async function generateUnique(
   page: Page,
   prompt: string,
+  lines?: string[],
 ): Promise<string> {
-  await mockGenerate(page);
+  await mockGenerate(page, lines ? { lines } : {});
   await page.goto(PATHS.ui);
   await waitForMsw(page);
   await page.getByPlaceholder(UI.promptPlaceholder).fill(prompt);

@@ -67,6 +67,48 @@ export const MOCK_EDIT_LINES: string[] = [
   }),
 ];
 
+/** Class tokens the publish journey's baked page is asserted against — the
+ *  compiled CSS for these must ship in the served HTML (plan:
+ *  spec-languages, task 5.4). Kept out of MOCK_UI_LINES so the default
+ *  mock's style baselines (editor.spec font-weight) stay untouched. */
+export const PUBLISH_HEADING_CLASS = "text-4xl font-bold tracking-tight";
+
+/** MOCK_UI_LINES with class tokens on the heading — publish/bake fixture. */
+export const PUBLISH_UI_LINES: string[] = [
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: MOCK_KEYS.card }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath(MOCK_KEYS.card),
+    value: {
+      type: COMPONENT.card,
+      props: { title: UI.mockCardTitle },
+      children: [MOCK_KEYS.heading, MOCK_KEYS.text],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath(MOCK_KEYS.heading),
+    value: {
+      type: COMPONENT.heading,
+      props: {
+        text: UI.mockHeading,
+        level: "h1",
+        className: PUBLISH_HEADING_CLASS,
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath(MOCK_KEYS.text),
+    value: {
+      type: COMPONENT.text,
+      props: { text: UI.mockBody },
+      children: [],
+    },
+  }),
+];
+
 /**
  * In-spec language fixture: a seed copy (`state.copy`) plus a partial Spanish
  * overlay (`state.i18n.es` — `title` translated, `subtitle` missing so the
@@ -111,6 +153,23 @@ export const I18N_UI_LINES: string[] = [
       props: { text: { $state: "/copy/subtitle" } },
       children: [],
     },
+  }),
+];
+
+function i18nLayerPath(tag: string): string {
+  return `${PATCH_PATH.state}/i18n/${tag}`;
+}
+
+/**
+ * Steer response for the "Add language… pt-br" model action: the overlay
+ * layer lands under the CANONICAL tag (pt-BR) — the dialog canonicalizes
+ * before the steer, so spec and canvas agree on the key.
+ */
+export const I18N_PTBR_EDIT_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: i18nLayerPath("pt-BR"),
+    value: { title: "Olá" },
   }),
 ];
 
