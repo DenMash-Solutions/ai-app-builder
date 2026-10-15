@@ -6,15 +6,20 @@ import { appDirectives } from "@/lib/computed/directives";
 import type { HistoryEntry } from "@/lib/history";
 import { getHistory, subscribeHistory } from "@/lib/history";
 import { Link } from "@/lib/i18n/navigation";
-import { mergeI18n } from "@/lib/i18n/spec-languages";
+import {
+  availableLanguages,
+  mergeI18n,
+  SPEC_STATE_KEYS,
+} from "@/lib/i18n/spec-languages";
+import { LOCALES, routing } from "@/lib/i18n/routing";
 import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import type { LivePageData } from "@/lib/publish/featured";
 import { localizeSpec } from "@/lib/specs/localize";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { ArrowUpRight } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
-import { useParams } from "next/navigation";
+import { hasLocale, useLocale, useTranslations } from "next-intl";
+import { useParams, useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 
 /**
@@ -36,6 +41,7 @@ export default function PreviewPage({
   bakedCss?: string | null;
 }) {
   const { slug } = useParams<{ slug: string }>();
+  const router = useRouter();
   const t = useTranslations();
   const locale = useLocale();
   const entry = useSyncExternalStore<HistoryEntry | null | undefined>(
@@ -80,8 +86,39 @@ export default function PreviewPage({
   if (!spec) return null;
 
   // Route locale = content language (same merge as the live page).
-  const state = mergeI18n(spec.state, locale) ?? {};
+  const merged = mergeI18n(spec.state, locale) ?? {};
+  // The design's switcher highlights state.locale — keep it on the language
+  // this route actually serves (runtime diff only; the stored spec's seed
+  // marker is never written).
+  const state =
+    SPEC_STATE_KEYS.locale in merged
+      ? { ...merged, [SPEC_STATE_KEYS.locale]: locale }
+      : merged;
   const localized = localizeSpec(spec, state);
+
+  // The switcher writes state.locale; on a route-driven surface that means
+  // "serve this language from its URL" — navigate instead of merging in
+  // place (decisions 5 and 11). Only real languages the spec carries count.
+  const handleStateChange = (
+    changes: Array<{ path: string; value: unknown }>,
+  ) => {
+    const change = changes.find(
+      (candidate) =>
+        candidate.path.replace(/^\//, "") === SPEC_STATE_KEYS.locale,
+    );
+    if (!change) return;
+    const tag = change.value;
+    if (typeof tag !== "string" || tag === locale) return;
+    if (!availableLanguages(spec).includes(tag)) return;
+    router.push(`/${tag}/${slug}`);
+  };
+
+  // The preview pill points at the playground: in the app's languages, and
+  // pinned to a routable one so it can never link into a 404 from a
+  // content-only locale (decision 11).
+  const pillLocale = hasLocale(LOCALES, locale)
+    ? locale
+    : routing.defaultLocale;
 
   // Tab title from the resolved name. React 19 hoists this client-rendered
   // <title> into <head> and lets it win over the layout's metadata title —
@@ -95,6 +132,7 @@ export default function PreviewPage({
     <JSONUIProvider
       registry={registry}
       initialState={state}
+      onStateChange={handleStateChange}
       handlers={{}}
       validationFunctions={{}}
       directives={appDirectives}
@@ -108,7 +146,7 @@ export default function PreviewPage({
         <Button asChild className="fixed bottom-4 right-4 z-50 shadow-lg">
           {/* The owner's local copy opens in their playground; a purely
                     public visit lands on the playground landing instead. */}
-          <Link href={entry ? `/ui/${entry.slug}` : "/ui"}>
+          <Link href={entry ? `/ui/${entry.slug}` : "/ui"} locale={pillLocale}>
             <ArrowUpRight aria-hidden="true" className="size-4" />
             {t("preview.openPlayground")}
           </Link>

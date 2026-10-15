@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { hasLocale, NextIntlClientProvider } from "next-intl";
+import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { ThemeInit } from "@/components/theme-init";
@@ -8,7 +8,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { SyncEngine } from "@/components/sync/sync-engine";
 import { UploadNudge } from "@/components/sync/upload-nudge";
 import { Toaster } from "@/components/ui/sonner";
-import { LOCALES } from "@/lib/i18n/routing";
+import { canonicalizeTag } from "@/lib/i18n/spec-languages";
 import "../globals.css";
 
 const geistSans = Geist({
@@ -37,7 +37,10 @@ export async function generateMetadata({
 export default async function LocaleLayout(props: LayoutProps<"/[locale]">) {
   const { locale } = await props.params;
 
-  if (!hasLocale(LOCALES, locale)) {
+  // Any canonical BCP-47 tag may pass (content routes serve their own
+  // language, decision 11); app surfaces re-gate to the app locales in
+  // (app)/layout.tsx, and garbage tags never render.
+  if (canonicalizeTag(locale) === null) {
     notFound();
   }
 

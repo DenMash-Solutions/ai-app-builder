@@ -1,21 +1,27 @@
 import * as rootParams from "next/root-params";
 import { hasLocale } from "next-intl";
 import { getRequestConfig } from "next-intl/server";
-import { notFound } from "next/navigation";
 import { routing } from "./routing";
 
 export default getRequestConfig(async ({ locale }) => {
   if (!locale) {
     const paramValue = await rootParams.locale();
-    if (hasLocale(routing.locales, paramValue)) {
-      locale = paramValue;
-    } else {
-      notFound();
-    }
+    locale =
+      typeof paramValue === "string" && paramValue.length > 0
+        ? paramValue
+        : routing.defaultLocale;
   }
+
+  // App locales carry the full UI catalog; content-only locales (live-page
+  // tags beyond the app languages, decision 11) reuse the default catalog —
+  // their pages render baked content, so only the shell's strings leak
+  // through. Invalid tags can't reach here: the [locale] layout 404s them.
+  const catalog = hasLocale(routing.locales, locale)
+    ? locale
+    : routing.defaultLocale;
 
   return {
     locale,
-    messages: (await import(`./locale/${locale}.json`)).default,
+    messages: (await import(`./locale/${catalog}.json`)).default,
   };
 });

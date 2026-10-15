@@ -5,6 +5,7 @@ import {
   EDITOR,
   I18N,
   PATHS,
+  PREVIEW,
   PROMPTS,
   ROLE,
   SLOTS,
@@ -102,6 +103,29 @@ test.describe("content languages", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(I18N.ptTitle, { exact: true })).toBeVisible();
 
+    // The design's own language switcher gained the option too — the mock
+    // stream only lands the i18n layer, so this proves the deterministic
+    // fix-up committed the button alongside the layer.
+    const switcherPtBr = page.getByRole(ROLE.button, {
+      name: I18N.switcher.ptBr,
+      exact: true,
+    });
+    await expect(switcherPtBr).toBeVisible();
+
+    // And it is the real switcher: a canvas click changes the content
+    // language, with the pill following what the canvas shows.
+    const switcherEs = page.getByRole(ROLE.button, {
+      name: I18N.switcher.es,
+      exact: true,
+    });
+    await switcherEs.click();
+    await expect(page.getByText(I18N.esTitle, { exact: true })).toBeVisible();
+    // The pill follows the canvas (its tag renders CSS-uppercased — match
+    // case-insensitively against either form).
+    await expect(langTrigger(page)).toContainText(/es/i);
+    await switcherPtBr.click();
+    await expect(page.getByText(I18N.ptTitle, { exact: true })).toBeVisible();
+
     // The write landed under the canonical tag; seed copy stays intact.
     const entries = await readHistoryStorage(page);
     const state = entries[0].spec.state as {
@@ -134,6 +158,9 @@ test.describe("content languages", () => {
       .getByRole(ROLE.button, { name: I18N.removeConfirm.confirm })
       .click();
     await expect(page.getByText(I18N.seedTitle, { exact: true })).toBeVisible();
+    // The switcher no longer offers the removed language — neither on the
+    // canvas nor in the committed spec.
+    await expect(switcherPtBr).toHaveCount(0);
     const afterEntries = await readHistoryStorage(page);
     const afterState = afterEntries[0].spec.state as {
       copy: Record<string, string>;
@@ -141,6 +168,15 @@ test.describe("content languages", () => {
     };
     expect(afterState.i18n?.["pt-BR"]).toBeUndefined();
     expect(afterState.i18n?.es.title).toBe(I18N.esTitle);
+    const afterElements = afterEntries[0].spec.elements as Record<
+      string,
+      { props?: { buttons?: Array<{ value: string }> } }
+    >;
+    expect(
+      afterElements["lang-toggle"].props?.buttons?.map(
+        (button) => button.value,
+      ),
+    ).toEqual(["es", "en"]);
   });
 
   test("copy edits in a non-seed language write the i18n overlay, not the seed", async ({
@@ -183,5 +219,57 @@ test.describe("content languages", () => {
     // "de" is not on the spec → clean fallback to the seed language.
     await expect(page.getByText(I18N.seedTitle, { exact: true })).toBeVisible();
     await expect(page.getByText(I18N.esTitle, { exact: true })).toHaveCount(0);
+  });
+
+  test("the design's switcher drives the preview by route, and content-only locales serve their own slug", async ({
+    page,
+  }) => {
+    await generateI18n(page);
+
+    // The read-only preview renders the spec's switcher against the route.
+    // Anchor on a single trailing segment — /en/ui/{id} must not match.
+    await page.getByRole(ROLE.link, { name: PREVIEW.open }).click();
+    await expect(page).toHaveURL(/\/en\/[^/]+$/);
+    await waitForMsw(page);
+    await expect(page.getByText(I18N.seedTitle, { exact: true })).toBeVisible();
+    const slug = new URL(page.url()).pathname.split("/").pop()!;
+
+    // Clicking ES navigates to the Spanish route — on this surface the URL
+    // owns the language (decisions 5 and 11), so the whole page re-serves.
+    // The first click races hydration (the SSR button exists before React
+    // attaches its handlers) — retry click+navigation until the route moves.
+    await expect(async () => {
+      await page
+        .getByRole(ROLE.button, { name: I18N.switcher.es, exact: true })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`/es/${slug}$`));
+    }).toPass({ timeout: 15_000 });
+    await expect(page.getByText(I18N.esTitle, { exact: true })).toBeVisible();
+    await expect(page.getByText(I18N.seedTitle, { exact: true })).toHaveCount(
+      0,
+    );
+
+    // …and back to English.
+    await page
+      .getByRole(ROLE.button, { name: I18N.switcher.en, exact: true })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/en/${slug}$`));
+    await expect(page.getByText(I18N.seedTitle, { exact: true })).toBeVisible();
+
+    // A content-only locale serves its own slug route: the fixture carries no
+    // fr layer, so the seed renders under lang="fr"…
+    const frPage = await page.goto(`/fr/${slug}`);
+    expect(frPage?.status()).toBe(200);
+    await waitForMsw(page);
+    await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+    await expect(page.getByText(I18N.seedTitle, { exact: true })).toBeVisible();
+    // …and the preview pill stays pointed at an app language.
+    await expect(
+      page.getByRole(ROLE.link, { name: PREVIEW.openPlayground }),
+    ).toHaveAttribute("href", `/en/ui/${slug}`);
+
+    // App surfaces remain app-locale only: /fr/ui is a 404.
+    const appSurface = await page.goto("/fr/ui");
+    expect(appSurface?.status()).toBe(404);
   });
 });
