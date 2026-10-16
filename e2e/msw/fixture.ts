@@ -155,7 +155,8 @@ export const I18N_UI_LINES: string[] = [
     },
   }),
   // The design's own language switcher: its options must keep pace with the
-  // languages the spec carries (added on add-language, dropped on removal).
+  // languages the spec carries (added on add-language, dropped on removal),
+  // and its change event declares the switch_language action (decision 13).
   line({
     op: PATCH_OP.add,
     path: elementPath("lang-toggle"),
@@ -167,6 +168,14 @@ export const I18N_UI_LINES: string[] = [
           { label: "EN", value: "en" },
         ],
         selected: { $bindState: "/locale" },
+      },
+      on: {
+        change: [
+          {
+            action: "switch_language",
+            params: { tag: { $state: "/locale" } },
+          },
+        ],
       },
       children: [],
     },

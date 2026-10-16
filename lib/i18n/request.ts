@@ -15,7 +15,9 @@ export default getRequestConfig(async ({ locale }) => {
   // App locales carry the full UI catalog; content-only locales (live-page
   // tags beyond the app languages, decision 11) reuse the default catalog —
   // their pages render baked content, so only the shell's strings leak
-  // through. Invalid tags can't reach here: the [locale] layout 404s them.
+  // through. Garbage tags are safe too: the routes validate what they serve
+  // (canonical tags on content routes, resolution on the root), and any
+  // render that survives falls back to this default catalog.
   const catalog = hasLocale(routing.locales, locale)
     ? locale
     : routing.defaultLocale;

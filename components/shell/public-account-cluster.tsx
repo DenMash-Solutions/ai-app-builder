@@ -1,7 +1,7 @@
 "use client";
 
 import { Globe, LayoutGrid, LogOut } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { hasLocale, useLocale, useTranslations } from "next-intl";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,23 +13,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "@/lib/i18n/navigation";
+import { LOCALES, routing } from "@/lib/i18n/routing";
 
 /**
  * Authed-only account cluster for the public root (featured landing): a
  * small avatar menu — Playground, Live pages (admins), Sign out — so the
  * owner can reach the app chrome from the chrome-less landing. Anonymous
  * visitors see nothing; the landing stays content-only for everyone else.
+ * The root serves content-only languages too (decision 12), so the cluster's
+ * app routes pin an app language — unprefixed pushes would be prefixed into
+ * /{tag}/ui, a 404 (decision 11's pill rule).
  */
 export function PublicAccountCluster() {
   const t = useTranslations("shell");
   const { user, role, loading, signOut } = useAuth();
   const router = useRouter();
+  const locale = useLocale();
+  const appLocale = hasLocale(LOCALES, locale) ? locale : routing.defaultLocale;
 
   if (loading || !user) return null;
 
   const handleSignOut = async () => {
     await signOut();
-    router.push("/");
+    router.push("/", { locale: appLocale });
     router.refresh();
   };
 
@@ -69,12 +75,16 @@ export function PublicAccountCluster() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => router.push("/ui")}>
+          <DropdownMenuItem
+            onSelect={() => router.push("/ui", { locale: appLocale })}
+          >
             <LayoutGrid aria-hidden="true" />
             {t("nav.playground")}
           </DropdownMenuItem>
           {role === "admin" && (
-            <DropdownMenuItem onSelect={() => router.push("/admin")}>
+            <DropdownMenuItem
+              onSelect={() => router.push("/admin", { locale: appLocale })}
+            >
               <Globe aria-hidden="true" />
               {t("nav.livePages")}
             </DropdownMenuItem>

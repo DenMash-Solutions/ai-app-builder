@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
+  SWITCH_LANGUAGE_ACTION,
   hasLanguageSwitcher,
+  hasSwitchLanguageBinding,
   withLanguageSwitcherOption,
+  withSwitchLanguageBinding,
 } from "@/lib/i18n/language-switcher";
 
 type AnySpec = Parameters<typeof withLanguageSwitcherOption>[0];
@@ -131,5 +134,102 @@ describe("withLanguageSwitcherOption", () => {
 
   it("detects the switcher on a denmash-shaped spec", () => {
     expect(hasLanguageSwitcher(specWith(structuredClone(ES_EN)))).toBe(true);
+  });
+});
+
+describe("withSwitchLanguageBinding", () => {
+  it("binds switch_language on the switcher's change event", () => {
+    const spec = specWith(structuredClone(ES_EN));
+    const result = withSwitchLanguageBinding(spec);
+    const toggle = (
+      result.elements as unknown as Record<
+        string,
+        { on: { change: Array<{ action: string; params: unknown }> } }
+      >
+    )["lang-toggle"];
+    expect(toggle.on.change).toEqual([
+      {
+        action: SWITCH_LANGUAGE_ACTION,
+        params: { tag: { $state: "/locale" } },
+      },
+    ]);
+    // The input is never mutated — the fix-up is pure.
+    expect(
+      (spec.elements as Record<string, { on?: unknown }>)["lang-toggle"].on,
+    ).toBeUndefined();
+  });
+
+  it("is idempotent and detection agrees", () => {
+    const bound = withSwitchLanguageBinding(specWith(structuredClone(ES_EN)));
+    expect(withSwitchLanguageBinding(bound)).toBe(bound);
+    expect(hasSwitchLanguageBinding(bound)).toBe(true);
+    expect(hasSwitchLanguageBinding(specWith(structuredClone(ES_EN)))).toBe(
+      false,
+    );
+  });
+
+  it("appends alongside existing change bindings instead of clobbering", () => {
+    const spec = specWith(structuredClone(ES_EN));
+    (
+      spec.elements as Record<
+        string,
+        { on: Record<string, unknown>; props: Record<string, unknown> }
+      >
+    )["lang-toggle"].on = {
+      change: [{ action: "other" }],
+      click: [{ action: "track" }],
+    };
+    const toggle = (
+      withSwitchLanguageBinding(spec).elements as unknown as Record<
+        string,
+        { on: { change: unknown[]; click: unknown } }
+      >
+    )["lang-toggle"];
+    expect(toggle.on.change).toHaveLength(2);
+    expect(toggle.on.change[0]).toEqual({ action: "other" });
+    expect(toggle.on.change[1]).toEqual({
+      action: SWITCH_LANGUAGE_ACTION,
+      params: { tag: { $state: "/locale" } },
+    });
+    expect(toggle.on.click).toEqual([{ action: "track" }]);
+  });
+
+  it("accepts the single-binding change shape and then no-ops", () => {
+    const spec = specWith(structuredClone(ES_EN));
+    (
+      spec.elements as Record<
+        string,
+        { props: Record<string, unknown>; on: Record<string, unknown> }
+      >
+    )["lang-toggle"].on = {
+      change: { action: SWITCH_LANGUAGE_ACTION },
+    };
+    expect(hasSwitchLanguageBinding(spec)).toBe(true);
+    expect(withSwitchLanguageBinding(spec)).toBe(spec);
+  });
+
+  it("leaves specs without a switcher untouched", () => {
+    const stepper = {
+      root: "page",
+      state: { locale: "en", copy: {} },
+      elements: {
+        toggle: {
+          type: "ButtonGroup",
+          props: {
+            buttons: [
+              { label: "JA", value: "ja" },
+              { label: "KO", value: "ko" },
+            ],
+          },
+          children: [],
+        },
+      },
+    } as unknown as AnySpec;
+    expect(withSwitchLanguageBinding(stepper)).toBe(stepper);
+    const bare = {
+      root: "page",
+      state: { locale: "en", copy: {} },
+    } as unknown as AnySpec;
+    expect(withSwitchLanguageBinding(bare)).toBe(bare);
   });
 });

@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import {
   ACTIONS,
   ADMIN,
+  I18N,
   PATHS,
   PUBLISH,
   ROLE,
@@ -12,8 +13,19 @@ import {
   UI,
   entryRowName,
 } from "./constants";
-import { historyRow, generateUnique, openHistory } from "./authed-helpers";
-import { PUBLISH_HEADING_CLASS, PUBLISH_UI_LINES } from "./msw/fixture";
+import {
+  dismissUploadNudge,
+  generateUnique,
+  historyRow,
+  openHistory,
+} from "./authed-helpers";
+import {
+  I18N_PTBR_EDIT_LINES,
+  I18N_UI_LINES,
+  PUBLISH_HEADING_CLASS,
+  PUBLISH_UI_LINES,
+} from "./msw/fixture";
+import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
 import {
   captureFeatured,
   deleteTestRow,
@@ -199,7 +211,7 @@ test.describe("authenticated — admin identity", () => {
     }
   });
 
-  test("feature/unfeature from the admin console switches the root page", async ({
+  test("feature/unfeature switches the root, whose switcher serves every language by route", async ({
     page,
   }) => {
     test.skip(
@@ -214,7 +226,45 @@ test.describe("authenticated — admin identity", () => {
     // from the moment the singleton is at risk (crash-safe).
     await captureFeatured();
     try {
-      entryId = await generateUnique(page, prompt);
+      // The switcher design (MSW): English seed + es layer, with the pt-BR
+      // edit stream armed for the picker below.
+      await mockGenerate(page, {
+        lines: I18N_UI_LINES,
+        editLines: I18N_PTBR_EDIT_LINES,
+      });
+      await page.goto(PATHS.ui);
+      await waitForMsw(page);
+      await page.getByPlaceholder(UI.promptPlaceholder).fill(prompt);
+      await page.getByRole(ROLE.button, { name: ACTIONS.generate }).click();
+      await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+      await expect(
+        page.getByText(I18N.seedTitle, { exact: true }),
+      ).toBeVisible();
+      await dismissUploadNudge(page);
+      const stored = (await readHistoryStorage(page)).find(
+        (candidate) => candidate.prompt === prompt,
+      );
+      if (!stored) {
+        throw new Error(
+          `generated entry not found in local history: ${prompt}`,
+        );
+      }
+      entryId = stored.id;
+
+      // Add pt-BR through the picker: the steer lands the layer and the
+      // completion fix-up commits the switcher's new option alongside it.
+      await page.getByRole(ROLE.button, { name: I18N.langTitle }).click();
+      const popover = page.locator('[data-slot="popover-content"]');
+      await popover.getByRole(ROLE.button, { name: I18N.addLang }).click();
+      const dialog = page.locator(SLOTS.dialog);
+      await dialog.getByLabel(I18N.addDialog.filterLabel).fill("pt-br");
+      await dialog.getByRole(ROLE.option, { name: /pt-BR/ }).click();
+      await expect(
+        page.getByText(I18N.addedLang("Brazilian Portuguese"), {
+          exact: true,
+        }),
+      ).toBeVisible({ timeout: 15_000 });
+
       await publishOpenEntry(page, prompt, slug);
 
       // Feature via the admin console, scoped to OUR card by its slug.
@@ -232,12 +282,51 @@ test.describe("authenticated — admin identity", () => {
         card.getByRole(ROLE.button, { name: ADMIN.feature }),
       ).toBeHidden();
 
-      // The root now renders OUR page.
+      // The root now renders OUR page in the route's language (seed = en).
       await page.goto(PATHS.root);
       await expect(page).toHaveURL(/\/en$/);
       await expect(
-        page.getByRole(ROLE.heading, { name: UI.mockHeading }),
+        page.getByRole(ROLE.heading, { name: I18N.seedTitle, exact: true }),
       ).toBeVisible();
+
+      // The design's switcher navigates by route (decision 13): ES lands on
+      // the bare Spanish root — the root serves every language the design
+      // carries (decision 12). The first click races hydration (the SSR
+      // button exists before React attaches its handlers) — retry
+      // click+navigation until the route moves.
+      await expect(async () => {
+        await page
+          .getByRole(ROLE.button, { name: I18N.switcher.es, exact: true })
+          .click();
+        await expect(page).toHaveURL(/\/es$/);
+      }).toPass({ timeout: 15_000 });
+      await expect(
+        page.getByRole(ROLE.heading, { name: I18N.esTitle, exact: true }),
+      ).toBeVisible();
+
+      // A content-only language serves at its bare tag: /pt-BR shows the
+      // Portuguese layer…
+      await page
+        .getByRole(ROLE.button, { name: I18N.switcher.ptBr, exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/pt-BR$/);
+      await expect(
+        page.getByRole(ROLE.heading, { name: I18N.ptTitle, exact: true }),
+      ).toBeVisible();
+
+      // …and EN comes back to the app-language root.
+      await page
+        .getByRole(ROLE.button, { name: I18N.switcher.en, exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/en$/);
+      await expect(
+        page.getByRole(ROLE.heading, { name: I18N.seedTitle, exact: true }),
+      ).toBeVisible();
+
+      // The bare-slug sugar still resolves: /{slug} redirects to
+      // /{default}/{slug} (decision 12's root resolution).
+      await page.goto(`/${slug}`);
+      await expect(page).toHaveURL(new RegExp(`/en/${slug}$`));
 
       // Unfeature → the playground is back on /.
       await page.goto(PATHS.admin);

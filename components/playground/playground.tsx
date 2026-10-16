@@ -90,8 +90,11 @@ import {
 } from "@/lib/history";
 import { languageName } from "@/lib/i18n/languages";
 import {
+  SWITCH_LANGUAGE_ACTION,
   hasLanguageSwitcher,
+  hasSwitchLanguageBinding,
   withLanguageSwitcherOption,
+  withSwitchLanguageBinding,
 } from "@/lib/i18n/language-switcher";
 import { normalizeSpecCopy } from "@/lib/i18n/spec-normalize";
 import { specsEqual } from "@/lib/utils";
@@ -298,11 +301,16 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
       // Ingest seam (generate, steer, import): lift stray inline copy into
       // state.copy — non-blocking by design, the coverage flag rides on the
-      // entry (createEntry/commitRevision recompute it).
+      // entry (createEntry/commitRevision recompute it). Every model commit
+      // also ends in the declared switching form: when the design has a
+      // switcher, the fix-up binds switch_language on its change event if it
+      // is missing (decision 13) — that is how designs published before the
+      // action migrate, on their next model commit.
       const { spec: normalizedSpec } = normalizeSpecCopy(completedSpec);
+      const boundSpec = withSwitchLanguageBinding(normalizedSpec);
 
       if (op.kind === PENDING_OP_KINDS.generate) {
-        const entry = createEntry(op.prompt, normalizedSpec);
+        const entry = createEntry(op.prompt, boundSpec);
         addEntry(entry);
         // The URL owns the active UI: the landing streams the generation,
         // then the committed entry takes over at /ui/[id] (the destination
@@ -332,10 +340,11 @@ export function Playground({ initialRef }: PlaygroundProps) {
       // An add-language steer owns the design's own switcher too: the model
       // was told to offer the new option — this fix-up guarantees it even if
       // the stream missed the element change (pure, so it no-ops when the
-      // model already did it).
+      // model already did it). The switch_language binding was already
+      // guaranteed at the ingest seam above.
       const specToCommit = pendingLang
-        ? withLanguageSwitcherOption(normalizedSpec, pendingLang, true)
-        : normalizedSpec;
+        ? withLanguageSwitcherOption(boundSpec, pendingLang, true)
+        : boundSpec;
       const updated = commitRevision(entry, specToCommit, op.label);
       updateEntry(updated);
       if (pendingLang) {
@@ -406,7 +415,9 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // The design's own switcher writes state.locale at runtime — treat that as
   // a content-language selection so canvas and pill always agree (the pill's
   // onChange does the same in reverse). Only real tags the spec carries
-  // count; every other state change is view noise and ignored.
+  // count; every other state change is view noise and ignored. Specs that
+  // declare the switch_language action turn this off — the action below
+  // owns the switch (decision 13), and running both would double-fire.
   const handleCanvasStateChange = (
     changes: Array<{ path: string; value: unknown }>,
   ) => {
@@ -421,6 +432,29 @@ export function Playground({ initialRef }: PlaygroundProps) {
     setLangOverride(tag);
     writeContentLang(activeEntry?.id ?? null, tag);
   };
+  // The declared switch (decision 13): on the canvas switching is local —
+  // the editor never navigates away from the design being edited. Same
+  // semantics as the fallback above; the handler stays stable-once
+  // (ActionProvider captures its initial handlers) while an effect re-syncs
+  // the closure each render, so it always sees the current language,
+  // spec, and streaming state.
+  const switchRef = useRef<(params: Record<string, unknown>) => void>(() => {});
+  useEffect(() => {
+    switchRef.current = (params) => {
+      const tag = params.tag;
+      if (typeof tag !== "string" || tag === contentLang || isStreaming) return;
+      if (!languages.includes(tag)) return;
+      setLangOverride(tag);
+      writeContentLang(activeEntry?.id ?? null, tag);
+    };
+  });
+  const handlers = useMemo(
+    () => ({
+      [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
+        switchRef.current(params),
+    }),
+    [],
+  );
   const missingByTag = useMemo(() => {
     const counts = new Map<string, number>();
     const report = validateSpecI18n(displayedSpec?.state);
@@ -748,10 +782,11 @@ export function Playground({ initialRef }: PlaygroundProps) {
     if (languages.includes(tag)) return;
     // The design's own language switcher (a ButtonGroup of language codes)
     // must offer the new language as well — the completion fix-up enforces
-    // it, but asking the model keeps the whole change in one revision.
+    // it, but asking the model keeps the whole change in one revision (the
+    // switch_language binding is fix-up-guaranteed either way).
     const switcherHint =
       displayedSpec && hasLanguageSwitcher(displayedSpec)
-        ? ` Also update the design's language-switcher ButtonGroup: append {"label": "${tag.toUpperCase()}", "value": "${tag}"} to its props.buttons, keeping every existing button exactly as it is.`
+        ? ` Also update the design's language-switcher ButtonGroup: append {"label": "${tag.toUpperCase()}", "value": "${tag}"} to its props.buttons, keeping every existing button exactly as it is, and make sure its change event is bound to the switch_language action — "on": {"change": [{"action": "switch_language", "params": {"tag": {"$state": "/locale"}}}]} — if it is not already.`
         : "";
     const started = steerWholeSpec(
       `Add a full translation of this spec into the language with BCP-47 tag "${tag}". For every key in state.copy, add a translated value under state.i18n.${tag} with the identical key, keeping every $state reference unchanged. Do not modify state.copy or any other language.${switcherHint}`,
@@ -1233,8 +1268,12 @@ export function Playground({ initialRef }: PlaygroundProps) {
     <JSONUIProvider
       registry={registry}
       initialState={canvasState}
-      onStateChange={handleCanvasStateChange}
-      handlers={{}}
+      onStateChange={
+        displayedSpec && hasSwitchLanguageBinding(displayedSpec)
+          ? undefined
+          : handleCanvasStateChange
+      }
+      handlers={handlers}
       validationFunctions={{}}
       directives={appDirectives}
     >

@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { appDirectives } from "@/lib/computed/directives";
 import type { HistoryEntry } from "@/lib/history";
 import { getHistory, subscribeHistory } from "@/lib/history";
+import {
+  SWITCH_LANGUAGE_ACTION,
+  hasSwitchLanguageBinding,
+} from "@/lib/i18n/language-switcher";
 import { Link } from "@/lib/i18n/navigation";
 import {
   availableLanguages,
@@ -20,7 +24,7 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { ArrowUpRight } from "lucide-react";
 import { hasLocale, useLocale, useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 
 /**
  * Read-only preview at /{locale}/{slug}: the entry's spec rendered with the
@@ -51,10 +55,37 @@ export default function PreviewPage({
     () => undefined,
   );
 
+  const spec = entry?.spec ?? published?.spec ?? null;
+
   // Runtime classes: spec classNames exist only at runtime — compile any not
   // yet covered via /api/tailwind (same no-op-on-failure behavior as the
   // playground; the hook is session-cached so revisits cost nothing).
-  useRuntimeClasses(entry?.spec ?? published?.spec ?? null);
+  useRuntimeClasses(spec);
+
+  // The spec-declared switch (decision 13): the toggle's change event hands
+  // the pressed tag to this handler, and this route-driven surface
+  // navigates instead of merging in place (decisions 5 and 11). Handlers
+  // must be stable-once — ActionProvider captures its initial handlers — so
+  // the handler lives behind a ref that an effect re-syncs each render (a
+  // stale closure would guard with the previous route's locale after a
+  // switch; the effect ref always reflects the committed page state).
+  const switchRef = useRef<(params: Record<string, unknown>) => void>(() => {});
+  useEffect(() => {
+    switchRef.current = (params) => {
+      if (!spec) return;
+      const tag = params.tag;
+      if (typeof tag !== "string" || tag === locale) return;
+      if (!availableLanguages(spec).includes(tag)) return;
+      router.push(`/${tag}/${slug}`);
+    };
+  });
+  const handlers = useMemo(
+    () => ({
+      [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
+        switchRef.current(params),
+    }),
+    [],
+  );
 
   if (entry === undefined && !published) {
     return (
@@ -82,7 +113,6 @@ export default function PreviewPage({
     );
   }
 
-  const spec = entry?.spec ?? published?.spec;
   if (!spec) return null;
 
   // Route locale = content language (same merge as the live page).
@@ -96,9 +126,10 @@ export default function PreviewPage({
       : merged;
   const localized = localizeSpec(spec, state);
 
-  // The switcher writes state.locale; on a route-driven surface that means
-  // "serve this language from its URL" — navigate instead of merging in
-  // place (decisions 5 and 11). Only real languages the spec carries count.
+  // The state-write fallback (decision 13): specs that predate the declared
+  // switch still navigate by writing state.locale — but once the toggle
+  // binds switch_language the action owns navigation and this would
+  // double-push, so it stays off.
   const handleStateChange = (
     changes: Array<{ path: string; value: unknown }>,
   ) => {
@@ -132,8 +163,10 @@ export default function PreviewPage({
     <JSONUIProvider
       registry={registry}
       initialState={state}
-      onStateChange={handleStateChange}
-      handlers={{}}
+      onStateChange={
+        hasSwitchLanguageBinding(spec) ? undefined : handleStateChange
+      }
+      handlers={handlers}
       validationFunctions={{}}
       directives={appDirectives}
     >

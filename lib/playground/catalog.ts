@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
+import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 
 const STYLE_PROPS = {
   className: z
@@ -48,7 +49,16 @@ const components = Object.fromEntries(
 
 export const playgroundCatalog = defineCatalog(schema, {
   components,
-  actions: {},
+  actions: {
+    // Declared intent, app-implemented (decision 13): the model binds this
+    // to the design's language switcher; each surface supplies the handler
+    // (editor = in-place switch, live surfaces = navigation).
+    [SWITCH_LANGUAGE_ACTION]: {
+      params: z.object({ tag: z.string() }),
+      description:
+        'Switch the design\'s language to <tag> (a BCP-47 tag the spec carries, e.g. "es" or "pt-BR"). Bind it to the language switcher ButtonGroup\'s change event with params.tag bound to the group\'s selected value ({"$state": "/locale"}).',
+    },
+  },
 });
 
 interface CatalogDefinitionLike {

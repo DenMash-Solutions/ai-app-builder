@@ -147,7 +147,13 @@ test.describe("ui rename & preview", () => {
     await page.getByLabel(RENAME.slug, { exact: true }).fill("brand-new-slug");
     await page.getByRole(ROLE.button, { name: RENAME.save }).click();
 
-    await page.goto(`/${originalSlug}`);
+    // The bare old slug is dead after the rename: it is an uncarried,
+    // unpublished single segment, so the root 404s it instead of redirecting
+    // to a panel (decision 12). The prefixed route still serves the
+    // friendly not-found panel.
+    const bare = await page.goto(`/${originalSlug}`);
+    expect(bare?.status()).toBe(404);
+    await page.goto(`/en/${originalSlug}`);
     await expect(
       page.getByRole(ROLE.heading, { name: UI.uiRouteNotFoundTitle }),
     ).toBeVisible();
