@@ -19,6 +19,7 @@ import {
   SPEC_STATE_KEYS,
 } from "@/lib/i18n/spec-languages";
 import { LOCALES, routing } from "@/lib/i18n/routing";
+import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { registry } from "@/lib/playground/registry";
 import { appDirectives } from "@/lib/computed/directives";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
@@ -115,6 +116,7 @@ export function LivePage({
       }
       handlers={handlers}
       validationFunctions={{}}
+      functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
       <main className="relative w-full">

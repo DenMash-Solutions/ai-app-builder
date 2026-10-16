@@ -4,10 +4,16 @@ import {
   PROP_FIELD_KINDS,
   PROP_FIELD_VARIANTS,
 } from "../editor";
-import { playgroundCatalog } from "./catalog";
+import {
+  examplePropsFor,
+  isContainerType,
+  pickerItems,
+  playgroundCatalog,
+} from "./catalog";
 
 interface DefinitionLike {
   props: unknown;
+  events?: readonly string[];
 }
 
 function componentDefinitions(): Array<[string, DefinitionLike]> {
@@ -58,5 +64,127 @@ describe("playgroundCatalog style props", () => {
       style: { color: "#1e3a8a", width: "100%" },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("playgroundCatalog Icon component", () => {
+  test("the model prompt exposes the Icon line with its name union and press event", () => {
+    const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
+    const line = prompt
+      .split("\n")
+      .find((entry) => entry.startsWith("- Icon:"));
+    expect(line).toBeDefined();
+    expect(line).toContain('"sparkles"');
+    expect(line).toContain('"arrow-right"');
+    expect(line).toContain("size?");
+    expect(line).toContain("[events: press]");
+  });
+
+  test("the name prop rejects anything outside the curated set", () => {
+    const icon = componentDefinitions().find(([name]) => name === "Icon");
+    expect(icon).toBeDefined();
+    const props = icon?.[1].props as {
+      safeParse: (value: unknown) => { success: boolean };
+    };
+    // (className/style are required-nullable across every definition today —
+    // a pre-existing schema-vs-prompt quirk with no ingest teeth; pass them
+    // explicitly to isolate the enum assertion.)
+    expect(
+      props.safeParse({ name: "sparkles", className: null, style: null })
+        .success,
+    ).toBe(true);
+    expect(
+      props.safeParse({
+        name: "definitely-not-an-icon",
+        className: null,
+        style: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("insert affordances: leaf with example defaults, listed in the picker", () => {
+    expect(isContainerType("Icon")).toBe(false);
+    expect(examplePropsFor("Icon")).toEqual({ name: "sparkles" });
+    const item = pickerItems().find((entry) => entry.name === "Icon");
+    expect(item).toBeDefined();
+    expect(item?.description).toContain("Lucide");
+    expect(item?.container).toBe(false);
+  });
+});
+
+describe("playgroundCatalog D5/D7 extensions", () => {
+  test("Button declares icon props over the curated enum", () => {
+    const definitions = componentDefinitions();
+    const button = definitions.find(([name]) => name === "Button")?.[1];
+    expect(button).toBeDefined();
+    if (!button) throw new Error("Button definition missing");
+    const shape = shapeOf(button);
+    expect(shape).toHaveProperty("leadingIcon");
+    expect(shape).toHaveProperty("trailingIcon");
+
+    const props = button.props as {
+      safeParse: (value: unknown) => { success: boolean };
+    };
+    expect(
+      props.safeParse({
+        label: "Next",
+        variant: "primary",
+        disabled: false,
+        leadingIcon: "arrow-left",
+        trailingIcon: "arrow-right",
+        className: null,
+        style: null,
+      }).success,
+    ).toBe(true);
+    expect(
+      props.safeParse({
+        label: "Next",
+        leadingIcon: "definitely-not-an-icon",
+        className: null,
+        style: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  test("Input declares change alongside its upstream events", () => {
+    const input = componentDefinitions().find(([name]) => name === "Input");
+    expect(input).toBeDefined();
+    const events = input?.[1].events;
+    expect(events).toContain("change");
+    expect(events).toContain("submit");
+    expect(events).toContain("focus");
+    expect(events).toContain("blur");
+  });
+
+  test("filterItems is registered as a catalog function", () => {
+    const data = playgroundCatalog.data as {
+      functions?: Record<string, unknown>;
+    };
+    expect(typeof data.functions?.filterItems).toBe("function");
+  });
+
+  test("the model prompt documents the additions", () => {
+    const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
+    // Functions are auto-listed by name, in registration order — `add` was
+    // dropped (D8r) in favor of the prompt-documented `$math` directive.
+    expect(prompt).toMatch(
+      /Available functions:\s*\n\s*- filterItems\n\s*- sliceItems\b/,
+    );
+    expect(prompt).not.toMatch(/- filterItems\n\s*- sliceItems\n\s*- add\b/);
+
+    const buttonLine = prompt
+      .split("\n")
+      .find((entry) => entry.startsWith("- Button:"));
+    expect(buttonLine).toBeDefined();
+    expect(buttonLine).toContain("leadingIcon?");
+    expect(buttonLine).toContain('"arrow-left"');
+    expect(buttonLine).toContain("trailingIcon?");
+
+    const inputLine = prompt
+      .split("\n")
+      .find((entry) => entry.startsWith("- Input:"));
+    expect(inputLine).toBeDefined();
+    const events = inputLine?.match(/\[events: ([^\]]+)\]/);
+    expect(events?.[1]).toContain("change");
   });
 });

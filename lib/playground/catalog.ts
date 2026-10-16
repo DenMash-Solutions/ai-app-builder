@@ -3,6 +3,8 @@ import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
+import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
+import { LUCIDE_ICON_NAMES } from "@/lib/playground/icons";
 
 const STYLE_PROPS = {
   className: z
@@ -35,20 +37,91 @@ type StyledDefinitions = {
   >;
 };
 
-const components = Object.fromEntries(
-  Object.entries(shadcnComponentDefinitions).map(([name, definition]) => [
-    name,
-    {
-      ...definition,
-      props: (definition.props as z.ZodObject<z.core.$ZodLooseShape>).extend(
-        STYLE_PROPS,
-      ),
+// The model's icon vocabulary is a constrained enum (decision: docs/plan/
+// catalog-icons) — the prompt shows the union inline, the editor's property
+// form derives its Select from it, and the renderer resolves against the
+// same map, so a name that parses always draws.
+const iconDefinition = {
+  props: z
+    .object({
+      name: z
+        .enum(LUCIDE_ICON_NAMES)
+        .describe("Lucide icon to draw (kebab-case, from the allowed list)"),
+      size: z
+        .number()
+        .nullable()
+        .optional()
+        .describe("Icon edge length in px (default 16)"),
+    })
+    .extend(STYLE_PROPS),
+  description:
+    "Lucide vector icon (inline SVG). Color via className (e.g. text-muted-foreground); fires press when tapped — bind on.press to make it an icon button.",
+  events: ["press"],
+  example: { name: "sparkles" },
+};
+
+// D5/D7 (docs/plan/catalog-icons): per-component additions on top of the
+// shared STYLE_PROPS extension. The catalog owns these two definitions, so
+// lib/playground/overrides.tsx owns the matching renderers.
+const componentExtensions: Record<
+  string,
+  { props?: z.core.$ZodLooseShape; events?: readonly string[] }
+> = {
+  // D5: icon-carrying buttons (the model's Previous/Next lesson) — the
+  // override draws them around the label and keeps a single press emission.
+  Button: {
+    props: {
+      leadingIcon: z
+        .enum(LUCIDE_ICON_NAMES)
+        .nullable()
+        .optional()
+        .describe('Lucide icon drawn before the label (e.g. "chevron-left")'),
+      trailingIcon: z
+        .enum(LUCIDE_ICON_NAMES)
+        .nullable()
+        .optional()
+        .describe('Lucide icon drawn after the label (e.g. "chevron-right")'),
     },
-  ]),
-) as unknown as StyledDefinitions;
+  },
+  // D7: upstream's Input only emits submit/focus/blur — our override also
+  // emits `change` on every keystroke so specs can search/filter live.
+  Input: { events: ["change"] },
+};
+
+const components = {
+  ...(Object.fromEntries(
+    Object.entries(shadcnComponentDefinitions).map(([name, definition]) => {
+      const extension = componentExtensions[name];
+      // Not every upstream definition carries `events` in its type union.
+      const upstreamEvents = (definition as { events?: readonly string[] })
+        .events;
+      const events =
+        extension?.events !== undefined
+          ? [...new Set([...(upstreamEvents ?? []), ...extension.events])]
+          : upstreamEvents;
+      return [
+        name,
+        {
+          ...definition,
+          ...(events !== undefined ? { events } : {}),
+          props: (
+            definition.props as z.ZodObject<z.core.$ZodLooseShape>
+          ).extend({
+            ...STYLE_PROPS,
+            ...(extension?.props ?? {}),
+          }),
+        },
+      ];
+    }),
+  ) as unknown as StyledDefinitions),
+  Icon: iconDefinition,
+} as unknown as StyledDefinitions & { Icon: typeof iconDefinition };
 
 export const playgroundCatalog = defineCatalog(schema, {
   components,
+  // D7: filterItems — the prompt lists the name automatically; STYLING_RULES
+  // documents the search/filter wiring that uses it.
+  functions: PLAYGROUND_FUNCTIONS,
   actions: {
     // Declared intent, app-implemented (decision 13): the model binds this
     // to the design's language switcher; each surface supplies the handler

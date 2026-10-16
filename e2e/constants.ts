@@ -241,6 +241,7 @@ export const MOCK_KEYS = {
   card: "card-1",
   heading: "heading-1",
   text: "text-1",
+  icon: "icon-1",
 } as const;
 
 export const MOCK_ROOT_KEY = MOCK_KEYS.card;
@@ -250,8 +251,11 @@ export const COMPONENT = {
   heading: "Heading",
   text: "Text",
   stack: "Stack",
+  grid: "Grid",
+  input: "Input",
   button: "Button",
   buttonGroup: "ButtonGroup",
+  icon: "Icon",
 } as const;
 
 export const PATCH_OP = {

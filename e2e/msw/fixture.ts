@@ -67,6 +67,164 @@ export const MOCK_EDIT_LINES: string[] = [
   }),
 ];
 
+/** MOCK_UI_LINES with a catalog Icon in the card — the icons fixture
+ *  (docs/plan/catalog-icons). Kept as its own key set so no other fixture's
+ *  structure-count assertions move. */
+export const ICON_UI_LINES: string[] = [
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: MOCK_KEYS.card }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath(MOCK_KEYS.card),
+    value: {
+      type: COMPONENT.card,
+      props: { title: UI.mockCardTitle },
+      children: [MOCK_KEYS.heading, MOCK_KEYS.icon, "icon-button"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath(MOCK_KEYS.heading),
+    value: {
+      type: COMPONENT.heading,
+      props: { text: UI.mockHeading, level: "h1" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath(MOCK_KEYS.icon),
+    value: {
+      type: COMPONENT.icon,
+      props: { name: "sparkles", size: 24 },
+      children: [],
+    },
+  }),
+  // D5 (docs/plan/catalog-icons): a Button carrying icon props — the leading
+  // and trailing icons must draw around the label.
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("icon-button"),
+    value: {
+      type: COMPONENT.button,
+      props: {
+        label: "Next",
+        leadingIcon: "arrow-left",
+        trailingIcon: "arrow-right",
+      },
+      children: [],
+    },
+  }),
+];
+
+/** D7 (docs/plan/catalog-icons): live search/filter fixture. Both arrays
+ *  are seeded in /state (state holds raw data only — the repeat reads the
+ *  filtered copy directly); the Input's change event rewrites
+ *  /filtered-icons through the catalog's filterItems function. */
+const FILTER_STATE_ITEMS = [
+  { name: "house" },
+  { name: "user" },
+  { name: "settings" },
+  { name: "search" },
+  { name: "mail" },
+  { name: "bell" },
+  { name: "star" },
+  { name: "heart" },
+  { name: "trash-2" },
+  { name: "pencil" },
+];
+
+export const FILTER_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: {
+      icons: FILTER_STATE_ITEMS,
+      "filtered-icons": [...FILTER_STATE_ITEMS],
+      query: "",
+    },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "filter-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("filter-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "md" },
+      children: ["filter-input", "filter-grid"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("filter-input"),
+    value: {
+      type: COMPONENT.input,
+      props: {
+        label: "Search icons",
+        name: "search",
+        type: "text",
+        placeholder: "Filter by name",
+        value: { $bindState: "/query" },
+      },
+      on: {
+        change: [
+          {
+            action: "setState",
+            params: {
+              statePath: "/filtered-icons",
+              value: {
+                $computed: "filterItems",
+                args: {
+                  source: { $state: "/icons" },
+                  query: { $state: "/query" },
+                  fields: ["name"],
+                },
+              },
+            },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("filter-grid"),
+    value: {
+      type: COMPONENT.grid,
+      props: { columns: 5, gap: "md" },
+      repeat: { statePath: "/filtered-icons" },
+      children: ["filter-cell"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("filter-cell"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "sm", className: "items-center" },
+      children: ["filter-icon", "filter-label"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("filter-icon"),
+    value: {
+      type: COMPONENT.icon,
+      props: { name: { $item: "name" }, size: 20 },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("filter-label"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: { $item: "name" } },
+      children: [],
+    },
+  }),
+];
+
 /** Class tokens the publish journey's baked page is asserted against — the
  *  compiled CSS for these must ship in the served HTML (plan:
  *  spec-languages, task 5.4). Kept out of MOCK_UI_LINES so the default

@@ -77,4 +77,40 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain('"repeat" belongs on the SCROLL CONTAINER');
     expect(STYLING_RULES).toContain('never put "repeat" on the card itself');
   });
+
+  test("documents the search/filter wiring through filterItems (D7)", () => {
+    expect(STYLING_RULES).toContain("Search & filter a list live");
+    expect(STYLING_RULES).toContain('{"$bindState": "/query"}');
+    expect(STYLING_RULES).toContain('"$computed": "filterItems"');
+    // The seed rule that fixes the items.map crash: state holds raw arrays,
+    // the repeat reads the filtered copy directly, no expressions in state.
+    expect(STYLING_RULES).toContain("Seed BOTH /items");
+    expect(STYLING_RULES).toContain('never put an expression like {"$search"');
+    expect(STYLING_RULES).toContain("case-insensitive substring");
+  });
+
+  test("documents the pagination pattern through sliceItems + $math + watch (D8/D8r)", () => {
+    expect(STYLING_RULES).toContain("Paginate a list");
+    // Seeds: raw data only — the repeat reads /page-items directly, and the
+    // seed must hold the first page's rows (an empty array = empty grid —
+    // the organic round-1 failure).
+    expect(STYLING_RULES).toContain('the list\'s "repeat" reads /page-items');
+    expect(STYLING_RULES).toContain("MUST start non-empty");
+    // The two ordered press actions: $math (prompt-documented directive)
+    // increments the page, then sliceItems re-slices from the filtered array.
+    expect(STYLING_RULES).toContain('"$math": "add"');
+    expect(STYLING_RULES).toContain('"$math": "subtract"');
+    expect(STYLING_RULES).toContain('"$computed": "sliceItems"');
+    expect(STYLING_RULES).toContain('"source": {"$state": "/filtered-items"}');
+    expect(STYLING_RULES).toContain("TWO press actions in order");
+    expect(STYLING_RULES).toContain("actions run sequentially");
+    // Dangling children refs must be caught by the rule (round-1 failure).
+    expect(STYLING_RULES).toContain("never defined renders nothing");
+    // Search ↔ pagination composition: watch re-pages on /filtered-items.
+    expect(STYLING_RULES).toContain('{"watch": {"/filtered-items"');
+    expect(STYLING_RULES).toContain("never on initial render");
+    // Edges + D5 icon affordance.
+    expect(STYLING_RULES).toContain("clamps the page into range");
+    expect(STYLING_RULES).toContain('leadingIcon "chevron-left"');
+  });
 });

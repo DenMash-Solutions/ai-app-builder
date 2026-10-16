@@ -65,6 +65,7 @@ import type {
   PromptScopeTarget,
 } from "@/lib/editor";
 import { examplePropsFor } from "@/lib/playground/catalog";
+import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
 import {
@@ -1275,6 +1276,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
       }
       handlers={handlers}
       validationFunctions={{}}
+      functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
       <div

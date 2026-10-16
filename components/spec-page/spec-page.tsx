@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { addEntry, createEntry } from "@/lib/history";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { localizeSpec } from "@/lib/specs/localize";
+import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { registry } from "@/lib/playground/registry";
 import { appDirectives } from "@/lib/computed/directives";
 
@@ -85,6 +86,7 @@ export function SpecPage({
       initialState={initialState}
       handlers={{}}
       validationFunctions={{}}
+      functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
       {main ? (
