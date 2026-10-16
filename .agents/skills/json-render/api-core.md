@@ -1,0 +1,766 @@
+# @json-render/core
+
+Core types, schemas, and utilities.
+
+## experimental_composeSpec
+
+**Experimental, unreleased:** may change in any release. Pin exact versions when published; see [source-build setup and the full Jev guide](/docs/jev).
+
+```typescript
+  experimental_composeSpec,
+  type Experimental_CompositionCandidate,
+  type Experimental_CompositionEvaluator,
+  type Experimental_CompositionEvent,
+} from "@json-render/core";
+
+const events = experimental_composeSpec({
+  catalog,             // Standard flat Spec catalog
+  candidates,          // App-owned atomic elements
+  prompt,              // User request
+  evaluate,            // Experimental_CompositionEvaluator
+  initialState: {},    // Included in spec; not sent to evaluator
+  initialSpec,         // Optional selected version to edit; never mutated
+  elementDescriptions: {}, // Optional descriptions of existing element IDs
+  context: {},         // Explicitly shared evaluator context
+  strategy: "batch",  // Default for new trees; edits are sequential
+  maxElements: 32,     // Batched creation only, includes the root
+  maxSteps: 32,        // Evaluation calls, including terminal decisions
+  maxDepth: 8,         // Root depth is one
+  signal,              // AbortSignal, optional
+  instructions: { root: "", next: "", parent: "" }, // Appended guidance
+});
+```
+
+A candidate has `id`, `description`, `element`, optional `root` (default true), `maxUses` (default one), and `resource` (mutually exclusive variants). IDs start with a letter and contain only letters, digits, underscores, and hyphens. IDs must be unique; `finish` and `unavailable` are reserved. Elements accept `type`, `props`, optional `on`, and `visible`. The composer supplies children and named slots.
+
+Events are full detached snapshots. A `step` contains `spec` and `step`; `complete` contains nullable `spec`, `steps`, `elapsedMs`, nullable `inputTokens`, and `stopReason` (`finish`, `limit`, or `unavailable`). Each trace step contains `index`, `choice`, `description`, nullable `parent`/`slot`, nullable `confidence`/`parentConfidence`, `elapsedMs`, and nullable `inputTokens`. Batched steps also contain `answers`, keyed by question name, with each selected `choice` and optional confidence. Each trace represents one evaluation: batched timing and usage are counted once, not once per answer. Indexes start at zero. Completion is not a guarantee of semantic correctness.
+
+### Batched creation
+
+With no `initialSpec`, `strategy: "batch"` is the default. The first evaluation selects the root and required components together. Shared `resource` variants use one exclusive choice; reusable recipes use bounded counts that include the root when applicable. Root selection takes precedence over speculative membership for the same recipe/resource. The first snapshot includes all selected elements in catalog order under the root's default slot, or its first declared slot when there is no default.
+
+A second evaluation selects parents and sibling positions from the actual selected set. Equal positions retain catalog order. The combined tree must pass catalog, slot, depth, and tree validation before publication; a cycle or invalid layout throws and preserves the first snapshot as partial output. A single root or one child in a single slot needs no layout call. No separate finish call is made.
+
+`maxElements` limits batched creation, including the root. A truncated selection, insufficient depth for selected content, or a call budget that prevents required layout returns `limit`. Use `strategy: "sequential"` for one-operation-at-a-time creation. Edits always use the sequential protocol.
+
+Invalid configuration, out-of-set decisions, provider failures, and aborts throw. Previous snapshots remain usable as partial UI. Stopping iteration prevents further evaluation calls. A supplied signal also stops waiting for an evaluator that ignores cancellation; that evaluator must honor the signal to stop its underlying work.
+
+### Custom evaluators
+
+The composer is provider independent. An evaluator receives `state`, `questions`, and `signal`, then returns a selected criteria key for each question:
+
+```typescript
+const evaluate: Experimental_CompositionEvaluator = async ({ state, questions, signal }) => {
+  // Your adapter calls a decision model with this request.
+  const result = await yourEvaluator({ state, questions, signal });
+  return {
+    answers: result.answers, // { [questionName]: { choice: "offered_key", confidence: 0.9 } }
+    usage: { inputTokens: result.inputTokens }, // Optional
+  };
+};
+```
+
+Questions are records of `type: "choice"`, `instructions`, and `criteria` (choice key to description). Return an answer for every question and treat question/choice keys as opaque. Batched creation sends `root` and `select_*` questions, then `parent_*` and `order_*` questions. Sequential creation and edits use `next` to select an operation, `finish`, or `unavailable`, with `parent` when several attachment points exist. Existing adapters that only implement `next`/`parent` must opt into `strategy: "sequential"`. Confidence must be in [0, 1] when provided; input tokens must be a nonnegative integer.
+
+State contains `user_request` and explicit app `context`, plus capabilities/guidance during batched selection, `selected_elements` during layout, or `already_built` during sequential composition. Candidate descriptions and instructions are shared; raw state/props/binding values are not automatically included. See [validation and v1 limits](/docs/jev#validation-and-v1-limits).
+
+### Follow-up edits
+
+Pass `initialSpec` to edit an existing version. The composer validates and clones it, preserving unchanged elements, IDs, action bindings, and state. `initialState` explicitly overrides `initialSpec.state` when provided. Optional `elementDescriptions` maps existing IDs to descriptions shared with the evaluator; matching candidates supply the default description, otherwise only the component type is shared.
+
+Editing adds bounded operations: replace an element with an offered recipe, remove a non-root subtree, and move/reorder a subtree to an allowed slot/position. Replacements preserve children and are offered only when the new component can contain them. Moves cannot create cycles or exceed the depth limit. Seed specs with cycles, shared children, missing references, unreachable nodes, or unsupported expressions are rejected before evaluation.
+
+The `next` question offers opaque operation keys as well as candidate IDs. For replacement or movement, the following evaluation selects a recipe or destination, also through `next`. Both calls count toward `maxSteps`; the first emits an unchanged snapshot with its decision trace. `changes_made` supplies the edit trace alongside `already_built`. A budget limit, unavailable result, or cancellation may leave a selected edit unapplied. Existing elements exactly matching a recipe count toward `maxUses` and `resource`; removing/replacing them releases those limits.
+
+## experimental_createEvaluator
+
+**Experimental:** creates a server-side evaluator using Vercel AI Gateway's experimental v4 evaluation transport. No AI SDK dependency or provider constructor is required.
+
+```typescript
+
+const evaluate = experimental_createEvaluator({
+  apiKey: process.env.AI_GATEWAY_API_KEY!, // Required; keep server-side
+  model: "typesafe-ai/jev",               // Required, plain Gateway evaluation model ID
+  timeoutMs: 10_000,                      // Default, per evaluation
+  fetch: globalThis.fetch,               // Optional transport override
+});
+```
+
+The factory uses model-neutral naming and requires an explicit model. Jev is the current tested example; other models must support the Gateway choice-evaluation protocol. When using Jev, the Gateway team must permit TypeSafe AI. The adapter reports HTTP status on failure and rejects malformed/unoffered decisions. For Jev, it normalizes TypeSafe's native confidence rather than treating option probability as confidence. Confidence from other provider metadata is not yet normalized. Missing confidence and usage remain unknown. It does not retry automatically or estimate cost.
+
+## defineCatalog
+
+Creates a type-safe catalog definition with schema validation.
+
+```typescript
+
+function defineCatalog<T extends ZodType>(
+  s: T,
+  config: CatalogConfig
+): Catalog
+
+// Use the React schema for standard UI specs
+const catalog = defineCatalog(schema, {
+  components: {...},
+  actions: {...},
+});
+```
+
+### CatalogConfig
+
+```typescript
+interface CatalogConfig {
+  components: Record<string, ComponentDefinition>;
+  actions?: Record<string, ActionDefinition>;
+  functions?: Record<string, FunctionDefinition>;
+}
+
+interface ComponentDefinition {
+  props: ZodObject;         // Use .nullable() for optional props
+  slots?: string[];         // Named slots (e.g., ["default"])
+  description?: string;     // Help AI understand usage
+}
+
+interface ActionDefinition {
+  params?: ZodObject;
+  description?: string;
+}
+
+interface FunctionDefinition {
+  description?: string;
+}
+```
+
+### Catalog Instance
+
+The returned catalog provides methods for AI prompt generation, validation, and schema export:
+
+```typescript
+interface Catalog {
+  // Data
+  readonly data: CatalogConfig;         // The catalog configuration
+  readonly componentNames: string[];    // List of component names
+  readonly actionNames: string[];       // List of action names
+
+  // AI Prompt Generation
+  prompt(options?: PromptOptions): string;
+
+  // Validation
+  validate(spec: unknown): SpecValidationResult;
+  zodSchema(): z.ZodType;               // Get the Zod schema for specs
+
+  // Export
+  jsonSchema(): object;                 // Export as JSON Schema
+}
+
+interface PromptOptions {
+  system?: string;           // Custom system message intro
+  customRules?: string[];    // Additional rules to append
+  mode?: "standalone" | "inline" | "generate" | "chat"; // Output mode (default: "standalone")
+  editModes?: EditMode[];    // Edit modes to document in prompt (default: ["patch"])
+}
+
+interface SpecValidationResult<T> {
+  success: boolean;
+  data?: T;               // Validated spec (if success)
+  error?: z.ZodError;     // Validation errors (if failed)
+}
+```
+
+### Catalog Methods
+
+```typescript
+// Generate AI system prompt
+const systemPrompt = catalog.prompt({
+  customRules: ["Always use Card as root element"],
+});
+
+// Validate a spec from AI
+const result = catalog.validate(aiOutput);
+if (result.success) {
+  render(result.data);
+} else {
+  console.error(result.error);
+}
+
+// Get Zod schema for custom validation
+const schema = catalog.zodSchema();
+const parsed = schema.safeParse(aiOutput);
+
+// Export as JSON Schema (for structured outputs)
+const jsonSchema = catalog.jsonSchema();
+```
+
+## Schema System
+
+json-render uses a flexible schema system that defines both the AI output format (spec) and what catalogs must provide. Each renderer package provides its own schema (e.g., @json-render/react exports `schema`).
+
+### schema
+
+The schema for flat UI element trees. This is exported from @json-render/react.
+
+```typescript
+
+// schema defines:
+// - Spec shape: { root: string, elements: Record<string, UIElement> }
+// - Catalog shape: { components: {...}, actions: {...} }
+
+const catalog = defineCatalog(schema, {
+  components: {
+    Card: {
+      props: z.object({ title: z.string() }),
+      slots: ["default"],
+      description: "Container card",
+    },
+  },
+  actions: {
+    submit: {
+      params: z.object({ formId: z.string() }),
+      description: "Submit a form",
+    },
+  },
+});
+```
+
+### SchemaOptions
+
+When creating schemas with `defineSchema`, you can pass options:
+
+```typescript
+interface SchemaOptions {
+  promptTemplate?: PromptTemplate;  // Custom AI prompt generator
+  defaultRules?: string[];          // Default rules injected before custom rules in prompts
+  builtInActions?: BuiltInAction[]; // Actions always available at runtime, auto-injected into prompts
+}
+
+interface BuiltInAction {
+  name: string;        // Action name (e.g. "setState")
+  description: string; // Human-readable description for the LLM
+}
+```
+
+Built-in actions are injected into prompts as `[built-in]` and are handled by the runtime (e.g. `ActionProvider`) without requiring handlers in `defineRegistry`. The React schema declares `setState`, `pushState`, and `removeState` as built-in.
+
+### defineSchema
+
+Create custom schemas for different output formats (e.g., page-based, block-based).
+
+```typescript
+
+const mySchema = defineSchema((s) => ({
+  // What the AI outputs (spec)
+  spec: s.object({
+    title: s.string(),
+    blocks: s.array(s.object({
+      type: s.ref("catalog.blocks"),
+      content: s.any(),
+    })),
+  }),
+
+  // What the catalog must provide
+  catalog: s.object({
+    blocks: s.map({
+      props: s.zod(),
+      description: s.string(),
+    }),
+  }),
+}));
+```
+
+### Schema Builder API
+
+The schema builder provides these methods:
+
+```typescript
+// Primitive types
+s.string()           // String value
+s.number()           // Number value
+s.boolean()          // Boolean value
+s.any()              // Any value
+
+// Compound types
+s.array(item)        // Array of items
+s.object({ ... })    // Object with shape
+s.record(value)      // Record/map with value type
+
+// Catalog references (for type safety)
+s.ref("catalog.components")      // Reference to catalog key (becomes enum)
+s.propsOf("catalog.components")  // Props schema from catalog entry
+
+// Catalog definitions
+s.map({ props: s.zod(), ... })   // Map of named entries with shared shape
+s.zod()                          // Placeholder for user-provided Zod schema
+
+// Modifiers
+s.optional()         // Mark field as optional
+```
+
+## Zod Schemas
+
+Pre-built Zod schemas for common json-render types:
+
+### Dynamic Value Schemas
+
+```typescript
+  DynamicValueSchema,    // string | number | boolean | null | { $state: string }
+  DynamicStringSchema,   // string | { $state: string }
+  DynamicNumberSchema,   // number | { $state: string }
+  DynamicBooleanSchema,  // boolean | { $state: string }
+} from '@json-render/core';
+
+// Dynamic values can be literals or state path references
+type DynamicValue<T> = T | { $state: string };
+
+// Example: a prop that can be a literal or bound to state
+const schema = z.object({
+  label: DynamicStringSchema,  // "Hello" or { $state: "/user/name" }
+});
+```
+
+### Visibility Schemas
+
+```typescript
+
+// Use in component props that need conditional rendering
+const schema = z.object({
+  visible: VisibilityConditionSchema.optional(),
+});
+```
+
+### Action Schemas
+
+```typescript
+  ActionSchema,           // Full action definition
+  ActionConfirmSchema,    // Confirmation dialog config
+  ActionOnSuccessSchema,  // Success handler config
+  ActionOnErrorSchema,    // Error handler config
+} from '@json-render/core';
+```
+
+### Validation Schemas
+
+```typescript
+  ValidationCheckSchema,   // Single validation check
+  ValidationConfigSchema,  // Full validation config with checks array
+} from '@json-render/core';
+```
+
+## SpecStream
+
+SpecStream is json-render's streaming format for progressively building specs from JSONL patches.
+
+### createSpecStreamCompiler
+
+Create a streaming compiler that incrementally builds a spec:
+
+```typescript
+
+const compiler = createSpecStreamCompiler<MySpec>();
+
+// Process streaming chunks
+const { result, newPatches } = compiler.push(chunk);
+
+// Get final result
+const spec = compiler.getResult();
+
+// Reset for reuse
+compiler.reset();
+```
+
+### compileSpecStream
+
+Compile an entire SpecStream string at once:
+
+```typescript
+
+const jsonl = `{"op":"add","path":"/root","value":{}}
+{"op":"add","path":"/root/type","value":"Card"}`;
+
+const spec = compileSpecStream<MySpec>(jsonl);
+```
+
+### Low-Level Utilities
+
+```typescript
+  parseSpecStreamLine,
+  applySpecStreamPatch,
+} from '@json-render/core';
+
+// Parse a single line
+const patch = parseSpecStreamLine('{"op":"add","path":"/root","value":{}}');
+
+// Apply patch to object (mutates in place)
+const obj = {};
+applySpecStreamPatch(obj, patch);
+```
+
+### applySpecPatch
+
+Apply a single SpecStream patch to a Spec object (mutates in place, returns the spec):
+
+```typescript
+
+let spec: Spec = { root: "", elements: {} };
+applySpecPatch(spec, { op: "add", path: "/root", value: "main" });
+
+// For React state updates, spread to create a new reference:
+setSpec({ ...applySpecPatch(spec, patch) });
+```
+
+### nestedToFlat
+
+Convert a nested element tree (with inline children and named slots) into the flat `Spec` format:
+
+```typescript
+
+const flat = nestedToFlat({
+  type: "Layout",
+  props: {},
+  children: [{ type: "Text", props: { content: "Main" }, children: [] }],
+  slots: {
+    header: [{ type: "Heading", props: { text: "Header" }, children: [] }],
+  },
+});
+// { root: "el-0", elements: { "el-0": ..., "el-1": ... } }
+```
+
+### createJsonRenderTransform
+
+Low-level `TransformStream` that separates text from JSONL patches in a mixed AI stream. Lines that parse as JSONL patches are emitted as `data-spec` parts; everything else passes through as text.
+
+The transform properly splits text blocks around spec data by emitting `text-end`/`text-start` pairs, ensuring the AI SDK creates separate text parts and preserving correct interleaving of prose and UI in `message.parts`.
+
+```typescript
+
+const transform = createJsonRenderTransform();
+// Use with ReadableStream.pipeThrough(transform) for custom pipelines
+```
+
+Most users should use `pipeJsonRender()` instead, which wraps this transform for the common AI SDK use case.
+
+### createMixedStreamParser
+
+Parse a mixed stream of text and JSONL patches (used for Inline mode):
+
+```typescript
+
+const parser = createMixedStreamParser({
+  onText: (text) => appendToMessage(text),
+  onPatch: (patch) => applySpecPatch(spec, patch),
+});
+
+// As chunks arrive from the stream:
+for await (const chunk of stream) {
+  parser.push(chunk);
+}
+parser.flush();
+```
+
+### pipeJsonRender
+
+Pipe an AI SDK `UIMessageStream` through the json-render transform. Lines that parse as JSONL patches are emitted as `data-spec` parts; everything else passes through as text. Used in Inline mode API routes.
+
+```typescript
+
+const stream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    writer.merge(pipeJsonRender(result.toUIMessageStream()));
+  },
+});
+return createUIMessageStreamResponse({ stream });
+```
+
+See [Generation Modes](/docs/generation-modes) for full Inline mode setup.
+
+### SpecStream Types
+
+Fully compliant with [RFC 6902](https://datatracker.ietf.org/doc/html/rfc6902):
+
+```typescript
+interface SpecStreamLine {
+  op: 'add' | 'remove' | 'replace' | 'move' | 'copy' | 'test';
+  path: string;
+  value?: unknown;  // Required for add, replace, test
+  from?: string;    // Required for move, copy
+}
+
+interface SpecStreamCompiler<T> {
+  push(chunk: string): { result: T; newPatches: SpecStreamLine[] };
+  getResult(): T;
+  getPatches(): SpecStreamLine[];
+  reset(): void;
+}
+
+interface MixedStreamCallbacks {
+  onText: (text: string) => void;
+  onPatch: (patch: SpecStreamLine) => void;
+}
+
+interface MixedStreamParser {
+  push(chunk: string): void;
+  flush(): void;
+}
+```
+
+## Utility Functions
+
+### Path Utilities
+
+```typescript
+
+// Get value by JSON Pointer path
+const value = getByPath(state, '/user/name');  // "Alice"
+
+// Set value by path (mutates object)
+setByPath(state, '/user/email', 'alice@example.com');
+```
+
+### resolveDynamicValue
+
+```typescript
+
+// Resolve a dynamic value against state
+const name = resolveDynamicValue("Hello", state);        // "Hello"
+const name2 = resolveDynamicValue({ $state: "/user/name" }, state);  // "Alice"
+```
+
+### findFormValue
+
+Read a value from resolved action parameters or state. A parameter value is literal, including strings with dots such as emails, URLs, and versions. Lookup order: a defined direct parameter, a parameter key ending in `.<fieldName>`, a matching flat state key, then a slash-delimited path in nested state.
+
+```typescript
+
+findFormValue("email", { email: "john.doe@example.com" }, {});
+findFormValue("email", { "form.email": "john.doe@example.com" }, {});
+findFormValue("email", {}, { "form.email": "john.doe@example.com" });
+findFormValue("/form/email", {}, { form: { email: "john.doe@example.com" } });
+```
+
+For action bindings, use `{ $state: "/form/email" }` to read nested state: the action resolver passes the resulting value to the handler. A raw string like `"form.email"` in parameters is not a state reference. A bare `"email"` field name does not search `state.form.email`.
+
+## buildUserPrompt
+
+Build structured user prompts for AI generation, with support for refinement and state context.
+
+```typescript
+
+function buildUserPrompt(options: UserPromptOptions): string
+
+interface UserPromptOptions {
+  prompt: string;                        // The user's text prompt
+  currentSpec?: Spec | null;             // Existing spec to refine (triggers edit mode)
+  state?: Record<string, unknown> | null; // Runtime state context to include
+  maxPromptLength?: number;              // Max length for user text (truncates before wrapping)
+  editModes?: EditMode[];                // Edit modes for refinement (default: ["patch"])
+}
+```
+
+### Fresh generation
+
+```typescript
+const userPrompt = buildUserPrompt({ prompt: "create a todo app" });
+```
+
+### Refinement (edit modes)
+
+When `currentSpec` is provided, the prompt instructs the AI to use the specified edit modes instead of recreating the entire spec. Available modes: `"patch"` (RFC 6902), `"merge"` (RFC 7396), and `"diff"` (unified diff).
+
+```typescript
+const userPrompt = buildUserPrompt({
+  prompt: "add a dark mode toggle",
+  currentSpec: existingSpec,
+  editModes: ["patch", "merge"],
+});
+```
+
+### With state context
+
+Include runtime state so the AI knows what data is available:
+
+```typescript
+const userPrompt = buildUserPrompt({
+  prompt: "show my data",
+  state: { todos: [{ text: "Buy milk" }] },
+});
+```
+
+## Edit Modes
+
+Universal edit mode utilities for modifying existing specs. Used by `buildUserPrompt` internally and available for direct use.
+
+```typescript
+  buildEditInstructions,
+  buildEditUserPrompt,
+  isNonEmptySpec,
+  type EditMode,
+  type EditConfig,
+} from '@json-render/core';
+
+type EditMode = "patch" | "merge" | "diff";
+```
+
+### buildEditInstructions
+
+Generate the prompt section describing available edit modes. Supports both JSON and YAML formats.
+
+```typescript
+function buildEditInstructions(config: EditConfig, format: "json" | "yaml"): string
+
+const instructions = buildEditInstructions({ modes: ["patch", "merge"] }, "json");
+```
+
+### buildEditUserPrompt
+
+Build a user prompt for editing an existing spec. Includes the current spec (with line numbers when diff mode is enabled) and mode-specific instructions.
+
+```typescript
+function buildEditUserPrompt(options: BuildEditUserPromptOptions): string
+
+interface BuildEditUserPromptOptions {
+  prompt: string;
+  currentSpec?: Spec | null;
+  config?: EditConfig;
+  format: "json" | "yaml";
+  maxPromptLength?: number;
+  serializer?: (spec: Spec) => string;
+}
+```
+
+### isNonEmptySpec
+
+Check whether a value is a non-empty spec (has a root string and at least one element).
+
+```typescript
+function isNonEmptySpec(spec: unknown): spec is Spec
+```
+
+## Deep Merge and Diff
+
+Format-agnostic utilities for merging and diffing spec objects.
+
+### deepMergeSpec
+
+Deep-merge with RFC 7396 semantics: `null` deletes, arrays replace, objects recurse. Neither input is mutated.
+
+```typescript
+
+function deepMergeSpec(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown>
+
+const merged = deepMergeSpec(currentSpec, { elements: { main: { props: { title: "New" } } } });
+```
+
+### diffToPatches
+
+Generate RFC 6902 JSON Patch operations that transform one object into another. Arrays are compared shallowly and replaced atomically; plain objects recurse.
+
+```typescript
+
+function diffToPatches(
+  oldObj: Record<string, unknown>,
+  newObj: Record<string, unknown>,
+  basePath?: string
+): JsonPatch[]
+
+const patches = diffToPatches(oldSpec, newSpec);
+// [{ op: "replace", path: "/elements/main/props/title", value: "New Title" }]
+```
+
+## evaluateVisibility
+
+Evaluates a visibility condition against the state model.
+
+```typescript
+function evaluateVisibility(
+  condition: VisibilityCondition | undefined,
+  ctx: VisibilityContext
+): boolean
+
+interface VisibilityContext {
+  stateModel: StateModel;
+  repeatItem?: unknown;    // Current repeat item (inside repeat scope)
+  repeatIndex?: number;    // Current repeat array index (inside repeat scope)
+}
+
+type VisibilityCondition =
+  | { $state: string }                                    // truthiness
+  | { $state: string; not: true }                         // falsy
+  | { $state: string; eq: unknown }                       // equality
+  | { $state: string; neq: unknown }                      // inequality
+  | { $state: string; gt: number }                        // greater than
+  | { $state: string; gte: number }                       // gte
+  | { $state: string; lt: number }                        // lt
+  | { $state: string; lte: number }                       // lte
+  | { $item: string }                                     // item field (repeat scope)
+  | { $item: string; eq: unknown }                        // item field equality
+  | { $index: true }                                      // index truthiness (repeat scope)
+  | { $index: true; gt: number }                          // index comparison
+  | VisibilityCondition[]                                 // implicit AND
+  | { $and: VisibilityCondition[] }                       // explicit AND
+  | { $or: VisibilityCondition[] }                        // OR
+  | boolean;                                              // always / never
+```
+
+## Types
+
+### UIElement
+
+```typescript
+interface UIElement {
+  type: string;
+  props: Record<string, unknown>;
+  children?: string[];          // Keys of child elements
+  slots?: Record<string, string[]>; // Named slots mapped to child keys
+  visible?: VisibilityCondition;
+  on?: Record<string, ActionBinding | ActionBinding[]>;  // Event bindings
+  repeat?: { statePath: string | { $item: string }; key?: string }; // Repeat for arrays
+}
+```
+
+Elements are stored in the `elements` map keyed by string IDs. The key comes from the map, not from the element itself.
+
+### Spec (Element Tree)
+
+```typescript
+interface Spec {
+  root: string | null;                        // Key of root element
+  elements: Record<string, UIElement>;        // Flat element map
+  state?: Record<string, unknown>;            // Initial state model
+}
+```
+
+Elements are stored as a flat map with string keys. The tree structure is built by following `children` and named `slots` references.
+
+### ActionBinding
+
+```typescript
+interface ActionBinding {
+  action: string;
+  params?: Record<string, DynamicValue>;
+  confirm?: {
+    title: string;
+    message: string;
+    variant?: 'default' | 'danger';
+  };
+  onSuccess?: { set: Record<string, unknown> };
+  onError?: { set: Record<string, unknown> };
+  preventDefault?: boolean;  // Prevent default browser behavior (e.g. navigation on links)
+}
+```
+
+### ValidationSchema
+
+```typescript
+interface ValidationSchema {
+  checks: ValidationCheck[];
+  validateOn?: 'change' | 'blur' | 'submit';
+}
+
+interface ValidationCheck {
+  type: string;
+  args?: Record<string, unknown>;
+  message: string;
+}
+```
