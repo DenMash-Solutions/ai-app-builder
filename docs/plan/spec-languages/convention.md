@@ -41,8 +41,7 @@ Rules:
    app routing; the *viewed* language comes from the route (live pages) or
    the editor toggle. On live/preview the renderer's **runtime**
    `state.locale` is diffed to the route tag (stored spec untouched) so the
-   design's own switcher highlights — and, via `onStateChange`, *navigates*
-   to — the language actually served.
+   design's own switcher highlights the language actually served.
 
 ## Merge & fallback chain
 
@@ -68,21 +67,44 @@ toggle's option list and the bake's per-tag loop.
 
 | Surface | Language source | Merge point |
 | --- | --- | --- |
-| Live/featured (`/{locale}`, `/{locale}/{slug}`) | route locale | server, before render/bake lookup |
-| Preview route (`/ui/{ref}` preview pill target) | route locale | client, same helper; its `state.locale` diff + `onStateChange` make the design's switcher navigate `/{tag}/{slug}` |
+| Featured root (`/{tag}` — app or carried content language) | route locale | server, before render/bake lookup; `state.locale` injected from the route so the switcher's highlight matches |
+| Live/featured (`/{tag}/{slug}`) | route locale | server, before render/bake lookup |
+| Preview route (`/ui/{ref}` preview pill target) | route locale | client, same helper; its `state.locale` diff + `switch_language` handler navigate `/{tag}/{slug}` |
 | Playground canvas | editor content-language toggle | `initialState` of the canvas `StateProvider` |
 | Committed specs (login/signup/admin) | route-injected bundles | unchanged — route already injects locale-correct `copy` via `extraState` |
 | Published pages | baked per tag at publish | artifact lookup uses the same chain (exact → base → seed) |
 
-Serving routes (decision 11, 2026-10-15): **any canonical BCP-47 tag** may
-lead a content path. The proxy passes `/{tag}/{slug}` through untouched when
-`tag` is not an app locale (next-intl routing would rewrite it into a dead
-three-segment URL), the root `[locale]` layout 404s non-canonical tags, and
-the `request.ts` config reuses the default message catalog for content-only
-locales (their pages render baked content; only shell strings leak through).
-App surfaces (`/`, `/ui`, `/admin`, `/login`, `/signup`) sit behind a strict
-`hasLocale` gate in `(app)/layout` — `/fr/denmash` serves, `/fr/ui` is a 404.
-The preview pill pins its link to an app locale so it never points into one.
+**Switching (decisions 5, 11, 13)**: the design's switcher declares
+`{"action": "switch_language", "params": {"tag": {"$state": "/locale"}}}` on
+its `change` event (catalog action; the group writes `/locale` before it
+emits, so the param resolves to the pressed tag). Each surface supplies the
+handler — canvas switches in place (never navigates), preview navigates
+`/{tag}/{slug}`, the root navigates `/{tag}` — kept stable-once behind a
+ref (the action provider captures its initial handlers) with an effect
+re-syncing the closure. Specs **without** the binding (published before the
+action) keep the older `onStateChange` state-write intercept; once the
+binding is declared the intercept is disabled for that surface, so the two
+never double-navigate. The completion fix-up binds the action on every
+model commit when a switcher is present, so existing designs migrate on
+their next edit.
+
+Serving routes (decisions 11 + 12, 2026-10-15): **any segment that is
+neither an app locale nor an app path segment leads content** — the proxy
+passes `/{tag}/{slug}` *and* a bare `/{seg}` through untouched (next-intl
+routing would rewrite them into a prefixed or dead three-segment URL), and
+the **root page (moved out of the `(app)` group) is the single
+disambiguator**: app locale → serve; non-app locale carried by the
+featured design → serve it in that language (`mergeI18n` fallback per key;
+content-only artifacts via `servingArtifact`); otherwise the old slug sugar
+— a published slug redirects to `/{default}/{slug}`, anything else 404s.
+The layout's canonical-tag guard moved down to the `[slug]` route so
+non-canonical slugs can still resolve; the `request.ts` config reuses the
+default message catalog for content-only locales (their pages render baked
+content; only shell strings leak through). App surfaces (`/ui`, `/admin`,
+`/login`, `/signup`) sit behind a strict `hasLocale` gate in
+`(app)/layout` — `/fr/denmash` serves, `/fr/ui` is a 404. The preview
+pill and the authed root's account cluster pin their links to an app locale
+so they never point into a content root (`/fr` → `/fr/ui` would 404).
 
 ## Generation contract
 
@@ -94,10 +116,16 @@ The generator is told (system-prompt rules + schema guidance):
   with the *same* keys — default pair when the prompt names none: **en, es**
   (the seed language is `state.locale`, so for an English seed only
   `i18n.es` is strictly required);
+- if the design has a language switcher, keep `state.locale` bound on its
+  `selected` prop and declare the switch:
+  `"on": {"change": [{"action": "switch_language", "params": {"tag": {"$state": "/locale"}}}]}`;
 - models drift: ingest is **not** trusted. The client ingest seam
   (`Playground.onComplete`, covering generate, steer-edit and JSON import)
   runs the normalizer (lifts stray inline copy into `state.copy`, replacing
-  it with `$state` refs) and the coverage validator. Missing translations
+  it with `$state` refs), the coverage validator, and the deterministic
+  switcher fix-ups: a switcher gains the newly added language's option and
+  its `switch_language` binding when missing (decisions 10 and 13 — pure,
+  idempotent, input untouched). Missing translations
   are a **non-blocking** flag on the entry (`i18nMissing: string[]`, local
   device metadata — not synced), never a rejection.
 
@@ -155,4 +183,6 @@ limitation.
 
 App-chrome locales beyond en/es · staleness/hash tracking of translations ·
 side-by-side translation editor · per-locale featured pages · `?lang=`
-serving / on-page pickers · nested copy props (`items[]`, `checks[]`).
+serving / on-page pickers · nested copy props (`items[]`, `checks[]`) · a
+generic spec `navigate` action (only `switch_language` is declared; other
+navigation stays app-side).
