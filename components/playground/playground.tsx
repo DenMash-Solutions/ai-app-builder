@@ -111,7 +111,6 @@ import { AddLanguageDialog } from "@/components/playground/add-language-dialog";
 import {
   SPEC_STATE_KEYS,
   availableLanguages,
-  getCopy,
   mergeI18n,
   seedLocale,
 } from "@/lib/i18n/spec-languages";
@@ -422,7 +421,6 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   // Content language (playground editor): the active tag drives the canvas
   // merge, the EditPanel's resolved values, and where copy edits are written.
-  const hasCopy = Object.keys(getCopy(displayedSpec?.state)).length > 0;
   const seedLang = seedLocale(displayedSpec?.state);
   const languages = useMemo(
     () => (displayedSpec ? availableLanguages(displayedSpec) : [seedLang]),
@@ -1273,28 +1271,30 @@ export function Playground({ initialRef }: PlaygroundProps) {
     );
   }
 
-  // Content-language toggle: only shown when the spec has translatable copy.
-  // Copy edits redirect per copyWriteTarget; add/translate are model steers
-  // (add collects the target tag in a dialog); revert drops the active
+  // Content-language control — ToolRail (rev 3), NOT gated on `hasCopy`:
+  // the rail trigger shows the current tag on ANY displayed spec, and its
+  // popover carries the "Add language…" row, so the original bug (only entry
+  // point hidden when state.copy is empty) cannot come back. On a copy-less
+  // spec `languages` falls back to [seedLang]; translate/revert rows self-
+  // hide (missing = 0, canRevert = false). Copy edits redirect per
+  // copyWriteTarget; translate is a model steer; revert drops the active
   // overlay layer back to the seed.
-  const contentLangProps: ContentLanguageSwitcherProps | null = hasCopy
-    ? {
-        languages,
-        value: contentLang,
-        seed: seedLang,
-        pendingTag: pendingLang,
-        missingByTag,
-        onChange: (tag: string) => {
-          setLangOverride(tag);
-          writeContentLang(activeEntry?.id ?? null, tag);
-        },
-        onAddLanguage: () => setAddLangOpen(true),
-        onRemoveLanguage: handleRemoveLanguage,
-        onTranslateMissing: handleTranslateMissing,
-        onRevertToSource: handleRevertToSource,
-        canRevert,
-      }
-    : null;
+  const contentLangProps: ContentLanguageSwitcherProps = {
+    languages,
+    value: contentLang,
+    seed: seedLang,
+    pendingTag: pendingLang,
+    missingByTag,
+    onChange: (tag: string) => {
+      setLangOverride(tag);
+      writeContentLang(activeEntry?.id ?? null, tag);
+    },
+    onRemoveLanguage: handleRemoveLanguage,
+    onTranslateMissing: handleTranslateMissing,
+    onRevertToSource: handleRevertToSource,
+    canRevert,
+    onAddLanguage: () => setAddLangOpen(true),
+  };
 
   return (
     <JSONUIProvider
@@ -1330,7 +1330,6 @@ export function Playground({ initialRef }: PlaygroundProps) {
             entrySlug={activeEntry?.slug ?? null}
             takenSlugs={takenSlugs}
             onRename={handleRename}
-            contentLang={contentLangProps}
           />
           {/* Landing only: while editing an entry the CTA would just
                     overlay the canvas the user is working on. */}
@@ -1344,6 +1343,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
               onTogglePick={handleTogglePick}
               onToggleDnd={() => setDndMode((prev) => !prev)}
               onToggleXray={() => setXrayMode((prev) => !prev)}
+              contentLang={contentLangProps}
               onClear={handleClearCurrent}
             />
           )}

@@ -11,7 +11,11 @@ import {
   SLOTS,
 } from "./constants";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
-import { I18N_PTBR_EDIT_LINES, I18N_UI_LINES } from "./msw/fixture";
+import {
+  I18N_PTBR_EDIT_LINES,
+  I18N_UI_LINES,
+  NO_COPY_UI_LINES,
+} from "./msw/fixture";
 
 const langTrigger = (page: Page) =>
   page.getByRole(ROLE.button, { name: I18N.langTitle });
@@ -69,9 +73,11 @@ test.describe("content languages", () => {
   }) => {
     await generateI18n(page, I18N_PTBR_EDIT_LINES);
 
-    // The action opens the picker — a comprehensive language catalog.
-    await langTrigger(page).click();
+    // The rail's language trigger opens the spec popover; its "Add
+    // language…" row opens the picker — a comprehensive language catalog
+    // (rail = the control's single home: trigger → popover row → dialog).
     const popover = page.locator('[data-slot="popover-content"]');
+    await langTrigger(page).click();
     await popover.getByRole(ROLE.button, { name: I18N.addLang }).click();
     const dialog = page.locator(SLOTS.dialog);
     await expect(dialog).toBeVisible();
@@ -113,14 +119,14 @@ test.describe("content languages", () => {
     await expect(switcherPtBr).toBeVisible();
 
     // And it is the real switcher: a canvas click changes the content
-    // language, with the pill following what the canvas shows.
+    // language, with the rail trigger following what the canvas shows.
     const switcherEs = page.getByRole(ROLE.button, {
       name: I18N.switcher.es,
       exact: true,
     });
     await switcherEs.click();
     await expect(page.getByText(I18N.esTitle, { exact: true })).toBeVisible();
-    // The pill follows the canvas (its tag renders CSS-uppercased — match
+    // The trigger follows the canvas (its tag renders CSS-uppercased — match
     // case-insensitively against either form).
     await expect(langTrigger(page)).toContainText(/es/i);
     await switcherPtBr.click();
@@ -177,6 +183,39 @@ test.describe("content languages", () => {
         (button) => button.value,
       ),
     ).toEqual(["es", "en"]);
+  });
+
+  test("the rail keeps Add language reachable on a spec without copy", async ({
+    page,
+  }) => {
+    // normalizeSpecCopy lifts element text into state.copy at ingest, so a
+    // spec without copy is one without a single lift-able string (the
+    // text-free fixture). Before the rail move, the whole language UI (and
+    // with it "Add language…") vanished on such specs — the pill was gated
+    // on translatable copy. Rev 3: the trigger lives on the rail, ungated,
+    // and shows the current tag.
+    await mockGenerate(page, { lines: NO_COPY_UI_LINES });
+    await page.goto(PATHS.ui);
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+
+    // Exactly one language control, on the rail (the TopBar lost the pill):
+    // it shows the current tag even though nothing is translatable.
+    const trigger = page.getByRole(ROLE.button, { name: I18N.langTitle });
+    await expect(trigger).toHaveCount(1);
+    await expect(
+      page.locator("[data-tool-rail]").getByRole(ROLE.button, {
+        name: I18N.langTitle,
+      }),
+    ).toHaveCount(1);
+    await expect(trigger).toContainText(/en/i);
+
+    // Its popover carries the Add row → the picker dialog opens.
+    await trigger.click();
+    const popover = page.locator('[data-slot="popover-content"]');
+    await popover.getByRole(ROLE.button, { name: I18N.addLang }).click();
+    await expect(page.locator(SLOTS.dialog)).toBeVisible();
   });
 
   test("copy edits in a non-seed language write the i18n overlay, not the seed", async ({

@@ -251,8 +251,9 @@ test.describe("authenticated — admin identity", () => {
       }
       entryId = stored.id;
 
-      // Add pt-BR through the picker: the steer lands the layer and the
-      // completion fix-up commits the switcher's new option alongside it.
+      // Add pt-BR through the picker (rev 3: the rail trigger opens the spec
+      // popover, whose Add row opens the dialog): the steer lands the layer
+      // and the completion fix-up commits the switcher's new option.
       await page.getByRole(ROLE.button, { name: I18N.langTitle }).click();
       const popover = page.locator('[data-slot="popover-content"]');
       await popover.getByRole(ROLE.button, { name: I18N.addLang }).click();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Languages, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { Check, Languages, Loader2, RotateCcw, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
@@ -32,8 +32,6 @@ export interface ContentLanguageSwitcherProps {
   /** Per-tag untranslated-key count (only tags with gaps are listed). */
   missingByTag: ReadonlyMap<string, number>;
   onChange: (tag: string) => void;
-  /** Opens the "Add language…" dialog — the tag the user names feeds the model action. */
-  onAddLanguage: () => void;
   /** Model action: fill the active language's missing keys. */
   onTranslateMissing: () => void;
   /** Tag whose translation is streaming in — spins the pill until it lands. */
@@ -47,7 +45,9 @@ export interface ContentLanguageSwitcherProps {
   onRevertToSource: () => void;
   /** Whether the active (non-seed) language has an overlay to revert. */
   canRevert: boolean;
-  variant?: "pill" | "row";
+  /** Opens the "Add language…" dialog — the popover lives on the ToolRail,
+   *  so this row keeps the action reachable on ANY spec (ungated by copy). */
+  onAddLanguage?: () => void;
   className?: string;
 }
 
@@ -59,19 +59,25 @@ function languageLabel(tag: string, locale: string): string {
   return languageName(tag, locale) ?? tag;
 }
 
+/**
+ * Spec content language — the ToolRail control (TopBar's LocaleSwitcher is
+ * the APP-shell language; the rail is spec-only, user boundary in plan rev 3).
+ * The trigger shows the current tag instead of an icon; the popover opens
+ * leftward over the canvas and carries switch / translate / revert / remove
+ * plus the "Add language…" row.
+ */
 export function ContentLanguageSwitcher({
   languages,
   value,
   seed,
   missingByTag,
   onChange,
-  onAddLanguage,
   onTranslateMissing,
   pendingTag,
   onRemoveLanguage,
   onRevertToSource,
   canRevert,
-  variant = "pill",
+  onAddLanguage,
   className,
 }: ContentLanguageSwitcherProps) {
   const t = useTranslations();
@@ -81,6 +87,7 @@ export function ContentLanguageSwitcher({
   // translation layer must never happen on a mis-click.
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const missing = missingByTag.get(value) ?? 0;
+  const pending = pendingTag === value;
 
   const select = (tag: string) => {
     onChange(tag);
@@ -149,19 +156,6 @@ export function ContentLanguageSwitcher({
         );
       })}
 
-      <Button
-        type="button"
-        variant="ghost"
-        className={ROW_CLASS}
-        onClick={() => {
-          setOpen(false);
-          onAddLanguage();
-        }}
-      >
-        <Plus aria-hidden="true" className="size-4 shrink-0" />
-        <span>{t("editor.contentLang.add")}</span>
-      </Button>
-
       {value !== seed && missing > 0 && (
         <Button
           type="button"
@@ -200,11 +194,28 @@ export function ContentLanguageSwitcher({
           <span>{t("editor.contentLang.revert")}</span>
         </Button>
       )}
+
+      {/* Single home for Add (plan rev 3): the rail popover carries it, so
+          it stays reachable on specs without copy. */}
+      {onAddLanguage && (
+        <Button
+          type="button"
+          variant="ghost"
+          className={ROW_CLASS}
+          onClick={() => {
+            setOpen(false);
+            onAddLanguage();
+          }}
+        >
+          <Languages aria-hidden="true" className="size-4 shrink-0" />
+          <span>{t("editor.contentLang.add")}</span>
+        </Button>
+      )}
     </div>
   );
 
   // Destructive-action confirm (repo pattern: plain dialog + footer buttons,
-  // as in failure-dialog). Rendered for both variants.
+  // as in failure-dialog).
   const confirmDialog = (
     <Dialog
       open={pendingRemove !== null}
@@ -244,67 +255,36 @@ export function ContentLanguageSwitcher({
     </Dialog>
   );
 
-  if (variant === "row") {
-    return (
-      <>
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className={cn(ROW_CLASS, className)}
-            >
-              <Languages aria-hidden="true" className="size-4 shrink-0" />
-              <span>{t("editor.contentLang.label")}</span>
-              <span className="ml-auto max-w-24 truncate text-xs text-muted-foreground uppercase">
-                {value}
-              </span>
-              {pendingTag === value && (
-                <Loader2
-                  aria-hidden="true"
-                  className="ml-auto size-4 shrink-0 animate-spin"
-                />
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            side="top"
-            align="start"
-            aria-label={t("editor.contentLang.title")}
-            className="w-72 p-1"
-          >
-            {rows}
-          </PopoverContent>
-        </Popover>
-        {confirmDialog}
-      </>
-    );
-  }
-
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
             aria-label={t("editor.contentLang.title")}
-            className={cn("h-7 gap-1.5 px-2 text-xs", className)}
+            title={`${t("editor.contentLang.title")}: ${languageLabel(value, locale)}`}
+            className={cn("relative shrink-0", className)}
           >
-            <Languages aria-hidden="true" className="size-3.5" />
-            <span className="max-w-20 truncate uppercase">{value}</span>
-            {pendingTag === value && (
+            {/* The current language, not an icon — the rail button reads as
+                the spec's language. Corner overlays keep the square rail
+                footprint: spinner while its layer streams, missing count on
+                top. */}
+            <span className="max-w-8 truncate text-[10px] font-medium uppercase leading-none">
+              {value}
+            </span>
+            {pending && (
               <Loader2
                 aria-hidden="true"
-                className="size-3.5 shrink-0 animate-spin"
+                className="absolute bottom-0.5 right-0.5 size-3 animate-spin"
               />
             )}
             {missing > 0 && (
               <Badge
                 variant="secondary"
-                className="ml-0.5 shrink-0 tabular-nums"
                 title={t("editor.contentLang.missingBadge", { count: missing })}
+                className="absolute -right-1 -top-1 flex size-4 justify-center p-0 text-[9px] tabular-nums"
               >
                 {missing}
               </Badge>
@@ -312,7 +292,8 @@ export function ContentLanguageSwitcher({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          align="end"
+          side="left"
+          align="start"
           aria-label={t("editor.contentLang.title")}
           className="w-72 p-1"
         >

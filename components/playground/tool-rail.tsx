@@ -3,6 +3,8 @@
 import { Eraser, Hand, Layers, MousePointer2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import { ContentLanguageSwitcher } from "@/components/content-language-switcher";
+import type { ContentLanguageSwitcherProps } from "@/components/content-language-switcher";
 
 interface ToolRailProps {
   pickMode: boolean;
@@ -11,6 +13,11 @@ interface ToolRailProps {
   onTogglePick: () => void;
   onToggleDnd: () => void;
   onToggleXray: () => void;
+  /** The SPEC's content language (rail = spec-only controls): trigger shows
+   *  the current tag; its popover carries switch/translate/remove and the
+   *  "Add language…" row. Null on the empty playground (nothing to control
+   *  until a spec displays). */
+  contentLang: ContentLanguageSwitcherProps | null;
   onClear: () => void;
 }
 
@@ -21,11 +28,15 @@ export function ToolRail({
   onTogglePick,
   onToggleDnd,
   onToggleXray,
+  contentLang,
   onClear,
 }: ToolRailProps) {
   const t = useTranslations();
   return (
-    <div className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border bg-background/80 p-1.5 shadow-lg backdrop-blur-md">
+    <div
+      data-tool-rail
+      className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border bg-background/80 p-1.5 shadow-lg backdrop-blur-md"
+    >
       <Button
         type="button"
         variant={pickMode ? "default" : "ghost"}
@@ -62,6 +73,7 @@ export function ToolRail({
       >
         <Layers />
       </Button>
+      {contentLang && <ContentLanguageSwitcher {...contentLang} />}
       <Button
         type="button"
         variant="ghost"
