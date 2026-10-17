@@ -6,7 +6,12 @@ import {
   markDevtoolsActive,
   setByPath,
 } from "@json-render/core";
-import { JSONUIProvider, Renderer, useUIStream } from "@json-render/react";
+import {
+  JSONUIProvider,
+  Renderer,
+  useUIStream,
+  useStateValue,
+} from "@json-render/react";
 import {
   useCallback,
   useEffect,
@@ -14,6 +19,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/lib/i18n/navigation";
@@ -116,6 +122,7 @@ import {
   resolveContentLang,
   writeContentLang,
 } from "@/lib/i18n/content-lang";
+import { SPEC_THEME_STATE_KEY } from "@/lib/theme/spec-theme";
 import type { ContentLanguageSwitcherProps } from "@/components/content-language-switcher";
 
 const EXAMPLE_PROMPT_LIST = Object.values(EXAMPLE_PROMPTS);
@@ -136,6 +143,30 @@ type PendingOp =
 // Add-language toast id per target tag — loading, success, and failure all
 // update the same toast entry instead of stacking.
 const langToastId = (tag: string): string => `add-lang-${tag}`;
+
+/**
+ * Spec-driven theme, author surface (docs/plan/tool-rail-and-spec-theme):
+ * scope `dark` to the rendered design so the app chrome keeps its own
+ * theme. Reads the live provider state (reactive to the ThemeSwitcher's
+ * /theme write) — it must render INSIDE the JSONUIProvider to subscribe.
+ */
+function CanvasContent({
+  className,
+  children,
+}: {
+  className: string;
+  children: ReactNode;
+}) {
+  const theme = useStateValue<string>(`/${SPEC_THEME_STATE_KEY}`);
+  return (
+    <div
+      data-canvas-surface
+      className={`${className}${theme === "dark" ? " dark" : ""}`}
+    >
+      {children}
+    </div>
+  );
+}
 
 type RouteStatus = "pending" | "ready" | "missing";
 
@@ -1325,7 +1356,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
               dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
             }`}
           >
-            <div className="flex min-h-full flex-col px-6 pb-28 pt-20">
+            <CanvasContent className="flex min-h-full flex-col px-6 pb-28 pt-20">
               {!displayedSpec && !isStreaming && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
                   <div className="w-full max-w-xl space-y-3">
@@ -1370,7 +1401,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
                 containerRef={containerRef}
                 spec={displayedSpec}
               />
-            </div>
+            </CanvasContent>
           </div>
 
           {/* Both overlays mount after the scroll container, not inside

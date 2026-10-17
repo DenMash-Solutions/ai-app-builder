@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import landingFixture from "./fixtures/landing-fixture.json";
+import themeFixture from "./fixtures/theme-fixture.json";
 import { E2E_STATE_DIR, canSeed, e2eEnv, statePath } from "./env";
 
 /**
@@ -22,6 +23,11 @@ import { E2E_STATE_DIR, canSeed, e2eEnv, statePath } from "./env";
 export const FIXTURE_UI_ID = "e2e00000-0000-4000-8000-000000000001";
 export const FIXTURE_SLUG = "e2e-landing";
 export const FIXTURE_NAME = "E2E fixture landing";
+
+/** Companion published page for the spec-driven theme journey (public route). */
+export const THEME_UI_ID = "e2e00000-0000-4000-8000-000000000002";
+export const THEME_SLUG = "e2e-theme";
+export const THEME_NAME = "E2E fixture theme";
 
 /**
  * Every record the authed suite creates carries this prompt prefix — the
@@ -160,6 +166,44 @@ export async function seedFixture(): Promise<void> {
   if (pageError) {
     throw new Error(
       `[e2e seed] published_pages upsert failed: ${pageError.message}`,
+    );
+  }
+
+  // 2b) Spec-driven theme page — the PUBLIC theme journey's stage: a dark
+  // default with a ThemeSwitcher, served at /{locale}/e2e-theme to
+  // anonymous visitors (never featured, never pointed at).
+  const { error: themeUiError } = await svc.from("uis").upsert(
+    {
+      id: THEME_UI_ID,
+      owner_id: owner.id,
+      name: THEME_NAME,
+      slug: THEME_SLUG,
+      prompt: "e2e seed: spec theme fixture",
+      revisions: [{ label: "seed", createdAt: Date.now(), spec: themeFixture }],
+      head: 0,
+    },
+    { onConflict: "id" },
+  );
+  if (themeUiError) {
+    throw new Error(
+      `[e2e seed] theme uis upsert failed: ${themeUiError.message}`,
+    );
+  }
+
+  const { error: themePageError } = await svc.from("published_pages").upsert(
+    {
+      ui_id: THEME_UI_ID,
+      owner_id: owner.id,
+      slug: THEME_SLUG,
+      name: THEME_NAME,
+      version: 1,
+      spec: themeFixture,
+    },
+    { onConflict: "ui_id" },
+  );
+  if (themePageError) {
+    throw new Error(
+      `[e2e seed] theme published_pages upsert failed: ${themePageError.message}`,
     );
   }
 

@@ -5,10 +5,13 @@ import type { ComponentProps, ReactNode } from "react";
 import type { BaseComponentProps } from "@json-render/react";
 import type { ValidationConfig } from "@json-render/core";
 import { useBoundProp, useFieldValidation } from "@json-render/react";
+import { useTranslations } from "next-intl";
+import { Moon, Sun } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LUCIDE_ICON_COMPONENTS } from "@/lib/playground/icons";
+import { THEMES } from "@/lib/theme";
 
 // D5/D7 (docs/plan/catalog-icons): our catalog extends upstream's Button and
 // Input definitions, so we own their renderers too — the stock shadcn
@@ -147,5 +150,67 @@ export function GridImpl({
     "div",
     { className: cn("grid", cols, gap, props.className ?? undefined) },
     children,
+  );
+}
+
+// Spec-driven theme (docs/plan/tool-rail-and-spec-theme): the value IS the
+// design's theme state — press flips the bound /theme and emits change so
+// the model's switch_theme binding can persist the visitor's decision.
+// Sun when dark (press → light), Moon when light (press → dark) — the icon
+// shows where the click lands, like the app's chrome toggle. The pure
+// button is split from the hooked shell so tests can call it directly.
+export function ThemeSwitcherButton({
+  isDark,
+  label,
+  onPress,
+  className,
+  style,
+}: {
+  isDark: boolean;
+  label: string;
+  onPress: () => void;
+  /** Merged in by withStyleProps — must reach the Button or editor className/style edits vanish. */
+  className?: string;
+  style?: React.CSSProperties;
+}): ReactNode {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      className={className}
+      style={style}
+      onClick={onPress}
+    >
+      {isDark ? (
+        <Sun aria-hidden="true" className="size-4" />
+      ) : (
+        <Moon aria-hidden="true" className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+export function ThemeSwitcherImpl({
+  props,
+  bindings,
+  emit,
+}: BaseComponentProps<Record<string, unknown>>): ReactNode {
+  const t = useTranslations();
+  const [theme, setThemeValue] = useBoundProp<unknown>(
+    props.value,
+    bindings?.value,
+  );
+  const isDark = theme === THEMES.dark;
+  return (
+    <ThemeSwitcherButton
+      isDark={isDark}
+      label={t(isDark ? "theme.toggleToLight" : "theme.toggleToDark")}
+      onPress={() => {
+        setThemeValue(isDark ? THEMES.light : THEMES.dark);
+        emit("change");
+      }}
+    />
   );
 }

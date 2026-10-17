@@ -4,9 +4,15 @@ import { defineRegistry } from "@json-render/react";
 import type { Components } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
+import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 import { playgroundCatalog } from "./catalog";
 import { IconImpl } from "./icons";
-import { ButtonImpl, GridImpl, InputImpl } from "./overrides";
+import {
+  ButtonImpl,
+  GridImpl,
+  InputImpl,
+  ThemeSwitcherImpl,
+} from "./overrides";
 import { withStyleProps } from "./with-style-props";
 import type { AnyComponentImpl } from "./with-style-props";
 
@@ -30,6 +36,11 @@ const components = {
   // The catalog's Icon draws from the curated Lucide map (icons.ts) — the
   // same single source the name enum derives from.
   Icon: withStyleProps(IconImpl as unknown as AnyComponentImpl),
+  // Spec-driven theme (docs/plan/tool-rail-and-spec-theme) — our catalog
+  // owns the definition, so it owns the renderer too.
+  ThemeSwitcher: withStyleProps(
+    ThemeSwitcherImpl as unknown as AnyComponentImpl,
+  ),
 } as unknown as Components<typeof playgroundCatalog>;
 
 const { registry } = defineRegistry(playgroundCatalog, {
@@ -39,6 +50,10 @@ const { registry } = defineRegistry(playgroundCatalog, {
     // switch_language handler through JSONUIProvider's handlers prop — the
     // editor switches in place, live surfaces navigate (decision 13).
     [SWITCH_LANGUAGE_ACTION]: async () => {},
+    // Same pattern: author surfaces need no handler (the ThemeSwitcher's
+    // bindState write IS the persistence there); public surfaces persist
+    // the visitor's decision via their own handler.
+    [SWITCH_THEME_ACTION]: async () => {},
   },
 });
 

@@ -1,0 +1,29 @@
+{
+  "root": "theme-root",
+  "elements": {
+    "theme-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "lg" },
+      "children": ["theme-heading", "theme-toggle"]
+    },
+    "theme-heading": {
+      "type": "Heading",
+      "props": { "text": "Theme demo", "level": "h1" },
+      "children": []
+    },
+    "theme-toggle": {
+      "type": "ThemeSwitcher",
+      "props": { "value": { "$bindState": "/theme" } },
+      "on": {
+        "change": [
+          {
+            "action": "switch_theme",
+            "params": { "theme": { "$state": "/theme" } }
+          }
+        ]
+      },
+      "children": []
+    }
+  },
+  "state": { "theme": "dark" }
+}

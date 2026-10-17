@@ -3,6 +3,7 @@ import {
   MOCK_KEYS,
   PATCH_OP,
   PATCH_PATH,
+  SPEC_THEME,
   STATE_MOCK,
   UI,
 } from "@/e2e/constants";
@@ -817,6 +818,96 @@ export const STATEFUL_ROWS_UI_LINES: string[] = [
     value: {
       type: COMPONENT.text,
       props: { text: { $item: "label" }, className: "tracking-wide" },
+      children: [],
+    },
+  }),
+];
+
+/**
+ * Spec-driven theme fixture (docs/plan/tool-rail-and-spec-theme): a light
+ * default and a ThemeSwitcher bound to /theme with the switch_theme change
+ * binding. Carries NO copy — it doubles as the empty-copy journey proving
+ * the rail keeps "Add language…" reachable.
+ */
+export const THEME_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: { theme: "light" },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "theme-card" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("theme-card"),
+    value: {
+      type: COMPONENT.card,
+      props: {},
+      children: ["theme-heading", "theme-toggle"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("theme-heading"),
+    value: {
+      type: COMPONENT.heading,
+      props: { text: SPEC_THEME.heading, level: "h1" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("theme-toggle"),
+    value: {
+      type: COMPONENT.themeSwitcher,
+      props: { value: { $bindState: "/theme" } },
+      on: {
+        change: [
+          {
+            action: "switch_theme",
+            params: { theme: { $state: "/theme" } },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+];
+
+/**
+ * Text-free fixture for the rail journey: normalizeSpecCopy lifts element
+ * text into state.copy at ingest, so "a spec without copy" means a spec
+ * without a single lift-able string — just the theme toggle itself.
+ */
+export const NO_COPY_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: { theme: "light" },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "no-copy-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("no-copy-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical" },
+      children: ["no-copy-toggle"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("no-copy-toggle"),
+    value: {
+      type: COMPONENT.themeSwitcher,
+      props: { value: { $bindState: "/theme" } },
+      on: {
+        change: [
+          {
+            action: "switch_theme",
+            params: { theme: { $state: "/theme" } },
+          },
+        ],
+      },
       children: [],
     },
   }),

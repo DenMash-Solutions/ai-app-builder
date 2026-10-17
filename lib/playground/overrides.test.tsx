@@ -3,7 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement, ReactNode } from "react";
 import type { BaseComponentProps } from "@json-render/react";
 import { StateProvider, ValidationProvider } from "@json-render/react";
-import { ButtonImpl, GridImpl, InputImpl } from "@/lib/playground/overrides";
+import { NextIntlClientProvider } from "next-intl";
+import en from "@/lib/i18n/locale/en.json";
+import {
+  ButtonImpl,
+  GridImpl,
+  InputImpl,
+  ThemeSwitcherButton,
+  ThemeSwitcherImpl,
+} from "@/lib/playground/overrides";
 
 function ctx(
   props: Record<string, unknown>,
@@ -167,5 +175,62 @@ describe("GridImpl (D3 responsive columns)", () => {
     expect(renderGrid({ columns: 3 })).toContain("gap-3");
     expect(renderGrid({ columns: 3, gap: "none" })).toContain("gap-3");
     expect(renderGrid({ className: "mt-4" })).toContain("mt-4");
+  });
+});
+
+interface SwitcherNodeProps {
+  onClick?: () => void;
+}
+
+describe("ThemeSwitcherImpl (spec-driven theme)", () => {
+  function renderSwitcher(value: string): string {
+    return renderToStaticMarkup(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
+        <StateProvider initialState={{ theme: value }}>
+          <ThemeSwitcherImpl
+            {...({
+              props: { value },
+              bindings: { value: "/theme" },
+              emit: () => {},
+              on: () => ({
+                emit: () => {},
+                shouldPreventDefault: false,
+                bound: false,
+              }),
+            } as unknown as BaseComponentProps<Record<string, unknown>>)}
+          />
+        </StateProvider>
+      </NextIntlClientProvider>,
+    );
+  }
+
+  test("moon when light, sun when dark — the icon shows where the click lands", () => {
+    const light = renderSwitcher("light");
+    expect(light).toContain("lucide-moon");
+    expect(light).not.toContain("lucide-sun");
+    expect(light).toContain('aria-label="Switch to dark mode"');
+
+    const dark = renderSwitcher("dark");
+    expect(dark).toContain("lucide-sun");
+    expect(dark).not.toContain("lucide-moon");
+    expect(dark).toContain('aria-label="Switch to light mode"');
+  });
+
+  test("press fires the flip callback exactly once (single click emission)", () => {
+    let pressed = 0;
+    const button = ThemeSwitcherButton({
+      isDark: true,
+      label: "Switch to light mode",
+      onPress: () => {
+        pressed += 1;
+      },
+    }) as ReactElement<SwitcherNodeProps>;
+    button.props.onClick?.();
+    button.props.onClick?.();
+    expect(pressed).toBe(2);
+    // The aria-label follows the icon: dark → the click lands on light.
+    const html = renderToStaticMarkup(button);
+    expect(html).toContain('aria-label="Switch to light mode"');
+    expect(html).toContain("lucide-sun");
   });
 });

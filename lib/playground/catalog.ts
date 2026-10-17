@@ -5,6 +5,7 @@ import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { LUCIDE_ICON_NAMES } from "@/lib/playground/icons";
+import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 
 const STYLE_PROPS = {
   className: z
@@ -58,6 +59,28 @@ const iconDefinition = {
     "Lucide vector icon (inline SVG). Color via className (e.g. text-muted-foreground); fires press when tapped — bind on.press to make it an icon button.",
   events: ["press"],
   example: { name: "sparkles" },
+};
+
+// Spec-driven theme (docs/plan/tool-rail-and-spec-theme): a light/dark
+// toggle whose value IS the design's theme state. The switcher flips the
+// bound /theme itself and emits change — the model's switch_theme binding
+// hands it to the page, which persists the visitor's decision.
+const themeSwitcherDefinition = {
+  props: z
+    .object({
+      value: z
+        .unknown()
+        .nullable()
+        .optional()
+        .describe(
+          'Theme state binding — use {"$bindState": "/theme"} (seed state.theme with "light" or "dark")',
+        ),
+    })
+    .extend(STYLE_PROPS),
+  description:
+    'Light/dark theme toggle for the design (sun when dark, moon when light). Wire "value" to {"$bindState": "/theme"} and bind on.change to the switch_theme action with params.theme bound to {"$state": "/theme"}; seed state.theme with the default theme.',
+  events: ["change"],
+  example: { value: { $bindState: "/theme" } },
 };
 
 // D5/D7 (docs/plan/catalog-icons): per-component additions on top of the
@@ -115,7 +138,11 @@ const components = {
     }),
   ) as unknown as StyledDefinitions),
   Icon: iconDefinition,
-} as unknown as StyledDefinitions & { Icon: typeof iconDefinition };
+  ThemeSwitcher: themeSwitcherDefinition,
+} as unknown as StyledDefinitions & {
+  Icon: typeof iconDefinition;
+  ThemeSwitcher: typeof themeSwitcherDefinition;
+};
 
 export const playgroundCatalog = defineCatalog(schema, {
   components,
@@ -130,6 +157,14 @@ export const playgroundCatalog = defineCatalog(schema, {
       params: z.object({ tag: z.string() }),
       description:
         'Switch the design\'s language to <tag> (a BCP-47 tag the spec carries, e.g. "es" or "pt-BR"). Bind it to the language switcher ButtonGroup\'s change event with params.tag bound to the group\'s selected value ({"$state": "/locale"}).',
+    },
+    // Spec-driven theme (docs/plan/tool-rail-and-spec-theme): the
+    // ThemeSwitcher flips /theme itself and emits change — this binding
+    // hands the new value to the page, which persists the visitor's choice.
+    [SWITCH_THEME_ACTION]: {
+      params: z.object({ theme: z.enum(["light", "dark"]) }),
+      description:
+        'Switch the design\'s theme to <theme> ("light" or "dark"). Bind it to the ThemeSwitcher\'s change event with params.theme bound to the switcher\'s value ({"$state": "/theme"}).',
     },
   },
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
+import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import { appDirectives } from "@/lib/computed/directives";
 import type { HistoryEntry } from "@/lib/history";
@@ -21,11 +22,36 @@ import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import type { LivePageData } from "@/lib/publish/featured";
 import { localizeSpec } from "@/lib/specs/localize";
-import { JSONUIProvider, Renderer } from "@json-render/react";
+import {
+  SWITCH_THEME_ACTION,
+  SPEC_THEME_STATE_KEY,
+  effectiveTheme,
+  isTheme,
+  persistThemeDecision,
+  readStoredDecision,
+  specTheme,
+} from "@/lib/theme/spec-theme";
+import { JSONUIProvider, Renderer, useStateValue } from "@json-render/react";
 import { ArrowUpRight } from "lucide-react";
 import { hasLocale, useLocale, useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useSyncExternalStore, useRef } from "react";
+
+/**
+ * Keeps <html>'s `dark` class on the design's theme while this chrome-less
+ * route is open — the provider seeds `state.theme` with the EFFECTIVE theme
+ * (stored decision > spec default), so following the state is following the
+ * one rule; pre-paint scripts already painted the first frame. Renders
+ * inside the JSONUIProvider to subscribe to the theme state.
+ */
+function ThemeHtmlSync() {
+  const theme = useStateValue<string>(`/${SPEC_THEME_STATE_KEY}`);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
+  return null;
+}
 
 /**
  * Read-only preview at /{locale}/{slug}: the entry's spec rendered with the
@@ -84,9 +110,27 @@ export default function PreviewPage({
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
+      [SWITCH_THEME_ACTION]: (params: Record<string, unknown>) =>
+        themeRef.current(params),
     }),
     [],
   );
+
+  // Spec-driven theme (decision D3): this chrome-less route themes <html>
+  // for BOTH audiences (decision > spec default, seeded above) — the page
+  // IS the design. Only persistence splits: serving the published projection
+  // is PUBLIC, so the toggle writes the visitor's decision site-wide; an
+  // owner toggling their local entry is session view state — the spec's
+  // default owns what comes back on reload. Handler stays stable-once behind
+  // a re-synced ref.
+  const themeRef = useRef<(params: Record<string, unknown>) => void>(() => {});
+  useEffect(() => {
+    themeRef.current = (params) => {
+      if (entry !== null || !published) return;
+      if (!isTheme(params.theme)) return;
+      persistThemeDecision(params.theme);
+    };
+  });
 
   if (entry === undefined && !published) {
     return (
@@ -121,10 +165,24 @@ export default function PreviewPage({
   // The design's switcher highlights state.locale — keep it on the language
   // this route actually serves (runtime diff only; the stored spec's seed
   // marker is never written).
-  const state =
+  const baseState =
     SPEC_STATE_KEYS.locale in merged
       ? { ...merged, [SPEC_STATE_KEYS.locale]: locale }
       : merged;
+  // Spec-driven theme seeding: the visitor's stored decision beats the spec
+  // default (decision D3) — but only on the CLIENT, where storage exists;
+  // SSR renders the spec default and the pre-paint scripts below (ThemeInit
+  // for a stored decision, SpecThemeInit for the default) already painted
+  // <html> before hydration corrects the switcher's icon.
+  const specDefault = specTheme(baseState);
+  const storedDecision = specDefault !== null ? readStoredDecision() : null;
+  const state =
+    specDefault === null
+      ? baseState
+      : {
+          ...baseState,
+          [SPEC_THEME_STATE_KEY]: effectiveTheme(storedDecision, specDefault),
+        };
   const localized = localizeSpec(spec, state);
 
   // The state-write fallback (decision 13): specs that predate the declared
@@ -177,7 +235,13 @@ export default function PreviewPage({
     >
       {/* Bare surface: no background, chrome, or layout padding — the
                 spec renders as-is; only the floating pill sits on top. */}
+      <ThemeHtmlSync />
       <main className="relative w-full">
+        {/* Pre-paint: the spec's dark default applies only when the visitor
+                carries no stored decision (ThemeInit in the layout applies
+                one) — rendered whenever a published page is being served, so
+                it lands in the server HTML. */}
+        {published ? <SpecThemeInit specDefault={specDefault} /> : null}
         {entryName ? <title>{entryName}</title> : null}
         {bakedCss ? <style>{bakedCss}</style> : null}
         <Renderer spec={fixupScrollLayout(localized)} registry={registry} />

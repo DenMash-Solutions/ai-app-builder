@@ -7,6 +7,7 @@ import { hasLocale, useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
+import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import {
   SWITCH_LANGUAGE_ACTION,
@@ -24,6 +25,12 @@ import { registry } from "@/lib/playground/registry";
 import { appDirectives } from "@/lib/computed/directives";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import { localizeSpec } from "@/lib/specs/localize";
+import {
+  SWITCH_THEME_ACTION,
+  isTheme,
+  persistThemeDecision,
+  specTheme,
+} from "@/lib/theme/spec-theme";
 
 /**
  * Chrome-less render of the featured spec (root): no playground chrome —
@@ -78,6 +85,12 @@ export function LivePage({
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
+      // Public surface (decision D3): persist the visitor's theme decision
+      // site-wide — it beats the spec default on every future visit.
+      [SWITCH_THEME_ACTION]: (params: Record<string, unknown>) => {
+        if (!isTheme(params.theme)) return;
+        persistThemeDecision(params.theme);
+      },
     }),
     [],
   );
@@ -120,6 +133,10 @@ export function LivePage({
       directives={appDirectives}
     >
       <main className="relative w-full">
+        {/* Spec-driven theme: pre-paint applies the design's default only
+                when the visitor carries no stored decision (ThemeInit in the
+                layout applies one) — their toggle above then persists. */}
+        <SpecThemeInit specDefault={specTheme(state)} />
         {bakedCss ? <style>{bakedCss}</style> : null}
         <Renderer spec={fixupScrollLayout(localized)} registry={registry} />
         <Button asChild className="fixed bottom-4 right-4 z-50 shadow-lg">

@@ -256,6 +256,7 @@ export const COMPONENT = {
   button: "Button",
   buttonGroup: "ButtonGroup",
   icon: "Icon",
+  themeSwitcher: "ThemeSwitcher",
 } as const;
 
 export const PATCH_OP = {
@@ -320,6 +321,16 @@ export const PROMPTS = {
 } as const;
 
 export const THEME = {
+  toggleToDark: en.theme.toggleToDark,
+  toggleToLight: en.theme.toggleToLight,
+} as const;
+
+/** Spec-driven theme (docs/plan/tool-rail-and-spec-theme) — the design's
+ *  own toggle; the visitor decision persists under the app's theme key. */
+export const SPEC_THEME = {
+  storageKey: "genui-theme",
+  heading: "Theme demo",
+  slug: "e2e-theme",
   toggleToDark: en.theme.toggleToDark,
   toggleToLight: en.theme.toggleToLight,
 } as const;

@@ -191,3 +191,41 @@ describe("playgroundCatalog D5/D7 extensions", () => {
     expect(events?.[1]).toContain("change");
   });
 });
+
+describe("playgroundCatalog spec-driven theme", () => {
+  test("ThemeSwitcher is defined with a value binding, change event, and insert affordances", () => {
+    const switcher = componentDefinitions().find(
+      ([name]) => name === "ThemeSwitcher",
+    );
+    expect(switcher).toBeDefined();
+    if (!switcher) throw new Error("ThemeSwitcher definition missing");
+    const shape = shapeOf(switcher[1]);
+    expect(shape).toHaveProperty("value");
+    // Shared style extension, same as every catalog component.
+    expect(shape).toHaveProperty("className");
+    expect(switcher[1].events).toContain("change");
+
+    expect(isContainerType("ThemeSwitcher")).toBe(false);
+    expect(examplePropsFor("ThemeSwitcher")).toEqual({
+      value: { $bindState: "/theme" },
+    });
+    const item = pickerItems().find((entry) => entry.name === "ThemeSwitcher");
+    expect(item).toBeDefined();
+    expect(item?.container).toBe(false);
+  });
+
+  test("switch_theme is declared with a light/dark param and surfaces in the prompt", () => {
+    const data = playgroundCatalog.data as {
+      actions?: Record<string, { description?: string }>;
+    };
+    expect(data.actions).toHaveProperty("switch_theme");
+
+    const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
+    const line = prompt
+      .split("\n")
+      .find((entry) => entry.startsWith("- ThemeSwitcher:"));
+    expect(line).toBeDefined();
+    expect(line).toContain("$bindState");
+    expect(prompt).toContain("switch_theme");
+  });
+});
