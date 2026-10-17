@@ -16,6 +16,7 @@ import {
   SPEC_STATE_KEYS,
 } from "@/lib/i18n/spec-languages";
 import { LOCALES, routing } from "@/lib/i18n/routing";
+import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import type { LivePageData } from "@/lib/publish/featured";
@@ -168,6 +169,10 @@ export default function PreviewPage({
       }
       handlers={handlers}
       validationFunctions={{}}
+      // Same computed-function set as the playground and live pages — without
+      // it, `$computed` props (filterItems/sliceItems/stepPage/pageLabel)
+      // render unresolved on this surface.
+      functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
       {/* Bare surface: no background, chrome, or layout padding — the
