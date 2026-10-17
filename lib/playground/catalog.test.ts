@@ -156,19 +156,22 @@ describe("playgroundCatalog D5/D7 extensions", () => {
     expect(events).toContain("blur");
   });
 
-  test("filterItems is registered as a catalog function", () => {
+  test("pagination functions are registered as catalog functions", () => {
     const data = playgroundCatalog.data as {
       functions?: Record<string, unknown>;
     };
     expect(typeof data.functions?.filterItems).toBe("function");
+    expect(typeof data.functions?.stepPage).toBe("function");
+    expect(typeof data.functions?.pageLabel).toBe("function");
   });
 
   test("the model prompt documents the additions", () => {
     const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
     // Functions are auto-listed by name, in registration order — `add` was
-    // dropped (D8r) in favor of the prompt-documented `$math` directive.
+    // dropped (D8r) in favor of $math, and $math increments were superseded
+    // by stepPage (D2, docs/plan/responsive-ui).
     expect(prompt).toMatch(
-      /Available functions:\s*\n\s*- filterItems\n\s*- sliceItems\b/,
+      /Available functions:\s*\n\s*- filterItems\n\s*- sliceItems\n\s*- stepPage\n\s*- pageLabel\b/,
     );
     expect(prompt).not.toMatch(/- filterItems\n\s*- sliceItems\n\s*- add\b/);
 

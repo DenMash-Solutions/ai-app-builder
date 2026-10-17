@@ -6,7 +6,7 @@ import { shadcnComponents } from "@json-render/shadcn";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { playgroundCatalog } from "./catalog";
 import { IconImpl } from "./icons";
-import { ButtonImpl, InputImpl } from "./overrides";
+import { ButtonImpl, GridImpl, InputImpl } from "./overrides";
 import { withStyleProps } from "./with-style-props";
 import type { AnyComponentImpl } from "./with-style-props";
 
@@ -24,6 +24,9 @@ const components = {
   // D7: the catalog's Input declares a `change` event — upstream's renderer
   // never emits it, so we override it too.
   Input: withStyleProps(InputImpl as unknown as AnyComponentImpl),
+  // D3 (docs/plan/responsive-ui): `columns` is the desktop target — the
+  // override emits the responsive ladder so grids fit phone viewports.
+  Grid: withStyleProps(GridImpl as unknown as AnyComponentImpl),
   // The catalog's Icon draws from the curated Lucide map (icons.ts) — the
   // same single source the name enum derives from.
   Icon: withStyleProps(IconImpl as unknown as AnyComponentImpl),

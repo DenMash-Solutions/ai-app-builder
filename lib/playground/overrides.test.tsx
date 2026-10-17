@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactElement, ReactNode } from "react";
 import type { BaseComponentProps } from "@json-render/react";
 import { StateProvider, ValidationProvider } from "@json-render/react";
-import { ButtonImpl, InputImpl } from "@/lib/playground/overrides";
+import { ButtonImpl, GridImpl, InputImpl } from "@/lib/playground/overrides";
 
 function ctx(
   props: Record<string, unknown>,
@@ -120,5 +120,52 @@ describe("InputImpl (D7 change event)", () => {
     });
     expect(html).toContain('type="email"');
     expect(html).not.toContain("<label");
+  });
+});
+
+describe("GridImpl (D3 responsive columns)", () => {
+  function renderGrid(props: Record<string, unknown>): string {
+    return renderToStaticMarkup(
+      GridImpl({
+        ...ctx(props),
+        children: "cells",
+      } as unknown as BaseComponentProps<Record<string, unknown>>),
+    );
+  }
+
+  test("columns is the desktop target — the ladder fills phones with 1–2 columns", () => {
+    expect(renderGrid({ columns: 1 })).toContain("grid-cols-1");
+    expect(renderGrid({ columns: 1 })).not.toContain("sm:grid-cols-2");
+
+    const two = renderGrid({ columns: 2 });
+    expect(two).toContain("grid-cols-1");
+    expect(two).toContain("sm:grid-cols-2");
+    expect(two).not.toContain("lg:");
+
+    expect(renderGrid({ columns: 3 })).toContain("lg:grid-cols-3");
+    expect(renderGrid({ columns: 5 })).toContain("lg:grid-cols-5");
+    // Phones still get the single-column base at every target.
+    for (const columns of [1, 2, 3, 5]) {
+      expect(renderGrid({ columns })).toContain("grid-cols-1");
+    }
+  });
+
+  test("keeps upstream's 1–6 clamp and defaults to a single column", () => {
+    expect(renderGrid({ columns: 9 })).toContain("lg:grid-cols-6");
+    expect(renderGrid({ columns: 0 })).toContain("grid-cols-1");
+    expect(renderGrid({ columns: -2 })).toContain("grid-cols-1");
+    expect(renderGrid({ columns: null })).toContain("grid-cols-1");
+    expect(renderGrid({})).toContain("grid-cols-1");
+  });
+
+  test("grid chrome, gap map and className merge match upstream", () => {
+    const html = renderGrid({ columns: 3, gap: "lg" });
+    expect(html).toContain('class="grid');
+    expect(html).toContain("gap-4");
+    expect(html).toContain("cells");
+
+    expect(renderGrid({ columns: 3 })).toContain("gap-3");
+    expect(renderGrid({ columns: 3, gap: "none" })).toContain("gap-3");
+    expect(renderGrid({ className: "mt-4" })).toContain("mt-4");
   });
 });

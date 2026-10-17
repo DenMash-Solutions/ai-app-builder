@@ -2,7 +2,11 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { EDITOR, PATHS, PREVIEW, PROMPTS, ROLE, UI } from "./constants";
 import { mockGenerate, waitForMsw } from "./helpers";
-import { FILTER_UI_LINES, ICON_UI_LINES } from "./msw/fixture";
+import {
+  FILTER_UI_LINES,
+  ICON_UI_LINES,
+  PAGINATED_UI_LINES,
+} from "./msw/fixture";
 
 async function generate(page: Page, lines?: string[]): Promise<void> {
   await mockGenerate(page, lines ? { lines } : undefined);
@@ -104,6 +108,14 @@ test.describe("catalog icons", () => {
       /^(house|user|settings|search|mail|bell|star|heart|trash-2|pencil)$/,
     );
     await expect(cells).toHaveCount(10);
+    // The repeat sits on the GRID container, so the grid has one child per
+    // item — the grouping bug (repeat on the cell) would show a single child
+    // holding every row. Count each cell's label paragraph: on the canvas
+    // the renderer wraps repeated children in transparent editor keys
+    // (span[data-jr-key]), on the preview they are plain divs — the label
+    // <p> is identical on both surfaces.
+    const grid = canvas.locator("div.grid").first();
+    await expect(grid.locator("p")).toHaveCount(10);
 
     // Typing fires Input change → setState($computed filterItems) → the
     // repeat narrows to the single match.
@@ -112,10 +124,92 @@ test.describe("catalog icons", () => {
     await input.fill("star");
     await expect(input).toHaveValue("star");
     await expect(cells).toHaveCount(1);
+    await expect(grid.locator("p")).toHaveCount(1);
     await expect(canvas.locator("svg.lucide-star")).toBeVisible();
 
     // Clearing the field: an empty query returns the full source array.
     await input.fill("");
     await expect(cells).toHaveCount(10);
+    await expect(grid.locator("p")).toHaveCount(10);
+  });
+
+  test("pagination stays bounded and labels the true position", async ({
+    page,
+  }) => {
+    await generate(page, PAGINATED_UI_LINES);
+
+    const canvas = page.locator("[data-canvas]");
+    const grid = canvas.locator("div.grid").first();
+    const label = canvas.getByText(/^Page \d+ of \d+$/);
+    const prev = canvas.getByRole(ROLE.button, { name: "Previous" });
+    const next = canvas.getByRole(ROLE.button, { name: "Next" });
+
+    // Seeded first page: 1-based label with the true total (3 pages over 11
+    // items), 5 grid children, Previous hidden at the start (element-level
+    // visible: page > 0).
+    await expect(label).toHaveText("Page 1 of 3");
+    await expect(grid.locator("p")).toHaveCount(5);
+    await expect(prev).toHaveCount(0);
+
+    await next.click();
+    await expect(label).toHaveText("Page 2 of 3");
+    await expect(grid.locator("p")).toHaveCount(5);
+    await expect(prev).toBeVisible();
+
+    await next.click();
+    await expect(label).toHaveText("Page 3 of 3");
+    await expect(grid.locator("p")).toHaveCount(1);
+
+    // Next past the end: stepPage clamps the write — the page state itself
+    // can never pass the last page (the "Page 3 of 2" bug).
+    await next.click();
+    await expect(label).toHaveText("Page 3 of 3");
+    await expect(grid.locator("p")).toHaveCount(1);
+
+    // Previous walks back down; at the start the label reads page 1 and the
+    // button hides again.
+    await prev.click();
+    await expect(label).toHaveText("Page 2 of 3");
+    await prev.click();
+    await expect(label).toHaveText("Page 1 of 3");
+    await expect(prev).toHaveCount(0);
+    await expect(grid.locator("p")).toHaveCount(5);
+
+    // The read-only preview renders the same bounded behavior (one shared
+    // renderer + function registry across surfaces). Assert the cells first
+    // (proves the spec rendered), then the label — the preview route can be
+    // cold-compiled on first hit.
+    await page.getByRole(ROLE.link, { name: PREVIEW.open }).click();
+    await expect(page).toHaveURL(/\/en\/[^/]+$/);
+    await waitForMsw(page);
+    const main = page.locator("main");
+    await expect(main.locator("div.grid").first().locator("p")).toHaveCount(5);
+    await expect(main.getByText(/^Page \d+ of \d+$/)).toHaveText(
+      "Page 1 of 3",
+      { timeout: 15000 },
+    );
+  });
+
+  test("a generated grid scales from phone to desktop viewports", async ({
+    page,
+  }) => {
+    await generate(page, FILTER_UI_LINES);
+
+    const trackCount = () =>
+      page.evaluate(() => {
+        const el = document.querySelector("[data-canvas] div.grid");
+        if (!el) return -1;
+        return getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/)
+          .length;
+      });
+
+    // Desktop: `columns: 5` is the desktop target — five tracks.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect.poll(trackCount).toBe(5);
+
+    // Phone: the responsive ladder (grid-cols-1 sm:grid-cols-2 lg:grid-cols-5)
+    // collapses to a single full-width column.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect.poll(trackCount).toBe(1);
   });
 });

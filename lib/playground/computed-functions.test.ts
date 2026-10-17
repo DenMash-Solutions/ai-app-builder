@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   filterItems,
+  pageLabel,
   PLAYGROUND_FUNCTIONS,
   sliceItems,
+  stepPage,
 } from "@/lib/playground/computed-functions";
 
 const ITEMS = [
@@ -117,5 +119,81 @@ describe("sliceItems (D8 pagination)", () => {
 
   test("the catalog registers sliceItems under its prompt name", () => {
     expect(PLAYGROUND_FUNCTIONS.sliceItems).toBe(sliceItems);
+  });
+});
+
+describe("stepPage (D2 bounded page increments)", () => {
+  const ITEMS = ["a", "b", "c", "d", "e"]; // 3 pages with limit 2
+
+  test("moves the page by delta", () => {
+    expect(stepPage({ source: ITEMS, page: 0, limit: 2, delta: 1 })).toBe(1);
+    expect(stepPage({ source: ITEMS, page: 1, limit: 2, delta: 1 })).toBe(2);
+    expect(stepPage({ source: ITEMS, page: 2, limit: 2, delta: -1 })).toBe(1);
+  });
+
+  test("never walks out of range — the state itself is bounded", () => {
+    // Previous at the start stays at 0 (the −1 bug).
+    expect(stepPage({ source: ITEMS, page: 0, limit: 2, delta: -1 })).toBe(0);
+    // Next past the end stays at the last page.
+    expect(stepPage({ source: ITEMS, page: 2, limit: 2, delta: 1 })).toBe(2);
+    expect(stepPage({ source: ITEMS, page: 99, limit: 2, delta: 1 })).toBe(2);
+    // Delta applies to the page the user SEES (the clamped one).
+    expect(stepPage({ source: ITEMS, page: 5, limit: 2, delta: -1 })).toBe(1);
+  });
+
+  test("non-number page/delta fall back to sane values", () => {
+    expect(stepPage({ source: ITEMS, page: "next", limit: 2, delta: 1 })).toBe(
+      1,
+    );
+    expect(stepPage({ source: ITEMS, page: 0, limit: 2, delta: "-1" })).toBe(0);
+    // Fractional deltas truncate.
+    expect(stepPage({ source: ITEMS, page: 0, limit: 2, delta: 0.7 })).toBe(0);
+    expect(stepPage({ source: ITEMS, page: 1, limit: 2, delta: -1.9 })).toBe(0);
+  });
+
+  test("falls back to a single page like sliceItems does", () => {
+    expect(stepPage({ source: ITEMS, page: 0, limit: 0, delta: 1 })).toBe(0);
+    expect(stepPage({ source: ITEMS, page: 0, limit: -3, delta: 1 })).toBe(0);
+    expect(stepPage({ source: ITEMS, page: 1, delta: 1 })).toBe(0);
+    expect(stepPage({ source: "nope", page: 0, limit: 2, delta: 1 })).toBe(0);
+    expect(stepPage({ page: 0, limit: 2, delta: 1 })).toBe(0);
+  });
+
+  test("the catalog registers stepPage under its prompt name", () => {
+    expect(PLAYGROUND_FUNCTIONS.stepPage).toBe(stepPage);
+  });
+});
+
+describe("pageLabel (D2 computed position label)", () => {
+  const ITEMS = ["a", "b", "c", "d", "e"]; // 3 pages with limit 2
+
+  test("is 1-based with the true page count", () => {
+    expect(pageLabel({ source: ITEMS, page: 0, limit: 2 })).toBe("Page 1 of 3");
+    expect(pageLabel({ source: ITEMS, page: 1, limit: 2 })).toBe("Page 2 of 3");
+    expect(pageLabel({ source: ITEMS, page: 2, limit: 2 })).toBe("Page 3 of 3");
+  });
+
+  test("reports the clamped position, never an out-of-range page", () => {
+    expect(pageLabel({ source: ITEMS, page: 99, limit: 2 })).toBe(
+      "Page 3 of 3",
+    );
+    expect(pageLabel({ source: ITEMS, page: -1, limit: 2 })).toBe(
+      "Page 1 of 3",
+    );
+    expect(pageLabel({ source: ITEMS, page: "x", limit: 2 })).toBe(
+      "Page 1 of 3",
+    );
+  });
+
+  test("falls back to a single page like sliceItems does", () => {
+    expect(pageLabel({ source: ITEMS, page: 0, limit: 0 })).toBe("Page 1 of 1");
+    expect(pageLabel({ source: "nope", page: 0, limit: 2 })).toBe(
+      "Page 1 of 1",
+    );
+    expect(pageLabel({ page: 0, limit: 2 })).toBe("Page 1 of 1");
+  });
+
+  test("the catalog registers pageLabel under its prompt name", () => {
+    expect(PLAYGROUND_FUNCTIONS.pageLabel).toBe(pageLabel);
   });
 });

@@ -225,6 +225,186 @@ export const FILTER_UI_LINES: string[] = [
   }),
 ];
 
+/** D2 (docs/plan/responsive-ui): pagination fixture mirroring the rules
+ *  pattern — the press actions move /page through the catalog's stepPage
+ *  (bounded), the label is a pageLabel Text, Previous is hidden at the start
+ *  via an element-level `visible`, and the repeat sits on the Grid container.
+ *  11 items over limit 5 → three pages (5, 5, 1 — a partial last page). */
+const PAGINATED_STATE_ITEMS = [...FILTER_STATE_ITEMS, { name: "camera" }];
+const PAGED_LIMIT = 5;
+
+export const PAGINATED_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: {
+      icons: PAGINATED_STATE_ITEMS,
+      "filtered-icons": [...PAGINATED_STATE_ITEMS],
+      page: 0,
+      "page-items": PAGINATED_STATE_ITEMS.slice(0, PAGED_LIMIT),
+    },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "page-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "md" },
+      children: ["page-label", "page-grid", "page-controls"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-label"),
+    value: {
+      type: COMPONENT.text,
+      props: {
+        text: {
+          $computed: "pageLabel",
+          args: {
+            source: { $state: "/filtered-icons" },
+            page: { $state: "/page" },
+            limit: PAGED_LIMIT,
+          },
+        },
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-grid"),
+    value: {
+      type: COMPONENT.grid,
+      props: { columns: 3, gap: "md" },
+      repeat: { statePath: "/page-items" },
+      children: ["page-cell"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-cell"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "sm", className: "items-center" },
+      children: ["page-cell-icon", "page-cell-label"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-cell-icon"),
+    value: {
+      type: COMPONENT.icon,
+      props: { name: { $item: "name" }, size: 20 },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-cell-label"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: { $item: "name" } },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-controls"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "row", gap: "sm" },
+      children: ["page-prev", "page-next"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-prev"),
+    value: {
+      type: COMPONENT.button,
+      props: { label: "Previous", leadingIcon: "chevron-left" },
+      visible: { $state: "/page", gt: 0 },
+      on: {
+        press: [
+          {
+            action: "setState",
+            params: {
+              statePath: "/page",
+              value: {
+                $computed: "stepPage",
+                args: {
+                  source: { $state: "/filtered-icons" },
+                  page: { $state: "/page" },
+                  limit: PAGED_LIMIT,
+                  delta: -1,
+                },
+              },
+            },
+          },
+          {
+            action: "setState",
+            params: {
+              statePath: "/page-items",
+              value: {
+                $computed: "sliceItems",
+                args: {
+                  source: { $state: "/filtered-icons" },
+                  page: { $state: "/page" },
+                  limit: PAGED_LIMIT,
+                },
+              },
+            },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("page-next"),
+    value: {
+      type: COMPONENT.button,
+      props: { label: "Next", trailingIcon: "chevron-right" },
+      on: {
+        press: [
+          {
+            action: "setState",
+            params: {
+              statePath: "/page",
+              value: {
+                $computed: "stepPage",
+                args: {
+                  source: { $state: "/filtered-icons" },
+                  page: { $state: "/page" },
+                  limit: PAGED_LIMIT,
+                  delta: 1,
+                },
+              },
+            },
+          },
+          {
+            action: "setState",
+            params: {
+              statePath: "/page-items",
+              value: {
+                $computed: "sliceItems",
+                args: {
+                  source: { $state: "/filtered-icons" },
+                  page: { $state: "/page" },
+                  limit: PAGED_LIMIT,
+                },
+              },
+            },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+];
+
 /** Class tokens the publish journey's baked page is asserted against — the
  *  compiled CSS for these must ship in the served HTML (plan:
  *  spec-languages, task 5.4). Kept out of MOCK_UI_LINES so the default

@@ -89,17 +89,22 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain("case-insensitive substring");
   });
 
-  test("documents the pagination pattern through sliceItems + $math + watch (D8/D8r)", () => {
+  test("documents the pagination pattern through stepPage + pageLabel + watch (D8/D2)", () => {
     expect(STYLING_RULES).toContain("Paginate a list");
     // Seeds: raw data only — the repeat reads /page-items directly, and the
     // seed must hold the first page's rows (an empty array = empty grid —
     // the organic round-1 failure).
-    expect(STYLING_RULES).toContain('the list\'s "repeat" reads /page-items');
+    expect(STYLING_RULES).toContain(
+      'the container\'s "repeat" reads /page-items',
+    );
     expect(STYLING_RULES).toContain("MUST start non-empty");
-    // The two ordered press actions: $math (prompt-documented directive)
-    // increments the page, then sliceItems re-slices from the filtered array.
-    expect(STYLING_RULES).toContain('"$math": "add"');
-    expect(STYLING_RULES).toContain('"$math": "subtract"');
+    // The two ordered press actions: stepPage writes a clamped page, then
+    // sliceItems re-slices from the filtered array (D2 replaced the $math
+    // increments, which left /page itself unbounded).
+    expect(STYLING_RULES).toContain('"$computed": "stepPage"');
+    expect(STYLING_RULES).toContain('"delta": 1');
+    expect(STYLING_RULES).toContain('"delta": -1');
+    expect(STYLING_RULES).not.toContain('"$math": "add"');
     expect(STYLING_RULES).toContain('"$computed": "sliceItems"');
     expect(STYLING_RULES).toContain('"source": {"$state": "/filtered-items"}');
     expect(STYLING_RULES).toContain("TWO press actions in order");
@@ -110,7 +115,44 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain('{"watch": {"/filtered-items"');
     expect(STYLING_RULES).toContain("never on initial render");
     // Edges + D5 icon affordance.
-    expect(STYLING_RULES).toContain("clamps the page into range");
+    expect(STYLING_RULES).toContain("clamped into range");
     expect(STYLING_RULES).toContain('leadingIcon "chevron-left"');
+    // D2: computed 1-based label (a $template cannot compute bounds) and the
+    // Previous button hidden at the start.
+    expect(STYLING_RULES).toContain('"$computed": "pageLabel"');
+    expect(STYLING_RULES).toContain('"Page 1 of 2"');
+    expect(STYLING_RULES).toContain('{"$state": "/page", "gt": 0}');
+    expect(STYLING_RULES).toContain("Hide the Previous button");
+  });
+
+  test("places repeat on the container, never the item element (bug-1 fix)", () => {
+    expect(STYLING_RULES).toContain("Repeat placement (all lists");
+    expect(STYLING_RULES).toContain("NEVER on the item element itself");
+    // The explicit Grid example: repeat on the Grid = one card per row; on
+    // the item card = ONE card containing every row (the observed bug).
+    expect(STYLING_RULES).toContain(
+      '{"repeat": {"statePath": "/page-items"}} on the Grid',
+    );
+    expect(STYLING_RULES).toContain("renders one card per row");
+    expect(STYLING_RULES).toContain("renders ONE card containing every row");
+    // The search bullet now points at the container too.
+    expect(STYLING_RULES).toContain('the Grid/Stack container\'s "repeat"');
+  });
+
+  test("documents responsive layout expectations (D3)", () => {
+    expect(STYLING_RULES).toContain("~375 px phone");
+    expect(STYLING_RULES).toContain("~1440 px desktop");
+    // columns = desktop target; the renderer owns the responsive ladder.
+    expect(STYLING_RULES).toContain(
+      "grid-cols-1 sm:grid-cols-2 lg:grid-cols-<n>",
+    );
+    expect(STYLING_RULES).toContain('"columns" prop is the DESKTOP target');
+    expect(STYLING_RULES).toContain("never hand-write grid-cols-*");
+    // Full-width layout, w-full inputs, responsive size pairs, wrapping
+    // control rows (the horizontal Stack wraps by itself).
+    expect(STYLING_RULES).toContain('Inputs get "className": "w-full"');
+    expect(STYLING_RULES).toContain('"p-4 md:p-6"');
+    expect(STYLING_RULES).toContain("the horizontal Stack wraps by itself");
+    expect(STYLING_RULES).toContain("max-w-* mx-auto");
   });
 });

@@ -5,6 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { BaseComponentProps } from "@json-render/react";
 import type { ValidationConfig } from "@json-render/core";
 import { useBoundProp, useFieldValidation } from "@json-render/react";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LUCIDE_ICON_COMPONENTS } from "@/lib/playground/icons";
@@ -109,5 +110,42 @@ export function InputImpl({
         <p className="text-sm text-destructive">{errors[0]}</p>
       ) : null}
     </div>
+  );
+}
+
+// D3 (docs/plan/responsive-ui): the Grid's `columns` prop is the DESKTOP
+// target — upstream renders a fixed grid-cols-<n> at every viewport, so a
+// 3-column grid squeezes into a 375 px phone. Same 1–6 clamp and gap map as
+// upstream; only the column classes become a responsive ladder.
+
+const GRID_COLS_BY_TARGET: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-1 sm:grid-cols-2",
+};
+const GRID_GAP_CLASSES = {
+  sm: "gap-2",
+  md: "gap-3",
+  lg: "gap-4",
+  xl: "gap-6",
+} as const;
+
+interface GridProps {
+  columns?: number | null;
+  gap?: "sm" | "md" | "lg" | "xl" | null;
+  className?: string | null;
+}
+
+export function GridImpl({
+  props,
+  children,
+}: BaseComponentProps<GridProps>): ReactNode {
+  const n = Math.max(1, Math.min(6, Math.floor(props.columns ?? 1)));
+  const cols =
+    GRID_COLS_BY_TARGET[n] ?? `grid-cols-1 sm:grid-cols-2 lg:grid-cols-${n}`;
+  const gap = GRID_GAP_CLASSES[props.gap ?? "md"] ?? "gap-3";
+  return createElement(
+    "div",
+    { className: cn("grid", cols, gap, props.className ?? undefined) },
+    children,
   );
 }
