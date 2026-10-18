@@ -1,16 +1,23 @@
 import type { Spec } from "@json-render/core";
+import {
+  describeDataIssues,
+  validateDataSources,
+} from "@/lib/data-sources/validate";
 
 /** Object-based error constants — keys map 1:1 to i18n messages. */
 export const PARSE_SPEC_ERRORS = {
   invalidJson: "invalidJson",
   invalidShape: "invalidShape",
+  invalidDataSources: "invalidDataSources",
 } as const;
 
 export type ParseSpecError =
   (typeof PARSE_SPEC_ERRORS)[keyof typeof PARSE_SPEC_ERRORS];
 
 export type ParseSpecResult =
-  { ok: true; spec: Spec } | { ok: false; error: ParseSpecError };
+  | { ok: true; spec: Spec }
+  /** `details` carries the data-source issue list (developer English). */
+  | { ok: false; error: ParseSpecError; details?: string };
 
 /**
  * Parses pasted text into a renderable json-render spec.
@@ -62,6 +69,18 @@ export function parseSpecJson(text: string): ParseSpecResult {
 
   if (!(root in (elements as Record<string, unknown>))) {
     return { ok: false, error: PARSE_SPEC_ERRORS.invalidShape };
+  }
+
+  // Data sources (docs/plan/data-sources, D3): the import seam validates
+  // the data blocks too — a pasted spec with dangling references or
+  // credential-shaped config is rejected with its issue list.
+  const dataIssues = validateDataSources(raw as Spec);
+  if (dataIssues.length > 0) {
+    return {
+      ok: false,
+      error: PARSE_SPEC_ERRORS.invalidDataSources,
+      details: describeDataIssues(dataIssues),
+    };
   }
 
   return { ok: true, spec: raw as Spec };

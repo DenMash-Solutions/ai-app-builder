@@ -45,6 +45,7 @@
     "jsonImport": "Import",
     "jsonInvalidJson": "That is not valid JSON — check the syntax.",
     "jsonInvalidSpec": "Valid JSON, but not a renderable spec: it needs a string \"root\", a non-empty \"elements\" object containing it, and every element must have a string \"type\".",
+    "dataSourcesInvalid": "The design's data sources are misconfigured — fix the dataSources, resources, and queries declarations (see the details).",
     "jsonCopied": "Spec copied to clipboard",
     "jsonCopyFailed": "Could not copy to the clipboard",
     "jsonExportEntry": "Export JSON: {title}",

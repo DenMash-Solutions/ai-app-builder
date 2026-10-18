@@ -100,4 +100,50 @@ describe("parseSpecJson", () => {
       error: PARSE_SPEC_ERRORS.invalidShape,
     });
   });
+
+  test("rejects misconfigured data sources, carrying the issue details", () => {
+    const spec = {
+      root: "page",
+      elements: {
+        page: { type: "Stack", props: {}, children: [] },
+      },
+      dataSources: { localTodos: { provider: "localStorage", config: {} } },
+      resources: { todos: { dataSource: "missing" } },
+    };
+    const result = parseSpecJson(JSON.stringify(spec));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe(PARSE_SPEC_ERRORS.invalidDataSources);
+      expect(result.details).toContain('Unknown dataSource "missing"');
+    }
+  });
+
+  test("preserves well-formed data blocks on round-trip", () => {
+    const spec = {
+      root: "page",
+      elements: {
+        page: { type: "Stack", props: {}, children: [] },
+      },
+      dataSources: { localTodos: { provider: "localStorage", config: {} } },
+      resources: {
+        todos: {
+          dataSource: "localTodos",
+          schema: { title: "string", done: "boolean" },
+        },
+      },
+      queries: { todoList: { resource: "todos", operation: "list" } },
+    };
+    const result = parseSpecJson(JSON.stringify(spec));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const blocks = result.spec as {
+        dataSources?: unknown;
+        resources?: unknown;
+        queries?: unknown;
+      };
+      expect(blocks.dataSources).toEqual(spec.dataSources);
+      expect(blocks.resources).toEqual(spec.resources);
+      expect(blocks.queries).toEqual(spec.queries);
+    }
+  });
 });

@@ -22,6 +22,7 @@ import type { ParseSpecError } from "@/lib/playground/json-io";
 const ERROR_MESSAGE_KEYS = {
   [PARSE_SPEC_ERRORS.invalidJson]: "playground.jsonInvalidJson",
   [PARSE_SPEC_ERRORS.invalidShape]: "playground.jsonInvalidSpec",
+  [PARSE_SPEC_ERRORS.invalidDataSources]: "playground.dataSourcesInvalid",
 } as const;
 
 interface JsonImportButtonProps {
@@ -40,12 +41,15 @@ export function JsonImportButton({ onImport }: JsonImportButtonProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<ParseSpecError | null>(null);
+  // Data-source issue list (developer English) rides under the friendly key.
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
 
   const handleOpenChange = (next: boolean): void => {
     setOpen(next);
     if (next) {
       setText("");
       setError(null);
+      setErrorDetails(null);
     }
   };
 
@@ -53,6 +57,7 @@ export function JsonImportButton({ onImport }: JsonImportButtonProps) {
     const result = parseSpecJson(text);
     if (!result.ok) {
       setError(result.error);
+      setErrorDetails(result.details ?? null);
       return;
     }
     onImport(result.spec);
@@ -82,6 +87,7 @@ export function JsonImportButton({ onImport }: JsonImportButtonProps) {
           onChange={(event) => {
             setText(event.target.value);
             setError(null);
+            setErrorDetails(null);
           }}
           placeholder={t("playground.jsonPlaceholder")}
           aria-label={t("playground.jsonDialogTitle")}
@@ -92,6 +98,11 @@ export function JsonImportButton({ onImport }: JsonImportButtonProps) {
         {error !== null && (
           <p role="alert" className="text-sm text-destructive">
             {t(ERROR_MESSAGE_KEYS[error])}
+          </p>
+        )}
+        {errorDetails !== null && (
+          <p className="text-xs font-mono text-muted-foreground">
+            {errorDetails}
           </p>
         )}
         <DialogFooter>

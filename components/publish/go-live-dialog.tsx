@@ -25,6 +25,10 @@ import {
 } from "@/lib/publish/publish";
 import { bakeAndPersistArtifacts } from "@/lib/publish/bake-client";
 import type { PublishedPage } from "@/lib/publish/publish";
+import {
+  describeDataIssues,
+  validateDataSources,
+} from "@/lib/data-sources/validate";
 
 interface GoLiveDialogProps {
   entry: HistoryEntry;
@@ -120,6 +124,17 @@ function GoLiveContent({
 
   const handleSubmit = async (): Promise<void> => {
     if (!user) return;
+    // Data sources (docs/plan/data-sources, D3): validation-before-publish
+    // — the head revision's data blocks must resolve before a version
+    // ships (same rule as generate/import).
+    const headSpec = entry.revisions[entry.head]?.spec ?? entry.spec;
+    const dataIssues = validateDataSources(headSpec);
+    if (dataIssues.length > 0) {
+      toast.error(t("playground.dataSourcesInvalid"), {
+        description: describeDataIssues(dataIssues),
+      });
+      return;
+    }
     setBusy(true);
     const result = await publishEntry(supabase, user.id, entry, slug);
     setBusy(false);
