@@ -1,6 +1,7 @@
 "use client";
 
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
+import { QueryLoader } from "@/components/data-sources/query-loader";
 import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import { appDirectives } from "@/lib/computed/directives";
@@ -233,6 +234,10 @@ export default function PreviewPage({
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
+      {/* Data sources runtime (docs/plan/data-sources, D6/D8): the slug
+                  scopes this design's records — owner preview and published
+                  visitor share one per-browser store for the same design. */}
+      <QueryLoader spec={spec} namespace={slug} />
       {/* Bare surface: no background, chrome, or layout padding — the
                 spec renders as-is; only the floating pill sits on top. */}
       <ThemeHtmlSync />

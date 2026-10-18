@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Spec } from "@json-render/core";
 import { bakeHtmlByLanguage, classifySpec } from "./bake";
+import { withDataBlocks } from "@/lib/data-sources/types";
 
 const contentSpec: Spec = {
   root: "h",
@@ -56,6 +57,24 @@ describe("classifySpec", () => {
         },
       }),
     ).toBe("stateful");
+  });
+
+  test("data-source blocks are stateful even with no interactions (D4)", () => {
+    // A read-only todo list has no event bindings, but its mirror is live
+    // runtime state — published HTML must keep the runtime for it.
+    const dataSpec = withDataBlocks({
+      root: "l",
+      elements: {
+        l: {
+          type: "Text",
+          props: { text: { $state: "/queries/todoList/count" } },
+        },
+      },
+      dataSources: { localTodos: { provider: "localStorage", config: {} } },
+      resources: { todos: { dataSource: "localTodos" } },
+      queries: { todoList: { resource: "todos", operation: "list" } },
+    } as Spec);
+    expect(classifySpec(dataSpec)).toBe("stateful");
   });
 });
 

@@ -3,6 +3,7 @@
 import type { Spec } from "@json-render/core";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { hasDataBlocks } from "@/lib/data-sources/types";
 import { availableLanguages, mergeI18n } from "@/lib/i18n/spec-languages";
 import { localizeSpec } from "@/lib/specs/localize";
 import { registry } from "@/lib/playground/registry";
@@ -28,6 +29,11 @@ import type { SpecKind } from "@/lib/publish/artifacts";
  * rather than as pure static markup.
  */
 export function classifySpec(spec: Spec): SpecKind {
+  // Data sources (docs/plan/data-sources, D4): a spec that declares
+  // queries/dataSources renders against the `/queries` runtime mirror —
+  // it needs the client engine, so it never bakes as static markup even
+  // when no element binds state directly.
+  if (hasDataBlocks(spec)) return "stateful";
   const elements = Object.values(spec.elements ?? {});
   for (const element of elements) {
     if (element.on && Object.keys(element.on).length > 0) return "stateful";

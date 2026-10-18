@@ -9,10 +9,14 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { addEntry, createEntry } from "@/lib/history";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
+import { QueryLoader } from "@/components/data-sources/query-loader";
 import { localizeSpec } from "@/lib/specs/localize";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { registry } from "@/lib/playground/registry";
 import { appDirectives } from "@/lib/computed/directives";
+
+/** Data-source scope of app-chrome specs (docs/plan/data-sources, D6). */
+const SPEC_PAGE_DATA_NAMESPACE = "app";
 
 /**
  * Imports the page's committed spec into the local playground as an editable
@@ -89,6 +93,10 @@ export function SpecPage({
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
+      {/* Data sources runtime (docs/plan/data-sources, D8): app-chrome
+                  specs carry no data blocks today — this is a no-op until one
+                  does. */}
+      <QueryLoader spec={spec} namespace={SPEC_PAGE_DATA_NAMESPACE} />
       {main ? (
         <main className="relative w-full">
           <Renderer spec={localized} registry={registry} />

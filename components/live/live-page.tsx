@@ -7,6 +7,7 @@ import { hasLocale, useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
+import { QueryLoader } from "@/components/data-sources/query-loader";
 import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,9 @@ import {
   persistThemeDecision,
   specTheme,
 } from "@/lib/theme/spec-theme";
+
+/** Data-source scope of the featured root (docs/plan/data-sources, D6). */
+const LIVE_DATA_NAMESPACE = "featured";
 
 /**
  * Chrome-less render of the featured spec (root): no playground chrome —
@@ -133,6 +137,10 @@ export function LivePage({
       directives={appDirectives}
     >
       <main className="relative w-full">
+        {/* Data sources runtime (docs/plan/data-sources, D8): the featured
+                root keeps its own namespace — its records never collide with a
+                published slug's. */}
+        <QueryLoader spec={spec} namespace={LIVE_DATA_NAMESPACE} />
         {/* Spec-driven theme: pre-paint applies the design's default only
                 when the visitor carries no stored decision (ThemeInit in the
                 layout applies one) — their toggle above then persists. */}

@@ -106,6 +106,12 @@ import {
 import { normalizeSpecCopy } from "@/lib/i18n/spec-normalize";
 import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
+import { QueryLoader } from "@/components/data-sources/query-loader";
+import {
+  describeDataIssues,
+  validateDataSources,
+} from "@/lib/data-sources/validate";
+import { withDataBlocksFromLines } from "@/lib/data-sources/stream-blocks";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import { AddLanguageDialog } from "@/components/playground/add-language-dialog";
 import {
@@ -142,6 +148,9 @@ type PendingOp =
 // Add-language toast id per target tag — loading, success, and failure all
 // update the same toast entry instead of stacking.
 const langToastId = (tag: string): string => `add-lang-${tag}`;
+
+/** Data-source scope while no entry exists yet (landing/streaming). */
+const LOCAL_DATA_NAMESPACE = "local";
 
 /**
  * Spec-driven theme, author surface (docs/plan/tool-rail-and-spec-theme):
@@ -248,6 +257,13 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // Pristine pre-steer spec for the no-op guard — the stream mutates
   // context.previousSpec in place (see the onComplete comment).
   const steerBaselineRef = useRef<Spec | null>(null);
+  // Deferred completion (docs/plan/data-sources, rev 1.3): onComplete
+  // stashes the streamed spec here; the commit effect below consumes it
+  // once the stream state (incl. rawLines) has fully settled.
+  const completionRef = useRef<{
+    op: PendingOp;
+    completedSpec: Spec;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Element keys ([data-jr-key]) only render while devtools are marked
@@ -256,7 +272,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   const activeEntry = routeEntry ?? null;
 
-  const { spec, isStreaming, send, clear } = useUIStream({
+  const { spec, isStreaming, send, clear, rawLines } = useUIStream({
     api: "/api/generate",
     onError: (streamError) => {
       // A failed fresh generation leaves the hook's empty spec mounted, which
@@ -293,105 +309,146 @@ export function Playground({ initialRef }: PlaygroundProps) {
       });
     },
     onComplete: (completedSpec) => {
-      const op = pendingOpRef.current;
-      if (!op) return;
+      // useUIStream's internal patch applier silently drops root members
+      // other than /root, /state and /elements/* (that's where the data
+      // blocks ride), and its rawLines closure may lag the final chunk —
+      // so the commit is DEFERRED to the effect below, which runs after
+      // the stream state fully settles and re-folds the blocks from the
+      // raw lines (docs/plan/data-sources, rev 1.3). The op is stashed
+      // here; the effect consumes it exactly once.
+      if (!pendingOpRef.current) return;
+      completionRef.current = { op: pendingOpRef.current, completedSpec };
+    },
+  });
 
-      // Defense in depth: a completion that never set the root (empty stream
-      // the server failed to classify, non-JSONL output) is a failure, not a
-      // generation — never commit it to history. pendingOpRef survives so the
-      // dialog's retry can replay the request.
-      if (
-        op.kind === PENDING_OP_KINDS.generate &&
-        !isNonEmptySpec(completedSpec)
-      ) {
-        clear();
-        setFailure({ kind: "service", message: t("service.noSpec") });
-        return;
-      }
+  /* eslint-disable react-hooks/set-state-in-effect -- the completion
+     commit is deliberately deferred into an effect (the stream state must
+     fully settle first — see the onComplete comment); it runs exactly
+     once per completed stream, guarded by the consumed completionRef. */
+  // Deferred completion commit (see the onComplete comment): runs when the
+  // stream has settled, with `rawLines` provably containing every line
+  // (the final setRawLines batches with setIsStreaming(false)). Strict
+  // Mode double-invocation is safe — the ref is consumed synchronously.
+  useEffect(() => {
+    const completion = completionRef.current;
+    if (!completion || isStreaming) return;
+    completionRef.current = null;
+    const { op, completedSpec: streamedSpec } = completion;
+    // Re-cover the data blocks the stream applier dropped, then run the
+    // original completion pipeline on the recovered spec.
+    const completedSpec = withDataBlocksFromLines(streamedSpec, rawLines);
 
-      // A steer that completes with the spec unchanged (truncated or
-      // empty stream) would commit a no-op revision — treat it as a model
-      // failure so the dialog offers switch-and-retry. pendingOpRef stays
-      // intact so the retry replays the request. The baseline lives in its
-      // own ref: useUIStream shallow-copies context.previousSpec into its
-      // working spec, so in-place patch application mutates that object —
-      // it cannot be trusted as the pre-steer snapshot.
-      const baseline = steerBaselineRef.current;
-      if (
-        op.kind === PENDING_OP_KINDS.edit &&
-        isNonEmptySpec(baseline) &&
-        specsEqual(completedSpec, baseline)
-      ) {
-        // Same treatment as the quota/service failures: the dialog speaks
-        // (and its retry replays the add), pendingLang stays armed.
-        if (pendingLang) toast.dismiss(langToastId(pendingLang));
-        setFailure({ kind: "service", message: t("service.noChanges") });
-        return;
-      }
-      pendingOpRef.current = null;
+    // Defense in depth: a completion that never set the root (empty stream
+    // the server failed to classify, non-JSONL output) is a failure, not a
+    // generation — never commit it to history. pendingOpRef survives so the
+    // dialog's retry can replay the request.
+    if (
+      op.kind === PENDING_OP_KINDS.generate &&
+      !isNonEmptySpec(completedSpec)
+    ) {
+      clear();
+      setFailure({ kind: "service", message: t("service.noSpec") });
+      return;
+    }
 
-      // Ingest seam (generate, steer, import): lift stray inline copy into
-      // state.copy — non-blocking by design, the coverage flag rides on the
-      // entry (createEntry/commitRevision recompute it). Every model commit
-      // also ends in the declared switching form: when the design has a
-      // switcher, the fix-up binds switch_language on its change event if it
-      // is missing (decision 13) — that is how designs published before the
-      // action migrate, on their next model commit.
-      const { spec: normalizedSpec } = normalizeSpecCopy(completedSpec);
-      const boundSpec = withSwitchLanguageBinding(normalizedSpec);
+    // A steer that completes with the spec unchanged (truncated or
+    // empty stream) would commit a no-op revision — treat it as a model
+    // failure so the dialog offers switch-and-retry. pendingOpRef stays
+    // intact so the retry replays the request. The baseline lives in its
+    // own ref: useUIStream shallow-copies context.previousSpec into its
+    // working spec, so in-place patch application mutates that object —
+    // it cannot be trusted as the pre-steer snapshot.
+    const baseline = steerBaselineRef.current;
+    if (
+      op.kind === PENDING_OP_KINDS.edit &&
+      isNonEmptySpec(baseline) &&
+      specsEqual(completedSpec, baseline)
+    ) {
+      // Same treatment as the quota/service failures: the dialog speaks
+      // (and its retry replays the add), pendingLang stays armed.
+      if (pendingLang) toast.dismiss(langToastId(pendingLang));
+      setFailure({ kind: "service", message: t("service.noChanges") });
+      return;
+    }
+    pendingOpRef.current = null;
 
-      if (op.kind === PENDING_OP_KINDS.generate) {
-        const entry = createEntry(op.prompt, boundSpec);
-        addEntry(entry);
-        // The URL owns the active UI: the landing streams the generation,
-        // then the committed entry takes over at /ui/[id] (the destination
-        // remount restores the identical spec from the entry).
-        router.push(`/ui/${entry.id}`);
-        return;
-      }
+    // Ingest seam (generate, steer, import): lift stray inline copy into
+    // state.copy — non-blocking by design, the coverage flag rides on the
+    // entry (createEntry/commitRevision recompute it). Every model commit
+    // also ends in the declared switching form: when the design has a
+    // switcher, the fix-up binds switch_language on its change event if it
+    // is missing (decision 13) — that is how designs published before the
+    // action migrate, on their next model commit.
+    const { spec: normalizedSpec } = normalizeSpecCopy(completedSpec);
+    const boundSpec = withSwitchLanguageBinding(normalizedSpec);
 
-      const entry = getHistory().find(
-        (candidate) => candidate.id === op.entryId,
-      );
-      if (!entry) {
-        // Revision target vanished mid-stream — the add can't land; fail
-        // loudly rather than leaving the loading toast and spinner hanging.
-        if (pendingLang) {
-          const tag = pendingLang;
-          toast.error(
-            t("playground.langAddFailed", {
-              name: languageName(tag, locale) ?? tag,
-            }),
-            { id: langToastId(tag) },
-          );
-          setPendingLang(null);
-        }
-        return;
-      }
-      // An add-language steer owns the design's own switcher too: the model
-      // was told to offer the new option — this fix-up guarantees it even if
-      // the stream missed the element change (pure, so it no-ops when the
-      // model already did it). The switch_language binding was already
-      // guaranteed at the ingest seam above.
-      const specToCommit = pendingLang
-        ? withLanguageSwitcherOption(boundSpec, pendingLang, true)
-        : boundSpec;
-      const updated = commitRevision(entry, specToCommit, op.label);
-      updateEntry(updated);
+    // Data sources (docs/plan/data-sources, D3): validation-before-write
+    // — a spec with dangling references or credential-shaped config
+    // never becomes an entry/revision. The friendly headline is the one
+    // i18n pair; the issue list stays developer-facing English.
+    const dataIssues = validateDataSources(boundSpec);
+    if (dataIssues.length > 0) {
+      if (pendingLang) toast.dismiss(langToastId(pendingLang));
+      if (op.kind === PENDING_OP_KINDS.generate) clear();
+      toast.error(t("playground.dataSourcesInvalid"), {
+        description: describeDataIssues(dataIssues),
+      });
+      return;
+    }
+
+    if (op.kind === PENDING_OP_KINDS.generate) {
+      const entry = createEntry(op.prompt, boundSpec);
+      addEntry(entry);
+      // The URL owns the active UI: the landing streams the generation,
+      // then the committed entry takes over at /ui/[id] (the destination
+      // remount restores the identical spec from the entry).
+      router.push(`/ui/${entry.id}`);
+      return;
+    }
+
+    const entry = getHistory().find((candidate) => candidate.id === op.entryId);
+    if (!entry) {
+      // Revision target vanished mid-stream — the add can't land; fail
+      // loudly rather than leaving the loading toast and spinner hanging.
       if (pendingLang) {
-        // The layer committed — resolve the loading toast and stop the
-        // switcher's pill spinner.
         const tag = pendingLang;
-        toast.success(
-          t("playground.langAdded", {
+        toast.error(
+          t("playground.langAddFailed", {
             name: languageName(tag, locale) ?? tag,
           }),
           { id: langToastId(tag) },
         );
         setPendingLang(null);
       }
-    },
-  });
+      return;
+    }
+    // An add-language steer owns the design's own switcher too: the model
+    // was told to offer the new option — this fix-up guarantees it even if
+    // the stream missed the element change (pure, so it no-ops when the
+    // model already did it). The switch_language binding was already
+    // guaranteed at the ingest seam above.
+    const specToCommit = pendingLang
+      ? withLanguageSwitcherOption(boundSpec, pendingLang, true)
+      : boundSpec;
+    const updated = commitRevision(entry, specToCommit, op.label);
+    updateEntry(updated);
+    if (pendingLang) {
+      // The layer committed — resolve the loading toast and stop the
+      // switcher's pill spinner.
+      const tag = pendingLang;
+      toast.success(
+        t("playground.langAdded", {
+          name: languageName(tag, locale) ?? tag,
+        }),
+        { id: langToastId(tag) },
+      );
+      setPendingLang(null);
+    }
+    // The commit reads the settling render's closure on purpose; every
+    // value it uses is listed so the linter sees the real dependency set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, rawLines]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Every request records its payload so the failure dialog's retry can
   // replay it with the newly selected model (pendingOpRef still holds the
@@ -1310,6 +1367,17 @@ export function Playground({ initialRef }: PlaygroundProps) {
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
+      {/* Data sources runtime (docs/plan/data-sources, D6/D8): mirrors
+                  declared queries into /queries and registers data_mutate. The
+                  namespace is the entry id, so each design's records live under
+                  their own localStorage keys; a not-yet-committed stream on the
+                  landing page shares the "local" scope. */}
+      {displayedSpec && (
+        <QueryLoader
+          spec={displayedSpec}
+          namespace={activeEntry?.id ?? LOCAL_DATA_NAMESPACE}
+        />
+      )}
       <div
         data-canvas
         className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row"

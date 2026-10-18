@@ -3,6 +3,7 @@
 import { defineRegistry } from "@json-render/react";
 import type { Components } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
+import { DATA_MUTATE_ACTION } from "@/lib/data-sources/types";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 import { playgroundCatalog } from "./catalog";
@@ -54,6 +55,11 @@ const { registry } = defineRegistry(playgroundCatalog, {
     // bindState write IS the persistence there); public surfaces persist
     // the visitor's decision via their own handler.
     [SWITCH_THEME_ACTION]: async () => {},
+    // Data sources (docs/plan/data-sources, rev 1.2): this map is a type
+    // requirement of defineRegistry, not a wiring point — the real
+    // data_mutate handler is registered at runtime inside the provider
+    // tree by <QueryLoader> (auth-actions precedent).
+    [DATA_MUTATE_ACTION]: async () => {},
   },
 });
 
