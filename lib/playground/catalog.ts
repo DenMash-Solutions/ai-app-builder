@@ -2,6 +2,10 @@ import { z } from "zod";
 import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
+import {
+  dataMutateParamsSchema,
+  DATA_MUTATE_ACTION,
+} from "@/lib/data-sources/types";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { LUCIDE_ICON_NAMES } from "@/lib/playground/icons";
@@ -165,6 +169,16 @@ export const playgroundCatalog = defineCatalog(schema, {
       params: z.object({ theme: z.enum(["light", "dark"]) }),
       description:
         'Switch the design\'s theme to <theme> ("light" or "dark"). Bind it to the ThemeSwitcher\'s change event with params.theme bound to the switcher\'s value ({"$state": "/theme"}).',
+    },
+    // Data sources (docs/plan/data-sources): the model declares the
+    // top-level dataSources/resources/queries blocks; reads mirror into
+    // /queries/<name>, and this action persists writes through the
+    // adapter. Registered at runtime by <QueryLoader> (registry actions
+    // are inert here — rev 1.2).
+    [DATA_MUTATE_ACTION]: {
+      params: dataMutateParamsSchema,
+      description:
+        'Persist a change to a declared resource (data sources): create ({ op: "create", resource, input }), update ({ op: "update", resource, id, input }), or delete ({ op: "delete", resource, id }). Requires top-level "dataSources"/"resources" declarations; lists bound to a query mirror ("/queries/<name>/data") refresh automatically. Build create/update input as an object whose fields read form state ({"input": {"title": {"$state": "/new-todo"}, "done": false}} — nested expressions resolve); inside a repeat pass the record id as ({"id": {"$item": "id"}}).',
     },
   },
 });

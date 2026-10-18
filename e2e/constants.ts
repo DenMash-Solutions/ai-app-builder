@@ -268,6 +268,10 @@ export const PATCH_PATH = {
   root: "/root",
   elements: "/elements",
   state: "/state",
+  // Data sources (docs/plan/data-sources): top-level spec blocks.
+  dataSources: "/dataSources",
+  resources: "/resources",
+  queries: "/queries",
 } as const;
 
 export const EDITOR = {
@@ -333,6 +337,24 @@ export const SPEC_THEME = {
   slug: "e2e-theme",
   toggleToDark: en.theme.toggleToDark,
   toggleToLight: en.theme.toggleToLight,
+} as const;
+
+/** Data sources (docs/plan/data-sources): the persistent-todo fixture. */
+export const TODO = {
+  heading: "Todos",
+  addLabel: "Add",
+  addName: "new-todo",
+  addPlaceholder: "What needs doing?",
+  doneLabel: "Done",
+  doneMark: "Done ✓",
+  deleteLabel: "Delete",
+  loading: "Loading todos…",
+  empty: "No todos yet",
+  error: "Todos are unavailable",
+  first: "Buy milk",
+  second: "Walk the dog",
+  countClass: "todo-count",
+  slugPrefix: "e2e-todo",
 } as const;
 
 export const MODELS = {

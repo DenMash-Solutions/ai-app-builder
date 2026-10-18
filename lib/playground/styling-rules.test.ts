@@ -155,4 +155,35 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain("the horizontal Stack wraps by itself");
     expect(STYLING_RULES).toContain("max-w-* mx-auto");
   });
+
+  test("documents data-source declarations, the query mirror and data_mutate", () => {
+    // Top-level blocks the model must emit (siblings of root/elements/state).
+    expect(STYLING_RULES).toContain("three TOP-LEVEL spec blocks");
+    expect(STYLING_RULES).toContain('"dataSources" maps a name');
+    expect(STYLING_RULES).toContain('"resources" maps a name');
+    expect(STYLING_RULES).toContain('"queries" maps a name');
+    // Mirror contract: reserved namespace, statuses, count, error payload —
+    // and the state-ownership rule (manager-owned, never seeded).
+    expect(STYLING_RULES).toContain('"/queries/<query name>"');
+    expect(STYLING_RULES).toContain('"status": "loading"|"success"|"error"');
+    expect(STYLING_RULES).toContain("never seed /queries in state");
+    // Branches: loading, error, empty (implicit AND of count + status).
+    expect(STYLING_RULES).toContain(
+      '{"$state": "/queries/<name>/status", "eq": "loading"}',
+    );
+    expect(STYLING_RULES).toContain(
+      '{"$state": "/queries/<name>/count", "eq": 0}',
+    );
+    // Mutations: declared action, form-state input, $item id, auto-refresh.
+    expect(STYLING_RULES).toContain('"data_mutate" action on Buttons');
+    expect(STYLING_RULES).toContain(
+      '"input": {"<field>": {"$state": "/new-item"}',
+    );
+    expect(STYLING_RULES).toContain("nested expressions resolve");
+    expect(STYLING_RULES).toContain('"id": {"$item": "id"}');
+    expect(STYLING_RULES).toContain("refreshes automatically after a mutation");
+    // Security stance: no credentials, per-visitor storage.
+    expect(STYLING_RULES).toContain("never carry credentials");
+    expect(STYLING_RULES).toContain("VISITOR's own browser");
+  });
 });

@@ -5,6 +5,7 @@ import {
   PATCH_PATH,
   SPEC_THEME,
   STATE_MOCK,
+  TODO,
   UI,
 } from "@/e2e/constants";
 
@@ -865,6 +866,244 @@ export const THEME_UI_LINES: string[] = [
           {
             action: "switch_theme",
             params: { theme: { $state: "/theme" } },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+];
+
+/**
+ * Data sources (docs/plan/data-sources): a persistent todo design. The
+ * three top-level blocks declare the store; `/queries/todoList` is the
+ * manager-owned mirror (never seeded in /state); loading/error/empty
+ * branches render off the mirror's status/count; every write goes through
+ * `data_mutate`, and the count Text is a second component on the same
+ * query (both must update together after a mutation — plan T12).
+ */
+export const TODO_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: { newTodo: "" },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.dataSources,
+    value: { localTodos: { provider: "localStorage", config: {} } },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.resources,
+    value: {
+      todos: {
+        dataSource: "localTodos",
+        schema: { title: "string", done: "boolean" },
+      },
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.queries,
+    value: { todoList: { resource: "todos", operation: "list" } },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "todo-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "md" },
+      children: [
+        "todo-heading",
+        "todo-count",
+        "todo-loading",
+        "todo-error",
+        "todo-empty",
+        "todo-list",
+        "todo-form",
+      ],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-heading"),
+    value: {
+      type: COMPONENT.heading,
+      props: { text: TODO.heading, level: "h1" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-count"),
+    value: {
+      type: COMPONENT.text,
+      props: {
+        text: { $state: "/queries/todoList/count" },
+        className: TODO.countClass,
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-loading"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.loading, className: "todo-loading" },
+      visible: { $state: "/queries/todoList/status", eq: "loading" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-error"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.error, className: "todo-error" },
+      visible: { $state: "/queries/todoList/status", eq: "error" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-empty"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.empty, className: "todo-empty" },
+      visible: [
+        { $state: "/queries/todoList/count", eq: 0 },
+        { $state: "/queries/todoList/status", eq: "success" },
+      ],
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-list"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "sm" },
+      repeat: { statePath: "/queries/todoList/data", key: "id" },
+      children: ["todo-item"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-item"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "horizontal", gap: "sm", className: "todo-item" },
+      children: [
+        "todo-item-title",
+        "todo-item-done",
+        "todo-item-done-mark",
+        "todo-item-delete",
+      ],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-item-title"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: { $item: "title" } },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-item-done"),
+    value: {
+      type: COMPONENT.button,
+      props: { label: TODO.doneLabel },
+      visible: { $item: "done", neq: true },
+      on: {
+        press: [
+          {
+            action: "data_mutate",
+            params: {
+              op: "update",
+              resource: "todos",
+              id: { $item: "id" },
+              input: { done: true },
+            },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-item-done-mark"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.doneMark },
+      visible: { $item: "done" },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-item-delete"),
+    value: {
+      type: COMPONENT.button,
+      props: { label: TODO.deleteLabel },
+      on: {
+        press: [
+          {
+            action: "data_mutate",
+            params: { op: "delete", resource: "todos", id: { $item: "id" } },
+          },
+        ],
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-form"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "horizontal", gap: "sm" },
+      children: ["todo-input", "todo-add"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-input"),
+    value: {
+      type: COMPONENT.input,
+      props: {
+        name: TODO.addName,
+        placeholder: TODO.addPlaceholder,
+        value: { $bindState: "/newTodo" },
+      },
+      children: [],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-add"),
+    value: {
+      type: COMPONENT.button,
+      props: { label: TODO.addLabel },
+      on: {
+        press: [
+          {
+            action: "data_mutate",
+            params: {
+              op: "create",
+              resource: "todos",
+              input: { title: { $state: "/newTodo" }, done: false },
+            },
+          },
+          {
+            action: "setState",
+            params: { statePath: "/newTodo", value: "" },
           },
         ],
       },

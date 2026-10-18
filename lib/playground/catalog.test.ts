@@ -228,4 +228,20 @@ describe("playgroundCatalog spec-driven theme", () => {
     expect(line).toContain("$bindState");
     expect(prompt).toContain("switch_theme");
   });
+
+  test("data_mutate is declared with op/resource/input/id and surfaces in the prompt", () => {
+    const data = playgroundCatalog.data as {
+      actions?: Record<string, { description?: string }>;
+    };
+    expect(data.actions).toHaveProperty("data_mutate");
+
+    const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
+    expect(prompt).toContain("data_mutate");
+    // The declaration teaches the three operations and the $item id rule.
+    const description = data.actions?.data_mutate?.description ?? "";
+    expect(description).toContain("create");
+    expect(description).toContain("update");
+    expect(description).toContain("delete");
+    expect(description).toContain("$item");
+  });
 });
