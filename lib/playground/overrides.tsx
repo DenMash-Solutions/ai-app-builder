@@ -4,9 +4,13 @@ import { createElement, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 import type { BaseComponentProps } from "@json-render/react";
 import type { ValidationConfig } from "@json-render/core";
-import { useBoundProp, useFieldValidation } from "@json-render/react";
+import {
+  useActions,
+  useBoundProp,
+  useFieldValidation,
+} from "@json-render/react";
 import { useTranslations } from "next-intl";
-import { Moon, Sun } from "lucide-react";
+import { Loader2, Moon, Sun } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,10 +30,19 @@ function buttonIcon(name: unknown): ReactNode {
   return createElement(Icon, { size: 16, "aria-hidden": true });
 }
 
+interface ButtonImplProps extends BaseComponentProps<Record<string, unknown>> {
+  /** True while any action is in flight — disables the button and swaps the
+   *  leading icon for a spinner (action-loading-states plan). Read from the
+   *  ActionProvider by <ButtonWithActionState>; kept a plain prop so this
+   *  renderer stays pure and directly testable. */
+  busy?: boolean;
+}
+
 export function ButtonImpl({
   props,
   emit,
-}: BaseComponentProps<Record<string, unknown>>): ReactNode {
+  busy = false,
+}: ButtonImplProps): ReactNode {
   const variant = (
     props.variant === "danger"
       ? "destructive"
@@ -37,12 +50,19 @@ export function ButtonImpl({
         ? "secondary"
         : "default"
   ) as ComponentProps<typeof Button>["variant"];
-  const leading = buttonIcon(props.leadingIcon);
+  const leading = busy
+    ? createElement(Loader2, {
+        size: 16,
+        className: "animate-spin",
+        "aria-hidden": true,
+      })
+    : buttonIcon(props.leadingIcon);
   const trailing = buttonIcon(props.trailingIcon);
   return (
     <Button
       variant={variant}
-      disabled={Boolean(props.disabled)}
+      disabled={Boolean(props.disabled) || busy}
+      aria-busy={busy || undefined}
       onClick={() => emit("press")}
       className={leading || trailing ? "gap-2" : undefined}
     >
@@ -51,6 +71,21 @@ export function ButtonImpl({
       {trailing}
     </Button>
   );
+}
+
+/**
+ * Context reader for <ButtonImpl>: upstream's ActionProvider tracks which
+ * action names are currently executing (`loadingActions`), so every spec
+ * button auto-disables while ANY action runs — sync actions add+remove
+ * within one batch (no flicker), slow writes (data_mutate, auth) hold the
+ * disabled state for their full duration. Enforced app-side so it works no
+ * matter what the generated spec omits.
+ */
+export function ButtonWithActionState(
+  ctx: BaseComponentProps<Record<string, unknown>>,
+): ReactNode {
+  const { loadingActions } = useActions();
+  return ButtonImpl({ ...ctx, busy: loadingActions.size > 0 });
 }
 
 export function InputImpl({

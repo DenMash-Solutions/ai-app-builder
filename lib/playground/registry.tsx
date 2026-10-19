@@ -9,7 +9,7 @@ import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 import { playgroundCatalog } from "./catalog";
 import { IconImpl } from "./icons";
 import {
-  ButtonImpl,
+  ButtonWithActionState,
   GridImpl,
   InputImpl,
   ThemeSwitcherImpl,
@@ -27,7 +27,7 @@ const components = {
   // D5: the catalog's Button declares leadingIcon/trailingIcon — upstream's
   // renderer doesn't know them, so we override it (single press emission,
   // icons drawn around the label).
-  Button: withStyleProps(ButtonImpl as unknown as AnyComponentImpl),
+  Button: withStyleProps(ButtonWithActionState as unknown as AnyComponentImpl),
   // D7: the catalog's Input declares a `change` event — upstream's renderer
   // never emits it, so we override it too.
   Input: withStyleProps(InputImpl as unknown as AnyComponentImpl),

@@ -8,6 +8,7 @@ import {
   TODO,
   UI,
 } from "@/e2e/constants";
+import type { DataSourceProvider } from "@/lib/data-sources/types";
 
 export interface GenerateMockConfig {
   status?: number;
@@ -882,7 +883,17 @@ export const THEME_UI_LINES: string[] = [
  * `data_mutate`, and the count Text is a second component on the same
  * query (both must update together after a mutation — plan T12).
  */
-export const TODO_UI_LINES: string[] = [
+/**
+ * The todo design as streamed JSONL. Parameterized by store so the same
+ * declarative shape ships for both providers (M2 plan T9): the blocks,
+ * mirror bindings and `data_mutate` actions are identical — only the
+ * data source line differs. `dbTodos` on the supabase variant is a
+ * logical label; the connection itself is app-configured.
+ */
+const todoUiLines = (
+  dataSourceName: "localTodos" | "dbTodos",
+  provider: DataSourceProvider,
+): string[] => [
   line({
     op: PATCH_OP.add,
     path: PATCH_PATH.state,
@@ -891,14 +902,14 @@ export const TODO_UI_LINES: string[] = [
   line({
     op: PATCH_OP.add,
     path: PATCH_PATH.dataSources,
-    value: { localTodos: { provider: "localStorage", config: {} } },
+    value: { [dataSourceName]: { provider, config: {} } },
   }),
   line({
     op: PATCH_OP.add,
     path: PATCH_PATH.resources,
     value: {
       todos: {
-        dataSource: "localTodos",
+        dataSource: dataSourceName,
         schema: { title: "string", done: "boolean" },
       },
     },
@@ -923,6 +934,7 @@ export const TODO_UI_LINES: string[] = [
         "todo-empty",
         "todo-list",
         "todo-form",
+        "todo-pending",
       ],
     },
   }),
@@ -1081,6 +1093,16 @@ export const TODO_UI_LINES: string[] = [
         name: TODO.addName,
         placeholder: TODO.addPlaceholder,
         value: { $bindState: "/newTodo" },
+        checks: [{ type: "required", message: TODO.required }],
+        validateOn: "change",
+      },
+      // form-validation-gating: every write to /newTodo (typing, or the
+      // submit's setState clearing it) re-validates into /formValidation.
+      watch: {
+        "/newTodo": {
+          action: "validateForm",
+          params: { statePath: "/formValidation" },
+        },
       },
       children: [],
     },
@@ -1090,7 +1112,17 @@ export const TODO_UI_LINES: string[] = [
     path: elementPath("todo-add"),
     value: {
       type: COMPONENT.button,
-      props: { label: TODO.addLabel },
+      props: {
+        label: TODO.addLabel,
+        // THE gate: disabled until /formValidation/valid — an invalid
+        // press never reaches data_mutate; the watcher re-locks it after
+        // the submit clears the field.
+        disabled: {
+          $cond: { $state: "/formValidation/valid" },
+          $then: false,
+          $else: true,
+        },
+      },
       on: {
         press: [
           {
@@ -1110,7 +1142,22 @@ export const TODO_UI_LINES: string[] = [
       children: [],
     },
   }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("todo-pending"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.saving, className: "todo-pending" },
+      // action-loading-states: visible exactly while the write + its
+      // refresh run (manager-stamped mirror flag).
+      visible: { $state: "/queries/todoList/pending", eq: true },
+      children: [],
+    },
+  }),
 ];
+
+export const TODO_UI_LINES = todoUiLines("localTodos", "localStorage");
+export const TODO_UI_LINES_SUPABASE = todoUiLines("dbTodos", "supabase");
 
 /**
  * Text-free fixture for the rail journey: normalizeSpecCopy lifts element

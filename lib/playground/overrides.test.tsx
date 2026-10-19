@@ -44,6 +44,28 @@ function renderInput(props: Record<string, unknown>): string {
 }
 
 describe("ButtonImpl (D5 icon props)", () => {
+  test("busy disables the button, spins the leading icon, marks aria-busy", () => {
+    const node = ButtonImpl({
+      ...ctx({ label: "Add", leadingIcon: "plus" }),
+      busy: true,
+    }) as ReactElement<ButtonNodeProps & { "aria-busy"?: boolean }>;
+    const html = renderToStaticMarkup(node);
+    expect(html).toContain('disabled=""');
+    expect(html).toContain("animate-spin");
+    expect(html).toContain('aria-busy="true"');
+    expect(html.indexOf("lucide-plus")).toBe(-1);
+  });
+
+  test("idle buttons keep their icon and stay enabled", () => {
+    const node = ButtonImpl(
+      ctx({ label: "Add", leadingIcon: "plus" }),
+    ) as ReactElement<ButtonNodeProps>;
+    const html = renderToStaticMarkup(node);
+    expect(html).not.toContain('disabled=""');
+    expect(html).not.toContain("animate-spin");
+    expect(html.indexOf("lucide-plus")).toBeGreaterThanOrEqual(0);
+  });
+
   test("draws leading/trailing icons around the label", () => {
     const node = ButtonImpl(
       ctx({

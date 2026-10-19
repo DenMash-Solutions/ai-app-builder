@@ -351,6 +351,8 @@ export const TODO = {
   loading: "Loading todos…",
   empty: "No todos yet",
   error: "Todos are unavailable",
+  saving: "Saving todos…",
+  required: "Type a task first",
   first: "Buy milk",
   second: "Walk the dog",
   countClass: "todo-count",
