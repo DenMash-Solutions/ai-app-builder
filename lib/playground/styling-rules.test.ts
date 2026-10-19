@@ -182,8 +182,66 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain("nested expressions resolve");
     expect(STYLING_RULES).toContain('"id": {"$item": "id"}');
     expect(STYLING_RULES).toContain("refreshes automatically after a mutation");
+    // Input item-reads (docs/plan/data-mutate-input-binding): a value the
+    // interaction just wrote must be read with $bindItem (live state), never
+    // nested $item (pre-interaction render snapshot → stale write-back).
+    expect(STYLING_RULES).toContain(
+      'use {"$bindItem": "<field>"}, NEVER {"$item": "<field>"}, inside "input"',
+    );
+    expect(STYLING_RULES).toContain("persist the OLD value");
+    // "id" keeps $item on purpose — top-level $item resolves to a path the
+    // app reads live (D2 rev 1.1); the rule must not push $bindItem there.
+    expect(STYLING_RULES).toContain(
+      '"id" keeps {"$item": "id"} (it resolves to a path the app reads live)',
+    );
     // Security stance: no credentials, per-visitor storage.
     expect(STYLING_RULES).toContain("never carry credentials");
-    expect(STYLING_RULES).toContain("VISITOR's own browser");
+    expect(STYLING_RULES).toContain("VISITOR's browser");
+  });
+
+  test("documents the supabase provider line, its empty config and scoping", () => {
+    // M2 (docs/plan/database-provider, T8): the provider line offers both
+    // stores with the same declarative shape.
+    expect(STYLING_RULES).toContain(
+      '{"provider": "localStorage"|"supabase", "config": {}}',
+    );
+    // The database provider is app-configured — a model must never emit
+    // connection details into a spec.
+    expect(STYLING_RULES).toContain('"config" must stay EMPTY');
+    // Per-visitor means signed-in rows, with the app handling the session.
+    expect(STYLING_RULES).toContain("per signed-in visitor");
+    expect(STYLING_RULES).toContain("signed in automatically");
+  });
+
+  test("gates form submits via watch-driven validateForm + $cond disabled (form-validation-gating)", () => {
+    expect(STYLING_RULES).toContain("Forms — gate writes on validation");
+    // The Input carries checks + validateOn and watches its own bound path —
+    // typing AND the post-submit clear re-validate into /formValidation.
+    expect(STYLING_RULES).toContain('"validateOn": "change"');
+    expect(STYLING_RULES).toContain(
+      '"watch": {"/<field>": {"action": "validateForm"',
+    );
+    expect(STYLING_RULES).toContain('"statePath": "/formValidation"');
+    // The disabled binding is THE gate: undefined validity → disabled at
+    // first paint, valid → enabled, cleared field → re-locked by the watcher.
+    expect(STYLING_RULES).toContain(
+      '"disabled": {"$cond": {"$state": "/formValidation/valid"}, "$then": false, "$else": true}',
+    );
+    expect(STYLING_RULES).toContain("starts disabled");
+    // Actions never skip each other — pre-dispatched validateForm is not a
+    // gate (the doc-sanctioned rule; the whole reason for the binding).
+    expect(STYLING_RULES).toContain("NEVER rely on validateForm's position");
+    expect(STYLING_RULES).toContain("no extra press action needed");
+  });
+
+  test("documents the pending busy mirror + automatic button disable (action-loading-states)", () => {
+    // The mirror contract now advertises the busy flag…
+    expect(STYLING_RULES).toContain('"pending": boolean');
+    // …with the spec-facing branch to render spinners/"Saving…"…
+    expect(STYLING_RULES).toContain('"/queries/<name>/pending"');
+    expect(STYLING_RULES).toContain('"pending": true');
+    // …while button disabling is enforced app-side, never spec-wired.
+    expect(STYLING_RULES).toContain("disable themselves automatically");
+    expect(STYLING_RULES).toContain("no wiring required");
   });
 });
