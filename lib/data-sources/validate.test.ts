@@ -70,6 +70,50 @@ describe("validateDataSources", () => {
     expect(issues[0].message).toContain("credential");
   });
 
+  test("accepts the supabase provider with no config (M2 plan T4)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: { db: { provider: "supabase", config: {} } },
+        resources: {
+          todos: {
+            dataSource: "db",
+            schema: { title: "string", done: "boolean" },
+          },
+        },
+        queries: { todoList: { resource: "todos", operation: "list" } },
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  test("rejects any config field on a supabase data source", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          db: { provider: "supabase", config: { storageKeyPrefix: "x" } },
+        },
+      }),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("dataSources.db.config");
+    expect(issues[0].message).toContain("takes no config");
+    expect(issues[0].message).toContain("RLS");
+  });
+
+  test("localStorage keeps its provider-specific config keys", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          localTodos: {
+            provider: "localStorage",
+            config: { storageKeyPrefix: "my-app" },
+          },
+        },
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
   test("rejects unsupported providers", () => {
     const issues = validateDataSources(
       withBlocks({

@@ -4,6 +4,7 @@ import type {
   DataSourceAdapter,
 } from "./adapter";
 import { createLocalStorageAdapter } from "./local-storage-adapter";
+import { createSupabaseAdapter } from "./supabase-adapter";
 import { DATA_SOURCE_PROVIDERS, DATA_ERROR_CODES, DataError } from "./types";
 import type { DataSourceDef, DataSourceProvider } from "./types";
 
@@ -17,6 +18,7 @@ import type { DataSourceDef, DataSourceProvider } from "./types";
 
 const FACTORIES: Record<DataSourceProvider, AdapterFactory> = {
   [DATA_SOURCE_PROVIDERS.localStorage]: createLocalStorageAdapter,
+  [DATA_SOURCE_PROVIDERS.supabase]: createSupabaseAdapter,
 };
 
 export class AdapterRegistry {
@@ -25,6 +27,15 @@ export class AdapterRegistry {
 
   constructor(factories: Partial<Record<string, AdapterFactory>> = FACTORIES) {
     this.factories = factories;
+  }
+
+  /**
+   * Swap/override one provider's factory at runtime. Used by tests (route
+   * `supabase` at a fake client without touching the singleton's other
+   * providers) and by future providers that register late (M3 API).
+   */
+  registerFactory(provider: DataSourceProvider, factory: AdapterFactory): void {
+    this.factories[provider] = factory;
   }
 
   /** The (cached) adapter for one data source inside one namespace. */

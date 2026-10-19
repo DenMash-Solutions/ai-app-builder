@@ -80,6 +80,7 @@ const mirror = (partial: Partial<QueryMirror>): QueryMirror => ({
   status: QUERY_STATUSES.idle,
   count: 0,
   error: null,
+  pending: false,
   ...partial,
 });
 

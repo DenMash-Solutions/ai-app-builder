@@ -14,9 +14,10 @@ import type { Spec } from "@json-render/core";
 /** The catalog action that creates/updates/deletes records (D2). */
 export const DATA_MUTATE_ACTION = "data_mutate";
 
-/** Storage providers the adapter registry knows (D3). */
+/** Storage providers the adapter registry knows (D3; M2 adds the database). */
 export const DATA_SOURCE_PROVIDERS = {
   localStorage: "localStorage",
+  supabase: "supabase",
 } as const;
 
 export type DataSourceProvider =
@@ -78,13 +79,18 @@ const recordFieldSchema = z.enum([
 export const dataSourceDefSchema = z
   .object({
     provider: z
-      .enum([DATA_SOURCE_PROVIDERS.localStorage])
-      .describe('Storage provider — only "localStorage" is supported'),
+      .enum([
+        DATA_SOURCE_PROVIDERS.localStorage,
+        DATA_SOURCE_PROVIDERS.supabase,
+      ])
+      .describe(
+        'Storage provider — "localStorage" for per-browser data, "supabase" for the project database (rows scoped to the signed-in visitor, authorization enforced by RLS)',
+      ),
     config: z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        'Provider options, e.g. {"storageKeyPrefix": "my-app"}. Never put credentials here — credential-shaped keys are rejected.',
+        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage. Never put credentials here — credential-shaped keys are rejected, and the supabase provider takes no config at all (project URL and keys come from the app environment)',
       ),
   })
   .strict();
@@ -228,6 +234,9 @@ export interface QueryMirror {
   status: QueryStatus;
   count: number;
   error: QueryMirrorError | null;
+  /** True while a `data_mutate` write for this query's resource (and its
+   *  post-write refresh) is running — specs branch busy UI on it. */
+  pending: boolean;
 }
 
 /** Reserved state namespace the query manager owns (D1). */

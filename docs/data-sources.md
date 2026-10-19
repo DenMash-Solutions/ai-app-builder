@@ -1,6 +1,6 @@
-# Data Sources — Reference (M1)
+# Data Sources — Reference (M1 + M2)
 
-**Milestone:** M0+M1 (`docs/plan/data-sources/plan.md`) — declarative data blocks in the spec, a query mirror in runtime state, and `data_mutate` writes, backed by the visitor's own `localStorage`.
+**Milestones:** M0+M1 (`docs/plan/data-sources/plan.md`) — declarative data blocks in the spec, a query mirror in runtime state, and `data_mutate` writes, backed by the visitor's own `localStorage`. M2 (`docs/plan/database-provider/plan.md`) — the `supabase` provider: the same declarative shape over the project database, per-visitor rows under RLS (see [Supabase provider (M2)](#supabase-provider-m2)).
 
 A generated design can declare persistent data without any renderer changes: the three top-level spec blocks are ordinary spec content, and `/queries/**` is ordinary runtime state. Everything below lives in `lib/data-sources/` + `components/data-sources/`.
 
@@ -13,6 +13,8 @@ A generated design can declare persistent data without any renderer changes: the
   "state": { "newTodo": "" },            // raw form state only — never /queries
   "dataSources": {
     "localTodos": { "provider": "localStorage", "config": {} }
+    // or the database provider (M2, config must stay EMPTY):
+    // "dbTodos": { "provider": "supabase", "config": {} }
   },
   "resources": {
     "todos": {
@@ -29,7 +31,7 @@ A generated design can declare persistent data without any renderer changes: the
 }
 ```
 
-- **`dataSources`** — named stores. M1 supports `{ "provider": "localStorage", "config": {} }`; `config.storageKeyPrefix` (default `genui-data`) scopes every key.
+- **`dataSources`** — named stores. Two providers, one shape: `{ "provider": "localStorage"|"supabase", "config": {} }`. localStorage scopes keys with `config.storageKeyPrefix` (default `genui-data`); supabase takes **no config at all** — connection comes from app env, and any config field on it is a validation issue.
 - **`resources`** — named collections inside a store. `schema` is the write-time contract: `create`/`update` records must carry every schema field with the declared type (`id` is generated on create; it is exempt).
 - **`queries`** — named reads. Each query mirrors into state (below). Unknown references (`resource` → missing resource, `dataSource` → missing data source) and credential-shaped config keys (`apiKey`, `token`, …) are rejected at generate/import/publish with issue details.
 
@@ -38,14 +40,14 @@ A generated design can declare persistent data without any renderer changes: the
 Every query writes `/queries/<name>` in runtime state:
 
 ```jsonc
-{ "data": [ /* records */ ], "status": "loading", "count": 0, "error": null }
+{ "data": [ /* records */ ], "status": "loading", "count": 0, "error": null, "pending": false }
 ```
 
 - `status`: `idle → loading → success | error` (the path always exists — bindings never see `undefined`).
 - `count`: `data.length` — the empty state binds `{"$state": "/queries/<name>/count", "eq": 0}` together with `status: "success"` (implicit AND array).
 - `error`: `null` or `{ "code": "<data error code>", "message": "…" }`.
 
-Specs bind to it like any state: `repeat.statePath` over `/queries/<name>/data`, `$item` for per-record fields, `visible` branches on `status`/`count`. Cross-component freshness is free — every bound component re-renders when the mirror is rewritten (verified by the count Text + list pair in the e2e fixture).
+Specs bind to it like any state: `repeat.statePath` over `/queries/<name>/data`, `$item` for per-record fields, `visible` branches on `status`/`count`, and on `pending` while a `data_mutate` write for the resource (plus its refresh) is running. Cross-component freshness is free — every bound component re-renders when the mirror is rewritten (verified by the count Text + list pair in the e2e fixture).
 
 ## Writing: `data_mutate`
 
@@ -79,7 +81,8 @@ Records are **per browser, per design** — never shared between visitors or des
   └─ queryManager.attach({ namespace, dataSources, resources, queries, write })
        ├─ mirror writes via the provider's state channel (the SPEC is never written — T9)
        └─ loads through adapterRegistry.get(provider, def, { namespace })
-            └─ localStorageAdapter — injectable Storage, schema-validated writes
+            ├─ localStorageAdapter — injectable Storage, schema-validated writes
+            └─ supabaseAdapter (M2) — session-ensure, PostgREST CRUD over genui_records
 ```
 
 - `lib/data-sources/types.ts` — zod schemas, statuses, path helpers, `DataError` codes (`malformed`, `notFound`, `invalidRecord`, `unavailable`, `unknownProvider`, `resourceNotFound`, `unsupported`, `unknown`).
@@ -87,18 +90,20 @@ Records are **per browser, per design** — never shared between visitors or des
 - `lib/data-sources/adapter.ts` — the `DataSourceAdapter` contract.
 - `lib/data-sources/adapter-registry.ts` — provider → factory map, one instance per `(dataSource, namespace)`, disposed on detach.
 - `lib/data-sources/local-storage-adapter.ts` — M1 adapter.
+- `lib/data-sources/supabase-adapter.ts` — M2 adapter: session ensure (reuse signed-in user, else one anonymous sign-in cached per document), PostgREST CRUD filtered on `(app_id, resource)`, client-side schema validation on reads and writes, normalized `DataError`s.
+- `lib/data-sources/record-validate.ts` — shared record schema validation used by both adapters.
 - `lib/data-sources/query-manager.ts` — mirrors, dedupe, refresh, storage events; per-document singleton. Detach **supersedes** in-flight reads (per-query generation counter): a stale load never writes over its replacement's mirror, and its dedupe slot is freed — this is what keeps StrictMode's mount→detach→mount honest.
 - `lib/data-sources/stream-blocks.ts` — **stream recovery**: `useUIStream` (in `@json-render/react` ≤0.21.1) applies patches through an applier that only understands `/root`, `/state` and `/elements/*` — `add /dataSources|/resources|/queries` lines are silently dropped mid-stream. The playground's completion commit is therefore deferred until the stream settles, and this helper re-folds the raw JSONL lines with the core SpecStream compiler, merging the blocks back onto the spec.
 - `components/data-sources/query-loader.tsx` — attach/detach lifecycle + `data_mutate` handler registration.
 - `lib/publish/bake.tsx` — `classifySpec` returns `stateful` for any spec with data blocks (D4), so published pages keep the runtime.
 
-## Limitations (M1, by design)
+## Limitations (by design)
 
-- **Client-only**: reads/writes happen in the visitor's browser; no server persistence, no sharing, no auth-scoped data. Published `content` pages with data blocks are `stateful` and need JavaScript.
+- **No sharing, ever**: records are always the visitor's own — per-browser with localStorage, per signed-in visitor with supabase (RLS). There is no cross-visitor access on either provider. Published `content` pages with data blocks are `stateful` and need JavaScript.
 - **Per-document singleton**: one manager per page; multiple `<QueryLoader>`s of the same namespace dedupe reads, but M1 targets one data-bearing surface per document.
-- **Synchronous store**: the loading mirror lasts microseconds (localStorage never yields) — the loading branch is unit-covered, and becomes paintable with async adapters (M2/M3).
+- **localStorage is synchronous**: the loading mirror lasts microseconds (localStorage never yields) — the loading branch is unit-covered and paints for the async supabase provider (M2 e2e).
 - **No credentials, ever**: credential-shaped config keys are rejected at every ingest seam.
-- **Cross-tab = last write wins** (silent re-read, no merge).
+- **Cross-tab = last write wins** (silent re-read, no merge; supabase updates are last-writer-wins too — see below).
 
 ## Implementing another adapter (M2/M3)
 
@@ -106,3 +111,48 @@ Records are **per browser, per design** — never shared between visitors or des
 2. Register it in `adapter-registry.ts`'s `FACTORIES` map (object-based — no string literals) and add the provider to `DATA_SOURCE_PROVIDERS` + `dataSourceDefSchema` in `types.ts`.
 3. Credential-bearing providers: extend `validateDataSources` to reject secrets in specs while reading real credentials from runtime config, never from the spec.
 4. Cover it with the same test shape as `local-storage-adapter.test.ts` (fake store, no DOM).
+
+## Supabase provider (M2)
+
+**Milestone:** M2 (`docs/plan/database-provider/plan.md`) — the same three spec blocks, backed by the project database instead of the visitor's browser:
+
+```jsonc
+"dataSources": { "dbTodos": { "provider": "supabase", "config": {} } }
+```
+
+### Config
+
+The config must be **empty** — any field is a validation issue (`dataSources.<name>.config … takes no config … RLS`). The connection (`NEXT_PUBLIC_SUPABASE_URL`, anon key) is app configuration read through `@/lib/supabase/client`; a spec never carries connection details, and specs stay credential-free as on every provider.
+
+### Scoping: one table, `(app_id, resource)` row scopes
+
+All generated data lives in one approved table, `public.genui_records` (`supabase/migrations/0001_genui_records.sql`):
+
+| column | meaning |
+| ------ | ------- |
+| `app_id` | the design namespace (same D6 table as localStorage: entry id / slug / `featured` / `app`) |
+| `resource` | the resource name from the spec |
+| `id` | client-generated record id (PK part) |
+| `user_id` | `auth.uid()` — the owning visitor session |
+| `data` | the record payload (`jsonb`), schema-validated client-side on read and write |
+
+Resources map to `(app_id, resource)` filters over `data` — never to named tables (rejected alternative: a table per resource; every app would need DDL on generation, which specs must never trigger). Composite PK `(app_id, resource, id)`; index on `(app_id, resource, created_at)` serves list reads.
+
+### RLS expectations (the authorization boundary)
+
+Four policies (`select/insert/update/delete … to authenticated using (user_id = auth.uid())`) make rows visible and writable **only by their owning session** — RLS, not the client, is what actually enforces isolation; the adapter filters scope, policies enforce it. Consequently:
+
+- The adapter **ensures a session before any query**: a signed-in user reuses their session; a fresh visitor is transparently signed in anonymously once per document (cached — the sign-in runs at most once).
+- Anonymous sign-in must be enabled on the project (Authentication → Sign In / Providers → Anonymous). If it's off, fresh visitors get the friendly `unavailable` error branch — signed-in visitors are unaffected.
+- Sessions carry the `authenticated` role (Supabase anonymous users included), so policies admit them.
+- Error normalization: RLS denial (42501/403) and expired/missing session (PGRST3x/401) and network failures (empty PostgREST code) → `unavailable`; unique violations (23505) → `unknown`.
+
+### Semantics
+
+- **Reads/writes are async** — the loading branch genuinely paints (M2 e2e) — the mirror contract is unchanged.
+- **Update = read-modify-write** (merge-patch against the row's `data`) → **last-writer-wins** across tabs/devices of the same visitor; no server merge.
+- Post-mutation auto-refresh, `$item` params, empty/error branches, and namespaces behave exactly as on localStorage — the mirror and `data_mutate` are provider-agnostic (the M1 e2e fixture ships the same design with only the data source line swapped: `TODO_UI_LINES_SUPABASE`).
+
+### Adapter notes
+
+`lib/data-sources/supabase-adapter.ts` — factory injectable with a resolver (`createSupabaseAdapter(def, context, resolveClient?)`, defaulting to a dynamic import of `@/lib/supabase/client`), so tests drive a structural fake PostgREST client (no network, no real supabase-js). The factory is registered in `adapter-registry.ts` `FACTORIES` (plus the `registerFactory` seam for tests). Deferred: Realtime updates (cross-device live refresh) is a follow-up milestone.

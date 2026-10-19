@@ -339,3 +339,66 @@ describe("state ownership (T9): the spec is never written", () => {
     expect(writes.every((w) => w.path.startsWith("/queries/"))).toBe(true);
   });
 });
+
+describe("pending busy flag (action-loading-states)", () => {
+  test("mirrors carry pending:false; setPending stamps the resource's queries", async () => {
+    const storage = fakeStorage();
+    const writes: Write[] = [];
+    const manager = new QueryManager(registryFor(storage));
+    manager.attach(todoConfig(writes));
+    await tick();
+
+    expect(writes.at(-1)?.value.pending).toBe(false);
+
+    manager.setPending("entry-1", "todos", true);
+    expect(writes.at(-1)?.value.pending).toBe(true);
+
+    // Regression guard: a refresh triggered mid-write (post-mutation
+    // auto-refresh) is stamped with the authoritative flag instead of
+    // resetting it — the spinner must survive the refresh.
+    await manager.refreshResource("entry-1", "todos");
+    expect(writes.at(-1)?.value.status).toBe(QUERY_STATUSES.success);
+    expect(writes.at(-1)?.value.pending).toBe(true);
+
+    manager.setPending("entry-1", "todos", false);
+    expect(writes.at(-1)?.value.pending).toBe(false);
+  });
+
+  test("only the named resource's queries are stamped", async () => {
+    const storage = fakeStorage();
+    const writes: Write[] = [];
+    const config = todoConfig(writes);
+    config.queries = {
+      ...config.queries,
+      otherList: { resource: "others", operation: "list" },
+    };
+    config.resources = {
+      ...config.resources,
+      others: { dataSource: "localTodos", schema: { title: "string" } },
+    };
+    const manager = new QueryManager(registryFor(storage));
+    manager.attach(config);
+    await tick();
+
+    manager.setPending("entry-1", "todos", true);
+    const byPath = new Map(writes.map((w) => [w.path, w.value]));
+    expect(byPath.get("/queries/todoList")?.pending).toBe(true);
+    expect(byPath.get("/queries/otherList")?.pending).toBe(false);
+  });
+
+  test("detaching the namespace releases stale flags for the next attach", async () => {
+    const storage = fakeStorage();
+    const writes: Write[] = [];
+    const manager = new QueryManager(registryFor(storage));
+    const detach = manager.attach(todoConfig(writes));
+    await tick();
+    manager.setPending("entry-1", "todos", true);
+    detach();
+
+    const fresh: Write[] = [];
+    manager.attach(todoConfig(fresh));
+    // A flag stuck true (surface unmounted mid-write) must not stamp the
+    // next attach's mirrors — otherwise the design opens stuck-busy.
+    expect(fresh[0].value.pending).toBe(false);
+  });
+});

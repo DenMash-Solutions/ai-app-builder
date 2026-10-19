@@ -1,6 +1,7 @@
 import type { Spec } from "@json-render/core";
 import {
   CREDENTIAL_CONFIG_KEYS,
+  DATA_SOURCE_PROVIDERS,
   dataSourceDefSchema,
   queryDefSchema,
   resourceDefSchema,
@@ -70,6 +71,20 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
               message: `"${key}" looks like a credential — specs never carry secrets; remove it (the visiting browser is the only "auth" a client-side provider needs).`,
             });
           }
+        }
+        // Per-provider config policy (M2 plan T4): the supabase provider is
+        // fully app-configured — project URL and keys come from the app's
+        // environment and rows are scoped by RLS — so any spec-level config
+        // field is either a mistake or an attempt to smuggle credentials in.
+        if (
+          parsed.data.provider === DATA_SOURCE_PROVIDERS.supabase &&
+          Object.keys(config).length > 0
+        ) {
+          issues.push({
+            path: `${path}.config`,
+            message:
+              'The "supabase" provider takes no config — omit "config" (project URL and keys come from the app environment); rows are scoped to the signed-in visitor by RLS.',
+          });
         }
       }
     }

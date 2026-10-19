@@ -26,10 +26,12 @@ import {
   PUBLISH_HEADING_CLASS,
   PUBLISH_UI_LINES,
   TODO_UI_LINES,
+  TODO_UI_LINES_SUPABASE,
 } from "./msw/fixture";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
 import {
   captureFeatured,
+  deleteGenuiRecords,
   deleteTestRow,
   restoreFeaturedIfRecovery,
   TEST_PROMPT_PREFIX,
@@ -81,8 +83,9 @@ async function publishOpenEntry(
 async function generateTodosUnique(
   page: Page,
   prompt: string,
+  lines: string[] = TODO_UI_LINES,
 ): Promise<string> {
-  await mockGenerate(page, { lines: TODO_UI_LINES });
+  await mockGenerate(page, { lines });
   await page.goto(PATHS.ui);
   await waitForMsw(page);
   await page.getByPlaceholder(UI.promptPlaceholder).fill(prompt);
@@ -312,6 +315,95 @@ test.describe("authenticated — admin identity", () => {
       await expect(historyRow(page, prompt)).toHaveCount(0);
     } finally {
       await deleteTestRow(entryId);
+    }
+  });
+
+  test("a published database-backed design serves per-visitor persistent todos (RLS)", async ({
+    page,
+    browser,
+  }) => {
+    const prompt = `${TEST_PROMPT_PREFIX}todo db publish ${randomUUID()}`;
+    const slug = `e2e-db-${randomUUID()}`;
+    let entryId: string | undefined;
+    try {
+      entryId = await generateTodosUnique(page, prompt, TODO_UI_LINES_SUPABASE);
+
+      // Author-side CRUD as a signed-in member: real rows under the admin
+      // session — a reload re-reads them from the database, not a browser.
+      await expect(page.getByText(TODO.empty)).toBeVisible();
+      await page.getByPlaceholder(TODO.addPlaceholder).fill("Author todo");
+      await page.getByRole(ROLE.button, { name: TODO.addLabel }).click();
+      await expect(page.getByText("Author todo")).toBeVisible();
+      await page.reload();
+      await expect(
+        page.getByRole(ROLE.heading, { name: TODO.heading }),
+      ).toBeVisible();
+      await expect(page.getByText("Author todo")).toBeVisible();
+
+      // Go live — the dialog validates the data blocks before publishing (D3).
+      await publishOpenEntry(page, prompt, slug);
+
+      // A FRESH visitor (transparent anonymous session) starts EMPTY — the
+      // author's rows are invisible: RLS, not browser storage, enforces it.
+      const visitor = await browser.newContext({ baseURL: BASE_URL });
+      try {
+        const visitorPage = await visitor.newPage();
+        await visitorPage.goto(`/en/${slug}`);
+        await expect(
+          visitorPage.getByRole(ROLE.heading, { name: TODO.heading }),
+        ).toBeVisible();
+        await expect(visitorPage.getByText(TODO.empty)).toBeVisible();
+
+        // The visitor's own write persists across a reload (their rows)…
+        await visitorPage
+          .getByPlaceholder(TODO.addPlaceholder)
+          .fill("Visitor todo");
+        await visitorPage
+          .getByRole(ROLE.button, { name: TODO.addLabel })
+          .click();
+        await expect(visitorPage.getByText("Visitor todo")).toBeVisible();
+        await visitorPage.reload();
+        await expect(visitorPage.getByText("Visitor todo")).toBeVisible();
+        await expect(visitorPage.getByText("Author todo")).toHaveCount(0);
+      } finally {
+        await visitor.close();
+      }
+
+      // …while ANOTHER fresh visitor sees neither session's rows.
+      const second = await browser.newContext({ baseURL: BASE_URL });
+      try {
+        const secondPage = await second.newPage();
+        await secondPage.goto(`/en/${slug}`);
+        await expect(
+          secondPage.getByRole(ROLE.heading, { name: TODO.heading }),
+        ).toBeVisible();
+        await expect(secondPage.getByText(TODO.empty)).toBeVisible();
+        await expect(secondPage.getByText("Author todo")).toHaveCount(0);
+        await expect(secondPage.getByText("Visitor todo")).toHaveCount(0);
+      } finally {
+        await second.close();
+      }
+
+      // Cleanup: manage → take offline → delete the entry.
+      await page.goto(PATHS.ui);
+      await openHistory(page);
+      await historyRow(page, prompt)
+        .getByRole(ROLE.button, { name: PUBLISH.manageLive })
+        .click();
+      await page
+        .locator(SLOTS.dialog)
+        .getByRole(ROLE.button, { name: PUBLISH.unpublish })
+        .click();
+      await expect(page.getByText(PUBLISH.unpublishDone)).toBeVisible();
+      await historyRow(page, prompt)
+        .getByRole(ROLE.button, { name: ACTIONS.deleteEntry })
+        .click();
+      await expect(historyRow(page, prompt)).toHaveCount(0);
+    } finally {
+      await deleteTestRow(entryId);
+      // Rows live under the minted namespaces (entry uuid + slug) — the
+      // sweep can never reach a real visitor's records.
+      await deleteGenuiRecords([entryId, slug]);
     }
   });
 

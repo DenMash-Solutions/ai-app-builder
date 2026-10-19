@@ -1,5 +1,6 @@
 import type { AdapterContext, DataSourceAdapter } from "./adapter";
 import type { AdapterCapabilities } from "./adapter";
+import { validateRecord } from "./record-validate";
 import {
   DATA_SOURCE_PROVIDERS,
   DATA_ERROR_CODES,
@@ -38,32 +39,6 @@ const resolvePrimaryKey = (resource: NamedResourceDef): string =>
 
 /** `undefined` until initialized — guards against use-before-initialize. */
 type StorageHandle = Storage | null | undefined;
-
-/**
- * Throws when a record misses a schema-declared field or types it wrongly
- * (D3: schema is validated before any write).
- */
-function validateRecord(
-  resource: NamedResourceDef,
-  record: Record<string, unknown>,
-): void {
-  if (!resource.schema) return;
-  for (const [field, expected] of Object.entries(resource.schema)) {
-    const value = record[field];
-    if (value === undefined) {
-      throw new DataError(
-        DATA_ERROR_CODES.invalidRecord,
-        `Record is missing schema field "${field}" (expected ${expected}).`,
-      );
-    }
-    if (typeof value !== expected) {
-      throw new DataError(
-        DATA_ERROR_CODES.invalidRecord,
-        `Record field "${field}" must be ${expected}, got ${typeof value}.`,
-      );
-    }
-  }
-}
 
 export function createLocalStorageAdapter(
   def: DataSourceDef,

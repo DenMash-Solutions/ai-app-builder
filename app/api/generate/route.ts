@@ -1,18 +1,18 @@
-import { google } from "@ai-sdk/google";
-import { streamText } from "ai";
-import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
-import { playgroundCatalog } from "@/lib/playground/catalog";
 import { appDirectives } from "@/lib/computed/directives";
-import { i18nRules } from "@/lib/playground/i18n-rules";
-import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
-import { validatePatchText } from "@/lib/playground/patch-text";
-import { STYLING_RULES } from "@/lib/playground/styling-rules";
+import { playgroundCatalog } from "@/lib/playground/catalog";
 import {
   FIRST_CHUNK_TIMEOUT_MS,
   IDLE_TIMEOUT_MS,
   StreamTimeoutError,
   withDeadline,
 } from "@/lib/playground/deadline";
+import { i18nRules } from "@/lib/playground/i18n-rules";
+import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
+import { validatePatchText } from "@/lib/playground/patch-text";
+import { STYLING_RULES } from "@/lib/playground/styling-rules";
+import { google } from "@ai-sdk/google";
+import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
+import { streamText } from "ai";
 
 export const maxDuration = 60;
 

@@ -51,7 +51,15 @@ const worker = setupWorker(
 );
 
 void worker
-  .start({ onUnhandledFrame: "bypass" })
+  .start({
+    // "Frame" covers requests: anything without a registered handler (the
+    // supabase host above all) bypasses the worker entirely and reaches
+    // the network byte-identical — worker-level hand-off of cross-origin
+    // responses strips their bodies (auth-js would see empty JSON), so
+    // those requests must never enter a handler. The delay/fail
+    // instrumentation for them lives in Playwright routing.
+    onUnhandledFrame: "bypass",
+  })
   .then(() => {
     mockWindow.__MSW_READY__ = true;
   })

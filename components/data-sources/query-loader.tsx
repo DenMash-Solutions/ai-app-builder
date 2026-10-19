@@ -90,6 +90,9 @@ export function QueryLoader({ spec, namespace }: QueryLoaderProps) {
         );
         return;
       }
+      // Busy flag first: pending covers the adapter op AND the refresh
+      // below (cleared in finally — action-loading-states plan).
+      queryManager.setPending(namespace, resourceName, true);
       try {
         const dataSource = config.dataSources[resource.dataSource];
         if (!dataSource) {
@@ -123,10 +126,16 @@ export function QueryLoader({ spec, namespace }: QueryLoaderProps) {
       } catch (error) {
         console.error("[data-sources] data_mutate failed:", error);
       }
-      // Every component bound to this resource re-renders off the refreshed
-      // mirror (D1) — also after a failed mutation, so the UI shows stored
-      // truth rather than the optimistic input.
-      await queryManager.refreshResource(namespace, resourceName);
+      try {
+        // Every component bound to this resource re-renders off the refreshed
+        // mirror (D1) — also after a failed mutation, so the UI shows stored
+        // truth rather than the optimistic input.
+        await queryManager.refreshResource(namespace, resourceName);
+      } finally {
+        // Pending covers the write AND the refresh; cleared last so a failed
+        // refresh can never leave the resource's mirrors stuck busy.
+        queryManager.setPending(namespace, resourceName, false);
+      }
     });
   }, [registerHandler, namespace, getSnapshot, spec]);
 

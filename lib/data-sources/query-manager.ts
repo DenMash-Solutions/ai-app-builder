@@ -47,6 +47,7 @@ const mirror = (partial: Partial<QueryMirror>): QueryMirror => ({
   status: QUERY_STATUSES.idle,
   count: 0,
   error: null,
+  pending: false,
   ...partial,
 });
 
@@ -80,6 +81,13 @@ export class QueryManager {
   // detach so a read that was in flight for a previous attach (StrictMode
   // remount, entry switch) can never write its result over the fresh one.
   private readonly generations = new Map<string, number>();
+  // Busy flags for in-flight mutations, keyed `${namespace}:${name}` — the
+  // single source writeMirror stamps into every mirror it emits, so a
+  // silent refresh during a write can't clobber the pending indicator.
+  private readonly pendingQueries = new Set<string>();
+  // Last value written per query (mirror shape) so setPending can rewrite
+  // the current mirror with a fresh flag without a state-read channel.
+  private readonly lastMirrors = new Map<string, QueryMirror>();
   private listener: ((event: StorageEvent) => void) | null = null;
 
   constructor(registry: AdapterRegistry = adapterRegistry) {
@@ -175,7 +183,19 @@ export class QueryManager {
     const namespaceStillUsed = [...this.contexts].some(
       (candidate) => candidate.namespace === ctx.namespace,
     );
-    if (!namespaceStillUsed) this.registry.disposeNamespace(ctx.namespace);
+    if (!namespaceStillUsed) {
+      this.registry.disposeNamespace(ctx.namespace);
+      // Release the namespace's busy flags + cached mirrors — a flag stuck
+      // true (surface unmounted mid-write) would otherwise stamp stale
+      // pending:true onto the next attach's mirrors.
+      const prefix = `${ctx.namespace}:`;
+      for (const key of [...this.pendingQueries]) {
+        if (key.startsWith(prefix)) this.pendingQueries.delete(key);
+      }
+      for (const key of [...this.lastMirrors.keys()]) {
+        if (key.startsWith(prefix)) this.lastMirrors.delete(key);
+      }
+    }
     if (this.contexts.size === 0) this.teardownListener();
   }
 
@@ -195,7 +215,38 @@ export class QueryManager {
     // An entry switch detaches the old namespace; a read that was already
     // in flight must not clobber the new design's mirror.
     if (!this.isLive(ctx.namespace)) return;
-    ctx.write(queryStatePath(name), value);
+    const key = `${ctx.namespace}:${name}`;
+    // Stamp the authoritative busy flag on EVERY write (loading, success,
+    // error, silent refresh) so a refresh triggered mid-write keeps the
+    // pending indicator instead of resetting it.
+    const stamped: QueryMirror = {
+      ...value,
+      pending: this.pendingQueries.has(key),
+    };
+    this.lastMirrors.set(key, stamped);
+    ctx.write(queryStatePath(name), stamped);
+  }
+
+  /**
+   * Mark/clear every query of one resource as writing (pending mirror
+   * flag): set true right before a `data_mutate` adapter op, false after
+   * the post-write refresh — the flag therefore covers the write AND the
+   * refresh that updates every bound list (action-loading-states plan).
+   */
+  setPending(namespace: string, resourceName: string, pending: boolean): void {
+    for (const ctx of this.contexts) {
+      if (ctx.namespace !== namespace) continue;
+      for (const [name, def] of Object.entries(ctx.queries)) {
+        if (def.resource !== resourceName) continue;
+        const key = `${namespace}:${name}`;
+        if (pending) this.pendingQueries.add(key);
+        else this.pendingQueries.delete(key);
+        const current = this.lastMirrors.get(key);
+        // Rewrite the current mirror with the new flag; if no mirror has
+        // been written yet, the next writeMirror stamps it anyway.
+        if (current) this.writeMirror(ctx, name, current);
+      }
+    }
   }
 
   private async loadQuery(

@@ -282,6 +282,25 @@ export async function deleteTestRow(uiId: string | undefined): Promise<void> {
   }
 }
 
+/**
+ * Service-role cleanup for data-source records (docs/plan/database-provider):
+ * scoped by the namespaces THIS test minted (design uuid, published slug).
+ * Never a bare table sweep and never the shared "local" namespace — a real
+ * visitor's rows must be unreachable from here. Idempotent, silent without
+ * the service-role key.
+ */
+export async function deleteGenuiRecords(
+  appIds: (string | undefined)[],
+): Promise<void> {
+  const ids = appIds.filter((id): id is string => Boolean(id));
+  if (!canSeed || ids.length === 0) return;
+  const svc = serviceClient();
+  const { error } = await svc.from("genui_records").delete().in("app_id", ids);
+  if (error) {
+    console.warn(`[e2e] genui_records cleanup failed: ${error.message}`);
+  }
+}
+
 const RECOVERY_FILE = statePath("featured-recovery.json");
 
 /**
