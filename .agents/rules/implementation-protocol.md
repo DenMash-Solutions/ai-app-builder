@@ -4,6 +4,11 @@
 
 ### Step 0: IMPLEMENTATION PREVIEW & CLARIFICATION (MANDATORY)
 
+- **BEFORE CREATING ANY PLAN — CHECK LESSONS + RELATED SKILLS FIRST**:
+  `grep -r "<topic>" .agents/lessons/` and load the matching skill(s) via the
+  `skill` tool (e.g. `json-render` for anything spec/recipe/renderer-shaped)
+  BEFORE drafting `docs/plan/...`. A preview written without them is invalid
+  and must be redone (mistake #21).
 - **ALWAYS** show a detailed preview of what you plan to implement
 - **ALWAYS** ask clarifying questions if requirements are unclear
 - **ALWAYS** include examples in clarifying questions for better understanding

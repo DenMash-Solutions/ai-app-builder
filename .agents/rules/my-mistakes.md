@@ -122,6 +122,12 @@
 **Lesson Reference**: `feature-plan.md`
 **Prevention**: Every feature plan written to `docs/plan/{kebab-feature}/plan.md` BEFORE code, committed with the feature; scope changes update the plan file in the same turn; chat-only plans don't count
 
+### 21. Plan Drafted Before Checking Lessons + Related Skills (NEW)
+
+**Problem**: `form-validation-gating` + `action-loading-states` plans were drafted straight from package-source research — `.agents/lessons/` was never grepped and the `json-render` skill was not loaded first. The skill audit that followed immediately changed both plans. Worse: a consequential design rejection ("`watch` isn't taught in the prompt") rested on a **mis-filtered grep** (filters `prompt|rule|description` on the same line missed the prompt's "STATE WATCHERS" rules at core `2795+`) — negative "evidence" from a weak grep is not evidence.
+**Lesson Reference**: `implementation-protocol.md` Step 0 — "BEFORE CREATING ANY PLAN — CHECK LESSONS + RELATED SKILLS FIRST"
+**Prevention**: Before drafting any `docs/plan/**`: (1) `grep -r "<topic>" .agents/lessons/`, (2) load the matching skill via the `skill` tool, (3) only then draft. For any REJECT/CONFIRM conclusion drawn from a grep: read the enclosing context / re-grep with a broad pattern before recording it.
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -254,6 +260,8 @@ When I see these → STOP and check lessons:
 - **NEW**: MCP screenshot contradicts a change you just made → stale frame; verify with `evaluate_script` (`mcp-verification.md`)
 - **NEW**: Fixed-dark component invisible in light theme → scope `.dark` class on the island (`mcp-verification.md`)
 - **NEW**: Writing a feature plan only in chat → must persist to `docs/plan/{feature}/plan.md` (`feature-plan.md`)
+- **NEW**: About to write a plan file → lessons grep + related skill load FIRST (`implementation-protocol` Step 0, mistake #21)
+- **NEW**: About to reject an option based on a grep result → re-grep broad + read enclosing context first (weak filter = false negative, mistake #21)
 
 ## ⚡ Quick Recovery Commands
 
