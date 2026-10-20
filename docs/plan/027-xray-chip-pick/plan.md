@@ -3,7 +3,7 @@
 **Status:** implemented
 **Date:** 2026-10-08
 
-> **Outcome**: superseded by `docs/plan/xray-dots/plan.md` (2026-10-10) —
+> **Outcome**: superseded by `docs/plan/031-xray-dots/plan.md` (2026-10-10) —
 > chip click/shift-click/shift-alt-click semantics were removed with the
 > chips; dots now pin on click (+ select when pick is armed) and scope via
 > the label's `+`/`✓` toggle (instance-only; template scope stays on the

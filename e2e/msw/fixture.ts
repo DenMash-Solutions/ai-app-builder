@@ -71,7 +71,7 @@ export const MOCK_EDIT_LINES: string[] = [
 ];
 
 /** MOCK_UI_LINES with a catalog Icon in the card — the icons fixture
- *  (docs/plan/catalog-icons). Kept as its own key set so no other fixture's
+ *  (docs/plan/040-catalog-icons). Kept as its own key set so no other fixture's
  *  structure-count assertions move. */
 export const ICON_UI_LINES: string[] = [
   line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: MOCK_KEYS.card }),
@@ -102,7 +102,7 @@ export const ICON_UI_LINES: string[] = [
       children: [],
     },
   }),
-  // D5 (docs/plan/catalog-icons): a Button carrying icon props — the leading
+  // D5 (docs/plan/040-catalog-icons): a Button carrying icon props — the leading
   // and trailing icons must draw around the label.
   line({
     op: PATCH_OP.add,
@@ -119,7 +119,7 @@ export const ICON_UI_LINES: string[] = [
   }),
 ];
 
-/** D7 (docs/plan/catalog-icons): live search/filter fixture. Both arrays
+/** D7 (docs/plan/040-catalog-icons): live search/filter fixture. Both arrays
  *  are seeded in /state (state holds raw data only — the repeat reads the
  *  filtered copy directly); the Input's change event rewrites
  *  /filtered-icons through the catalog's filterItems function. */
@@ -228,7 +228,7 @@ export const FILTER_UI_LINES: string[] = [
   }),
 ];
 
-/** D2 (docs/plan/responsive-ui): pagination fixture mirroring the rules
+/** D2 (docs/plan/041-responsive-ui): pagination fixture mirroring the rules
  *  pattern — the press actions move /page through the catalog's stepPage
  *  (bounded), the label is a pageLabel Text, Previous is hidden at the start
  *  via an element-level `visible`, and the repeat sits on the Grid container.
@@ -826,7 +826,7 @@ export const STATEFUL_ROWS_UI_LINES: string[] = [
 ];
 
 /**
- * Spec-driven theme fixture (docs/plan/tool-rail-and-spec-theme): a light
+ * Spec-driven theme fixture (docs/plan/042-tool-rail-and-spec-theme): a light
  * default and a ThemeSwitcher bound to /theme with the switch_theme change
  * binding. Carries NO copy — it doubles as the empty-copy journey proving
  * the rail keeps "Add language…" reachable.
@@ -876,7 +876,7 @@ export const THEME_UI_LINES: string[] = [
 ];
 
 /**
- * Data sources (docs/plan/data-sources): a persistent todo design. The
+ * Data sources (docs/plan/043-data-sources): a persistent todo design. The
  * three top-level blocks declare the store; `/queries/todoList` is the
  * manager-owned mirror (never seeded in /state); loading/error/empty
  * branches render off the mirror's status/count; every write goes through

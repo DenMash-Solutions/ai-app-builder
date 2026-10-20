@@ -3,7 +3,7 @@
 **Status:** implemented
 **Date:** 2026-10-08
 
-> **Outcome**: superseded by `docs/plan/xray-dots/plan.md` (2026-10-10) —
+> **Outcome**: superseded by `docs/plan/031-xray-dots/plan.md` (2026-10-10) —
 > permanent chips, quiet/container tiering, and the marker system were
 > replaced by one family-colored dot per element with a horizontal fan;
 > hover/pin labels and the label `+` scope toggle live there.

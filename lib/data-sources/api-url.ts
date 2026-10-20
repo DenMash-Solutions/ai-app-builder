@@ -1,5 +1,5 @@
 /**
- * URL policy for the "api" provider (docs/plan/api-data-source, decisions
+ * URL policy for the "api" provider (docs/plan/048-api-data-source, decisions
  * 2 & 5): the spec declares the base URL, so both the three validation
  * seams and the adapter runtime enforce the same shape rules — https
  * everywhere except local development, no userinfo, query string or

@@ -10,7 +10,7 @@ import type { Spec } from "@json-render/core";
  * spec's seed. The chosen tag drives the canvas merge, the EditPanel's resolved
  * values, and where copy edits are written (`state.copy` for the seed,
  * `state.i18n.<tag>` for any other language). Contract:
- * `docs/plan/spec-languages/convention.md` → "Editor semantics".
+ * `docs/plan/038-spec-languages/convention.md` → "Editor semantics".
  */
 
 export const GLOBAL_LANG_KEY = "genui-content-lang";

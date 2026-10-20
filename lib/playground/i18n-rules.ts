@@ -5,7 +5,7 @@ export const DEFAULT_GENERATION_LANGUAGES = ["en", "es"] as const;
 
 /**
  * In-spec language contract for the generator (see
- * `docs/plan/spec-languages/convention.md`). The seed language is
+ * `docs/plan/038-spec-languages/convention.md`). The seed language is
  * `state.locale` — passed per request so the copy is written in the route's
  * language; translations live in `state.i18n.<tag>` under the same keys.
  */

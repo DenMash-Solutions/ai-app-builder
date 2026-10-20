@@ -17,7 +17,7 @@ import { mockGenerate, waitForMsw } from "./helpers";
  * Anonymous / auth / publish-adjacent paths for the live-pages feature.
  * Nothing here signs in (credentials never live in the repo) — the
  * authenticated half of the journey is verified via the MCP script
- * (see docs/plan/live-pages/tasks.md §7.3) and the data layer via unit
+ * (see docs/plan/033-live-pages/tasks.md §7.3) and the data layer via unit
  * tests. Assumes the landing page is featured as root (tasks.md §8), so
  * the playground entry point for these tests is `/ui`.
  */

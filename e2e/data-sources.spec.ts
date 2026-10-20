@@ -12,7 +12,7 @@ import { deleteGenuiRecords, serviceClient } from "./db";
 import { canSeed, e2eEnv } from "./env";
 
 /**
- * Data sources (docs/plan/data-sources, M1): a generated design declares a
+ * Data sources (docs/plan/043-data-sources, M1): a generated design declares a
  * localStorage-backed resource and every read/write flows through the
  * query mirror (`/queries/todoList`) and `data_mutate`. Journeys drive the
  * UI only; environment instrumentation is limited to corrupting/simulating
@@ -193,7 +193,7 @@ test.describe("data sources — persistent todo (localStorage)", () => {
 });
 
 /**
- * Database provider (docs/plan/database-provider, M2): the SAME todo
+ * Database provider (docs/plan/046-database-provider, M2): the SAME todo
  * design with `provider: "supabase"` — every read/write is a real
  * PostgREST round-trip to the project (the MSW worker only mocks
  * /api/generate and bypasses everything else; `delay`/`fail` journeys

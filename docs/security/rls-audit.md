@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-13
 **Project:** `rfgmupbktannfedkqypq`
-**Method:** adversarial review per `docs/plan/rls-audit/plan.md` — policy introspection, live battery executed as real roles (`anon` / `authenticated` user A vs user B / admin) through the Supabase MCP, end-to-end HTTP checks with the real anon key, security advisors and 24 h log review.
+**Method:** adversarial review per `docs/plan/037-rls-audit/plan.md` — policy introspection, live battery executed as real roles (`anon` / `authenticated` user A vs user B / admin) through the Supabase MCP, end-to-end HTTP checks with the real anon key, security advisors and 24 h log review.
 **Fix migration:** `rls_audit_hardening` (applied 2026-10-13). App-layer fix: `lib/history/sync.ts` (finding F7).
 **Recreation scripts:** `db/` — ordered, re-runnable SQL reproducing the audited schema end-to-end (tables, functions, policies, grants, triggers, seed). Each file validated against the live project inside a rolled-back transaction.
 

@@ -5,7 +5,7 @@ import { SPEC_STATE_KEYS, getCopy } from "@/lib/i18n/spec-languages";
  * Ingest normalizer: lifts inline user-facing strings into stable
  * `state.copy` keys and replaces them with `{ $state: "/copy/<key>" }`
  * refs, so generated/imported specs satisfy the in-spec language contract
- * (see `docs/plan/spec-languages/convention.md`). Non-blocking: anything
+ * (see `docs/plan/038-spec-languages/convention.md`). Non-blocking: anything
  * not covered (nested copy, non-whitelisted props) stays inline.
  */
 

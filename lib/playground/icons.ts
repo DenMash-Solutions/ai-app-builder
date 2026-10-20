@@ -2,7 +2,7 @@
  * Curated Lucide icon set for the playground catalog — the single source of
  * truth behind the `Icon` component: the catalog's `name` enum is derived
  * from these keys, so the model's prompt, the editor's property select, and
- * the renderer can never drift (decision 2, docs/plan/catalog-icons).
+ * the renderer can never drift (decision 2, docs/plan/040-catalog-icons).
  *
  * Keys are kebab-case (the Lucide website's own naming) and must match the
  * installed lucide-react export (v1 renamed several icons — `filter` →

@@ -29,7 +29,7 @@ import type { SpecKind } from "@/lib/publish/artifacts";
  * rather than as pure static markup.
  */
 export function classifySpec(spec: Spec): SpecKind {
-  // Data sources (docs/plan/data-sources, D4): a spec that declares
+  // Data sources (docs/plan/043-data-sources, D4): a spec that declares
   // queries/dataSources renders against the `/queries` runtime mirror —
   // it needs the client engine, so it never bakes as static markup even
   // when no element binds state directly.

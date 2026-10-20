@@ -14,7 +14,7 @@ import { z } from "zod";
  * prompt via `catalog.prompt({ directives })`, and every render site resolves
  * them through `<JSONUIProvider directives={appDirectives}>`.
  *
- * Contract: `docs/plan/computed-directives/plan.md`.
+ * Contract: `docs/plan/039-computed-directives/plan.md`.
  *
  * Resolvers are defensive — they never throw, because a throw inside a
  * directive would crash the render tree. Bad input coerces to a safe default.

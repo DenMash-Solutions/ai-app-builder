@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Spec } from "@json-render/core";
 
 /**
- * Data sources M0+M1 (docs/plan/data-sources): the provider-independent
+ * Data sources M0+M1 (docs/plan/043-data-sources): the provider-independent
  * contract a generated UI uses to read and write persistent data. A spec
  * declares three top-level blocks — `dataSources` (where), `resources`
  * (what) and `queries` (reads) — and the catalog action `data_mutate`

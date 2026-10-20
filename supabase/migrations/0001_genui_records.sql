@@ -1,4 +1,4 @@
--- Data sources M2 (docs/plan/database-provider): the single approved table
+-- Data sources M2 (docs/plan/046-database-provider): the single approved table
 -- generated UIs may touch. Resources map to (app_id, resource) row scopes
 -- over a `data jsonb` column — never to named author tables — and every
 -- row is owned by the visitor session whose context created it

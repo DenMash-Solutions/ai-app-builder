@@ -169,7 +169,7 @@ describe("playgroundCatalog D5/D7 extensions", () => {
     const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
     // Functions are auto-listed by name, in registration order — `add` was
     // dropped (D8r) in favor of $math, and $math increments were superseded
-    // by stepPage (D2, docs/plan/responsive-ui).
+    // by stepPage (D2, docs/plan/041-responsive-ui).
     expect(prompt).toMatch(
       /Available functions:\s*\n\s*- filterItems\n\s*- sliceItems\n\s*- stepPage\n\s*- pageLabel\b/,
     );

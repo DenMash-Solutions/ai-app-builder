@@ -316,7 +316,7 @@ export async function waitForRemoteRow(
 }
 
 /**
- * Service-role cleanup for data-source records (docs/plan/database-provider):
+ * Service-role cleanup for data-source records (docs/plan/046-database-provider):
  * scoped by the namespaces THIS test minted (design uuid, published slug).
  * Never a bare table sweep and never the shared "local" namespace — a real
  * visitor's rows must be unreachable from here. Idempotent, silent without

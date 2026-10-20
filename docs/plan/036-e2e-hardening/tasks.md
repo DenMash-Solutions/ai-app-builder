@@ -1,6 +1,6 @@
 # E2E Hardening — Tasks
 
-Plan: `docs/plan/e2e-hardening/plan.md` (Status: implemented)
+Plan: `docs/plan/036-e2e-hardening/plan.md` (Status: implemented)
 
 Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 

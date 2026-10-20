@@ -1,6 +1,6 @@
 # Deploy — Tasks
 
-Plan: `docs/plan/deploy/plan.md` (Status: draft — awaiting approval; 3 decisions needed from user first)
+Plan: `docs/plan/035-deploy/plan.md` (Status: draft — awaiting approval; 3 decisions needed from user first)
 
 Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 

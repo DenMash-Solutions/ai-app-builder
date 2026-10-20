@@ -271,7 +271,7 @@ test.describe("authenticated — admin identity", () => {
     try {
       entryId = await generateTodosUnique(page, prompt);
 
-      // Author-side: one record in the ENTRY's namespace (docs/plan/data-sources, D6).
+      // Author-side: one record in the ENTRY's namespace (docs/plan/043-data-sources, D6).
       await expect(page.getByText(TODO.empty)).toBeVisible();
       await page.getByPlaceholder(TODO.addPlaceholder).fill("Author todo");
       await page.getByRole(ROLE.button, { name: TODO.addLabel }).click();

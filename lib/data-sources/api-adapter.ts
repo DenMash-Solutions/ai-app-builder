@@ -9,7 +9,7 @@ import { DATA_SOURCE_PROVIDERS, DATA_ERROR_CODES, DataError } from "./types";
 import type { DataSourceDef, NamedResourceDef } from "./types";
 
 /**
- * Milestone 3 adapter (docs/plan/api-data-source): a plain HTTPS JSON API,
+ * Milestone 3 adapter (docs/plan/048-api-data-source): a plain HTTPS JSON API,
  * fetched DIRECTLY by the visitor's browser (Lane 1 — keyless public
  * endpoints, no server route, no egress worker). The spec declares the
  * origin (`config.baseUrl`), the resource's `collection` is the path

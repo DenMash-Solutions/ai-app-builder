@@ -1,6 +1,6 @@
 # Spec Languages — Tasks
 
-Plan: `docs/plan/spec-languages/plan.md` (Status: in progress)
+Plan: `docs/plan/038-spec-languages/plan.md` (Status: in progress)
 
 Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 
@@ -8,7 +8,7 @@ Dependency order: 1 → (2, 3) → 4 → 5 → 6 → 7. Phases 2 and 3 are paral
 
 ## Phase 0 — Convention
 
-- [x] 0.1 ADR `docs/plan/spec-languages/convention.md`: the contract in one page — copy-seed rule, `i18n.<tag>` namespace, merge + fallback chain (exact → base → seed), app-locale ≠ content-language separation, generation contract, route-driven serving, editor semantics (toggle, write redirection, persistence)
+- [x] 0.1 ADR `docs/plan/038-spec-languages/convention.md`: the contract in one page — copy-seed rule, `i18n.<tag>` namespace, merge + fallback chain (exact → base → seed), app-locale ≠ content-language separation, generation contract, route-driven serving, editor semantics (toggle, write redirection, persistence)
 
 ## Phase 1 — Core mechanics (`lib/`, unit-tested)
 
@@ -51,7 +51,7 @@ Dependency order: 1 → (2, 3) → 4 → 5 → 6 → 7. Phases 2 and 3 are paral
 ## Phase 7 — Gate & close
 
 - [x] 7.1 Full gate: `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e` — green 2026-10-14 (369 unit, 85 e2e, build OK)
-- [x] 7.2 Plan → `Status: implemented` + verification record; ADR linked from the repo docs index — README gains a Documentation section linking `docs/plan/spec-languages/convention.md` (plus plans/security)
+- [x] 7.2 Plan → `Status: implemented` + verification record; ADR linked from the repo docs index — README gains a Documentation section linking `docs/plan/038-spec-languages/convention.md` (plus plans/security)
 
 ## Phase 8 — Preview/live switching + content-only routes (reopened 2026-10-15, decision 11)
 

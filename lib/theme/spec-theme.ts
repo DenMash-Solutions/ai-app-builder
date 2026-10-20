@@ -1,7 +1,7 @@
 import { THEMES, THEME_STORAGE_KEY, type Theme } from "@/lib/theme";
 
 /**
- * Spec-driven theme (docs/plan/tool-rail-and-spec-theme) — the design's
+ * Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme) — the design's
  * theme lives in the spec like its language does: a state convention
  * (`state.theme`), a declared catalog action (`switch_theme`), and a
  * catalog component (ThemeSwitcher) whose press flips the bound state and

@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { LUCIDE_ICON_COMPONENTS } from "@/lib/playground/icons";
 import { THEMES } from "@/lib/theme";
 
-// D5/D7 (docs/plan/catalog-icons): our catalog extends upstream's Button and
+// D5/D7 (docs/plan/040-catalog-icons): our catalog extends upstream's Button and
 // Input definitions, so we own their renderers too — the stock shadcn
 // components know neither the icon props nor the `change` event.
 
@@ -151,7 +151,7 @@ export function InputImpl({
   );
 }
 
-// D3 (docs/plan/responsive-ui): the Grid's `columns` prop is the DESKTOP
+// D3 (docs/plan/041-responsive-ui): the Grid's `columns` prop is the DESKTOP
 // target — upstream renders a fixed grid-cols-<n> at every viewport, so a
 // 3-column grid squeezes into a 375 px phone. Same 1–6 clamp and gap map as
 // upstream; only the column classes become a responsive ladder.
@@ -188,7 +188,7 @@ export function GridImpl({
   );
 }
 
-// Spec-driven theme (docs/plan/tool-rail-and-spec-theme): the value IS the
+// Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme): the value IS the
 // design's theme state — press flips the bound /theme and emits change so
 // the model's switch_theme binding can persist the visitor's decision.
 // Sun when dark (press → light), Moon when light (press → dark) — the icon

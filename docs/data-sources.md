@@ -1,6 +1,6 @@
 # Data Sources — Reference (M1 + M2)
 
-**Milestones:** M0+M1 (`docs/plan/data-sources/plan.md`) — declarative data blocks in the spec, a query mirror in runtime state, and `data_mutate` writes, backed by the visitor's own `localStorage`. M2 (`docs/plan/database-provider/plan.md`) — the `supabase` provider: the same declarative shape over the project database, per-visitor rows under RLS (see [Supabase provider (M2)](#supabase-provider-m2)).
+**Milestones:** M0+M1 (`docs/plan/043-data-sources/plan.md`) — declarative data blocks in the spec, a query mirror in runtime state, and `data_mutate` writes, backed by the visitor's own `localStorage`. M2 (`docs/plan/046-database-provider/plan.md`) — the `supabase` provider: the same declarative shape over the project database, per-visitor rows under RLS (see [Supabase provider (M2)](#supabase-provider-m2)).
 
 A generated design can declare persistent data without any renderer changes: the three top-level spec blocks are ordinary spec content, and `/queries/**` is ordinary runtime state. Everything below lives in `lib/data-sources/` + `components/data-sources/`.
 
@@ -114,7 +114,7 @@ Records are **per browser, per design** — never shared between visitors or des
 
 ## Supabase provider (M2)
 
-**Milestone:** M2 (`docs/plan/database-provider/plan.md`) — the same three spec blocks, backed by the project database instead of the visitor's browser:
+**Milestone:** M2 (`docs/plan/046-database-provider/plan.md`) — the same three spec blocks, backed by the project database instead of the visitor's browser:
 
 ```jsonc
 "dataSources": { "dbTodos": { "provider": "supabase", "config": {} } }
@@ -159,7 +159,7 @@ Four policies (`select/insert/update/delete … to authenticated using (user_id 
 
 ## API provider (M3)
 
-**Milestone:** M3 (`docs/plan/api-data-source/plan.md`) — reads and writes a plain HTTPS JSON API **directly from the visitor's browser** (Lane 1: keyless, public endpoints — no server route, no proxy):
+**Milestone:** M3 (`docs/plan/048-api-data-source/plan.md`) — reads and writes a plain HTTPS JSON API **directly from the visitor's browser** (Lane 1: keyless, public endpoints — no server route, no proxy):
 
 ```jsonc
 "dataSources": {
@@ -198,4 +198,4 @@ Only two keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required) and `itemsP
 
 ### Spot-check (M3 verification)
 
-A plain-language Pokédex generation against `https://pokeapi.co/api/v2/pokemon/` exercised the provider end to end (live list reads through the browser-direct fetch; loading/error/empty branches covered by the e2e journeys). Derived per-item URLs must use the registered composition — `{"$concat": [base, {"$item": "id"}, ".png"]}` — because JavaScript inside `$template` silently resolves to `""`; the recipe line in `lib/playground/styling-rules.ts` teaches exactly this. Evidence log: `docs/plan/api-data-source/plan.md` (verification + incidents); general lesson: `.agents/lessons/template-derived-strings.md`.
+A plain-language Pokédex generation against `https://pokeapi.co/api/v2/pokemon/` exercised the provider end to end (live list reads through the browser-direct fetch; loading/error/empty branches covered by the e2e journeys). Derived per-item URLs must use the registered composition — `{"$concat": [base, {"$item": "id"}, ".png"]}` — because JavaScript inside `$template` silently resolves to `""`; the recipe line in `lib/playground/styling-rules.ts` teaches exactly this. Evidence log: `docs/plan/048-api-data-source/plan.md` (verification + incidents); general lesson: `.agents/lessons/template-derived-strings.md`.

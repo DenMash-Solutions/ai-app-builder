@@ -65,7 +65,7 @@ const iconDefinition = {
   example: { name: "sparkles" },
 };
 
-// Spec-driven theme (docs/plan/tool-rail-and-spec-theme): a light/dark
+// Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme): a light/dark
 // toggle whose value IS the design's theme state. The switcher flips the
 // bound /theme itself and emits change — the model's switch_theme binding
 // hands it to the page, which persists the visitor's decision.
@@ -87,7 +87,7 @@ const themeSwitcherDefinition = {
   example: { value: { $bindState: "/theme" } },
 };
 
-// D5/D7 (docs/plan/catalog-icons): per-component additions on top of the
+// D5/D7 (docs/plan/040-catalog-icons): per-component additions on top of the
 // shared STYLE_PROPS extension. The catalog owns these two definitions, so
 // lib/playground/overrides.tsx owns the matching renderers.
 const componentExtensions: Record<
@@ -162,7 +162,7 @@ export const playgroundCatalog = defineCatalog(schema, {
       description:
         'Switch the design\'s language to <tag> (a BCP-47 tag the spec carries, e.g. "es" or "pt-BR"). Bind it to the language switcher ButtonGroup\'s change event with params.tag bound to the group\'s selected value ({"$state": "/locale"}).',
     },
-    // Spec-driven theme (docs/plan/tool-rail-and-spec-theme): the
+    // Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme): the
     // ThemeSwitcher flips /theme itself and emits change — this binding
     // hands the new value to the page, which persists the visitor's choice.
     [SWITCH_THEME_ACTION]: {
@@ -170,7 +170,7 @@ export const playgroundCatalog = defineCatalog(schema, {
       description:
         'Switch the design\'s theme to <theme> ("light" or "dark"). Bind it to the ThemeSwitcher\'s change event with params.theme bound to the switcher\'s value ({"$state": "/theme"}).',
     },
-    // Data sources (docs/plan/data-sources): the model declares the
+    // Data sources (docs/plan/043-data-sources): the model declares the
     // top-level dataSources/resources/queries blocks; reads mirror into
     // /queries/<name>, and this action persists writes through the
     // adapter. Registered at runtime by <QueryLoader> (registry actions

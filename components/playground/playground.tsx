@@ -153,7 +153,7 @@ const langToastId = (tag: string): string => `add-lang-${tag}`;
 const LOCAL_DATA_NAMESPACE = "local";
 
 /**
- * Spec-driven theme, author surface (docs/plan/tool-rail-and-spec-theme):
+ * Spec-driven theme, author surface (docs/plan/042-tool-rail-and-spec-theme):
  * scope `dark` to the rendered design so the app chrome keeps its own
  * theme. Reads the live provider state (reactive to the ThemeSwitcher's
  * /theme write) — it must render INSIDE the JSONUIProvider to subscribe.
@@ -257,7 +257,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // Pristine pre-steer spec for the no-op guard — the stream mutates
   // context.previousSpec in place (see the onComplete comment).
   const steerBaselineRef = useRef<Spec | null>(null);
-  // Deferred completion (docs/plan/data-sources, rev 1.3): onComplete
+  // Deferred completion (docs/plan/043-data-sources, rev 1.3): onComplete
   // stashes the streamed spec here; the commit effect below consumes it
   // once the stream state (incl. rawLines) has fully settled.
   const completionRef = useRef<{
@@ -314,7 +314,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
       // blocks ride), and its rawLines closure may lag the final chunk —
       // so the commit is DEFERRED to the effect below, which runs after
       // the stream state fully settles and re-folds the blocks from the
-      // raw lines (docs/plan/data-sources, rev 1.3). The op is stashed
+      // raw lines (docs/plan/043-data-sources, rev 1.3). The op is stashed
       // here; the effect consumes it exactly once.
       if (!pendingOpRef.current) return;
       completionRef.current = { op: pendingOpRef.current, completedSpec };
@@ -382,7 +382,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
     const { spec: normalizedSpec } = normalizeSpecCopy(completedSpec);
     const boundSpec = withSwitchLanguageBinding(normalizedSpec);
 
-    // Data sources (docs/plan/data-sources, D3): validation-before-write
+    // Data sources (docs/plan/043-data-sources, D3): validation-before-write
     // — a spec with dangling references or credential-shaped config
     // never becomes an entry/revision. The friendly headline is the one
     // i18n pair; the issue list stays developer-facing English.
@@ -1367,7 +1367,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
-      {/* Data sources runtime (docs/plan/data-sources, D6/D8): mirrors
+      {/* Data sources runtime (docs/plan/043-data-sources, D6/D8): mirrors
                   declared queries into /queries and registers data_mutate. The
                   namespace is the entry id, so each design's records live under
                   their own localStorage keys; a not-yet-committed stream on the

@@ -268,7 +268,7 @@ export const PATCH_PATH = {
   root: "/root",
   elements: "/elements",
   state: "/state",
-  // Data sources (docs/plan/data-sources): top-level spec blocks.
+  // Data sources (docs/plan/043-data-sources): top-level spec blocks.
   dataSources: "/dataSources",
   resources: "/resources",
   queries: "/queries",
@@ -329,7 +329,7 @@ export const THEME = {
   toggleToLight: en.theme.toggleToLight,
 } as const;
 
-/** Spec-driven theme (docs/plan/tool-rail-and-spec-theme) — the design's
+/** Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme) — the design's
  *  own toggle; the visitor decision persists under the app's theme key. */
 export const SPEC_THEME = {
   storageKey: "genui-theme",
@@ -339,7 +339,7 @@ export const SPEC_THEME = {
   toggleToLight: en.theme.toggleToLight,
 } as const;
 
-/** Data sources (docs/plan/data-sources): the persistent-todo fixture. */
+/** Data sources (docs/plan/043-data-sources): the persistent-todo fixture. */
 export const TODO = {
   heading: "Todos",
   addLabel: "Add",

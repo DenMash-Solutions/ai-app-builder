@@ -5,7 +5,7 @@
  * parseSpecStreamLine + applySpecPatch sequence useUIStream applies), and
  * writes a static analysis JSON beside each raw response.
  *
- * Run: bun docs/plan/scrollable-carousel/responses/capture.ts
+ * Run: bun docs/plan/013-scrollable-carousel/responses/capture.ts
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

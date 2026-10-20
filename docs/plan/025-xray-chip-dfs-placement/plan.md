@@ -3,7 +3,7 @@
 **Status:** implemented
 **Date:** 2026-10-08
 
-> **Outcome**: superseded by `docs/plan/xray-dots/plan.md` (2026-10-10) —
+> **Outcome**: superseded by `docs/plan/031-xray-dots/plan.md` (2026-10-10) —
 > the lane-placement apparatus (and the DFS/hierarchy regressions it fixed)
 > went away with the chips; dots fan horizontally instead of stacking
 > vertically, so chips never need lane or tree-order placement.
@@ -26,7 +26,7 @@ Fix the x-ray chip stack misreading where a child's chip lands under a later sib
 
 ### Out of scope
 
-- Tree-outline x placement (chipLeft = depth × indent) — rejected 2026-10-08, see `docs/plan/xray-chip-tree-indent/plan.md` (chips must stay element-anchored in their containers)
+- Tree-outline x placement (chipLeft = depth × indent) — rejected 2026-10-08, see `docs/plan/026-xray-chip-tree-indent/plan.md` (chips must stay element-anchored in their containers)
 - Connector lines / indent guides between parent and child chips — YAGNI until asked (descoped 2026-10-08)
 - Hover-only chip placement path — unchanged; it reuses the permanent-chip positions
 

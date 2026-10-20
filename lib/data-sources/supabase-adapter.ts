@@ -5,7 +5,7 @@ import { DATA_SOURCE_PROVIDERS, DATA_ERROR_CODES, DataError } from "./types";
 import type { DataSourceDef, NamedResourceDef } from "./types";
 
 /**
- * Milestone 2 adapter (docs/plan/database-provider): Supabase Postgres
+ * Milestone 2 adapter (docs/plan/046-database-provider): Supabase Postgres
  * behind the same provider-independent contract. Records live as `data`
  * jsonb rows in the single approved table `genui_records`, scoped to one
  * design (app_id = the D6 namespace) and owned by the visiting session

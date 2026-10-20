@@ -188,7 +188,7 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain("nested expressions resolve");
     expect(STYLING_RULES).toContain('"id": {"$item": "id"}');
     expect(STYLING_RULES).toContain("refreshes automatically after a mutation");
-    // Input item-reads (docs/plan/data-mutate-input-binding): a value the
+    // Input item-reads (docs/plan/045-data-mutate-input-binding): a value the
     // interaction just wrote must be read with $bindItem (live state), never
     // nested $item (pre-interaction render snapshot → stale write-back).
     expect(STYLING_RULES).toContain(
@@ -206,7 +206,7 @@ describe("STYLING_RULES", () => {
   });
 
   test("documents the supabase provider line, its empty config and scoping", () => {
-    // M2 (docs/plan/database-provider, T8): the provider line offers both
+    // M2 (docs/plan/046-database-provider, T8): the provider line offers both
     // stores with the same declarative shape (M3 extended it with "api").
     expect(STYLING_RULES).toContain(
       '{"provider": "localStorage"|"supabase"|"api", "config": {}}',
@@ -220,7 +220,7 @@ describe("STYLING_RULES", () => {
   });
 
   test("documents the api provider line: spec-declared baseUrl, REST mapping, no keys (api-data-source)", () => {
-    // M3 (docs/plan/api-data-source): the endpoint is the ONE value the
+    // M3 (docs/plan/048-api-data-source): the endpoint is the ONE value the
     // spec declares — validated https, plain public URLs only.
     expect(STYLING_RULES).toContain(
       '"config": {"baseUrl": "https://…"} with an optional "itemsPath": "/data"',
@@ -273,7 +273,7 @@ describe("STYLING_RULES", () => {
   });
 
   test("teaches derived strings via $concat and bans JS inside $template (pokeapi steer)", () => {
-    // Steer experiment (docs/plan/api-data-source verification, 2026-10-19):
+    // Steer experiment (docs/plan/048-api-data-source verification, 2026-10-19):
     // fresh gens on 3.1 Lite (×2) emitted JS inside $template ("${$index +
     // 1}" → silently "") and 3.5 Lite dropped the image src entirely; the
     // plain-language steer that fixed it emitted $concat + $math. The recipe

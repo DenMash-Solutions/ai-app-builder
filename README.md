@@ -22,7 +22,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Documentation
 
-- [ADR: In-spec languages](docs/plan/spec-languages/convention.md) — the `state.copy` seed + `state.i18n.<tag>` overlay contract every renderer, editor surface, and publish bake follows
+- [ADR: In-spec languages](docs/plan/038-spec-languages/convention.md) — the `state.copy` seed + `state.i18n.<tag>` overlay contract every renderer, editor surface, and publish bake follows
 - [Implementation plans](docs/plan/) — per-feature plans with decisions and task logs
 - [Security](docs/security/) — RLS audit notes
 

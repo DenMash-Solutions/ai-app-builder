@@ -4,7 +4,7 @@ import { DATA_BLOCK_KEYS } from "./types";
 
 /**
  * Data-block recovery for the playground stream (plan
- * docs/plan/data-sources, rev 1.3 — found empirically).
+ * docs/plan/043-data-sources, rev 1.3 — found empirically).
  *
  * `useUIStream` (in `@json-render/react`) applies streamed patches through
  * its own `setSpecValue`, which only understands `/root`, `/state`,

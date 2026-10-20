@@ -120,7 +120,7 @@
 
 **Problem**: Structure-editing feature's initial plan (including drag-and-drop scope) lived only in conversation → descoped silently, zero trace in the repo (no `docs/`, no git-history hit for "drag"); scope decisions unrecoverable after session ended
 **Lesson Reference**: `feature-plan.md`
-**Prevention**: Every feature plan written to `docs/plan/{kebab-feature}/plan.md` BEFORE code, committed with the feature; scope changes update the plan file in the same turn; chat-only plans don't count
+**Prevention**: Every feature plan written to `docs/plan/{NNN}-{kebab-feature}/plan.md` BEFORE code, committed with the feature; scope changes update the plan file in the same turn; chat-only plans don't count
 
 ### 21. Plan Drafted Before Checking Lessons + Related Skills (NEW)
 
@@ -271,7 +271,7 @@ When I see these → STOP and check lessons:
 - **NEW**: Playwright finds 0 but a11y tree shows the name → missing `{" "}` between JSX spans (`jsx-whitespace-names.md`)
 - **NEW**: MCP screenshot contradicts a change you just made → stale frame; verify with `evaluate_script` (`mcp-verification.md`)
 - **NEW**: Fixed-dark component invisible in light theme → scope `.dark` class on the island (`mcp-verification.md`)
-- **NEW**: Writing a feature plan only in chat → must persist to `docs/plan/{feature}/plan.md` (`feature-plan.md`)
+- **NEW**: Writing a feature plan only in chat → must persist to `docs/plan/{NNN}-{feature}/plan.md` (`feature-plan.md`)
 - **NEW**: About to write a plan file → lessons grep + related skill load FIRST (`implementation-protocol` Step 0, mistake #21)
 - **NEW**: About to reject an option based on a grep result → re-grep broad + read enclosing context first (weak filter = false negative, mistake #21)
 - **NEW**: Concluding "model adherence gap" from one generated spec → check whether the recipe teaches the composition (`template-derived-strings.md`, mistake #22)

@@ -15,7 +15,7 @@ import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { registry } from "@/lib/playground/registry";
 import { appDirectives } from "@/lib/computed/directives";
 
-/** Data-source scope of app-chrome specs (docs/plan/data-sources, D6). */
+/** Data-source scope of app-chrome specs (docs/plan/043-data-sources, D6). */
 const SPEC_PAGE_DATA_NAMESPACE = "app";
 
 /**
@@ -93,7 +93,7 @@ export function SpecPage({
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
-      {/* Data sources runtime (docs/plan/data-sources, D8): app-chrome
+      {/* Data sources runtime (docs/plan/043-data-sources, D8): app-chrome
                   specs carry no data blocks today — this is a no-op until one
                   does. */}
       <QueryLoader spec={spec} namespace={SPEC_PAGE_DATA_NAMESPACE} />

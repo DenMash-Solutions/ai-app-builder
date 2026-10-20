@@ -6,7 +6,7 @@
 
 ## Goal
 
-Add a database-backed provider behind the same resource/query/binding/mutation model shipped in M0+M1 (`docs/plan/data-sources/plan.md`). A generated UI declares `{ "provider": "supabase", "config": {} }` and its resources become Postgres rows with per-visitor authorization enforced by RLS — the provider-agnostic adapter contract, spec validation, mirror, and `data_mutate` semantics stay untouched. Async adapters finally make the loading branch paintable, which M1's synchronous localStorage could not show.
+Add a database-backed provider behind the same resource/query/binding/mutation model shipped in M0+M1 (`docs/plan/043-data-sources/plan.md`). A generated UI declares `{ "provider": "supabase", "config": {} }` and its resources become Postgres rows with per-visitor authorization enforced by RLS — the provider-agnostic adapter contract, spec validation, mirror, and `data_mutate` semantics stay untouched. Async adapters finally make the loading branch paintable, which M1's synchronous localStorage could not show.
 
 ## Scope
 

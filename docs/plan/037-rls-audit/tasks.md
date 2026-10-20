@@ -1,6 +1,6 @@
 # RLS Audit — Tasks
 
-Plan: `docs/plan/rls-audit/plan.md` (Status: draft — awaiting approval)
+Plan: `docs/plan/037-rls-audit/plan.md` (Status: draft — awaiting approval)
 
 Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 

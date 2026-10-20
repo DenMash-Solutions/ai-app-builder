@@ -4,7 +4,7 @@ import type { Spec } from "@json-render/core";
  * In-spec languages: `state.copy` is the single-language seed, translations
  * live in `state.i18n.<bcp47-tag>` and every surface merges the active
  * language over the seed before rendering. Contract: see
- * `docs/plan/spec-languages/convention.md`.
+ * `docs/plan/038-spec-languages/convention.md`.
  */
 
 type SpecState = Record<string, unknown>;

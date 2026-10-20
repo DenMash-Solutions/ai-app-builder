@@ -31,13 +31,13 @@ const components = {
   // D7: the catalog's Input declares a `change` event — upstream's renderer
   // never emits it, so we override it too.
   Input: withStyleProps(InputImpl as unknown as AnyComponentImpl),
-  // D3 (docs/plan/responsive-ui): `columns` is the desktop target — the
+  // D3 (docs/plan/041-responsive-ui): `columns` is the desktop target — the
   // override emits the responsive ladder so grids fit phone viewports.
   Grid: withStyleProps(GridImpl as unknown as AnyComponentImpl),
   // The catalog's Icon draws from the curated Lucide map (icons.ts) — the
   // same single source the name enum derives from.
   Icon: withStyleProps(IconImpl as unknown as AnyComponentImpl),
-  // Spec-driven theme (docs/plan/tool-rail-and-spec-theme) — our catalog
+  // Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme) — our catalog
   // owns the definition, so it owns the renderer too.
   ThemeSwitcher: withStyleProps(
     ThemeSwitcherImpl as unknown as AnyComponentImpl,
@@ -55,7 +55,7 @@ const { registry } = defineRegistry(playgroundCatalog, {
     // bindState write IS the persistence there); public surfaces persist
     // the visitor's decision via their own handler.
     [SWITCH_THEME_ACTION]: async () => {},
-    // Data sources (docs/plan/data-sources, rev 1.2): this map is a type
+    // Data sources (docs/plan/043-data-sources, rev 1.2): this map is a type
     // requirement of defineRegistry, not a wiring point — the real
     // data_mutate handler is registered at runtime inside the provider
     // tree by <QueryLoader> (auth-actions precedent).

@@ -1,6 +1,6 @@
 # ADR: In-Spec Languages (copy seed + `i18n.<tag>` overlays)
 
-**Status:** accepted · 2026-10-12 · Plan: `docs/plan/spec-languages/plan.md`
+**Status:** accepted · 2026-10-12 · Plan: `docs/plan/038-spec-languages/plan.md`
 
 ## The contract
 

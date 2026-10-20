@@ -25,7 +25,7 @@ The element editor's `className` and `style` properties are edited as free-text 
 - **`className`/`style` sections wrapped in shadcn `Collapsible`** *(user-directed 2026-10-06)*: each list editor sits inside a `Collapsible`, **collapsed by default** with a trigger showing the prop name + a value summary *(user-confirmed 2026-10-06)*
 - i18n keys added to **both** `en.json` and `es.json` (add buttons + row remove aria-labels with `{name}` param, key/value placeholders, collapsible summaries)
 - **shadcn `Combobox` autocomplete** *(user-directed 2026-10-06, replaces native `<datalist>`)*: class-token row inputs and style-key row inputs become Comboboxes with free-entry typing + filtered suggestion dropdown; suggestion sources unchanged — classes already used anywhere in the current spec ∪ curated `COMMON_TAILWIND_CLASSES`, curated `COMMON_STYLE_KEYS` for style keys (both via `lib/editor/suggestions.ts`)
-- `docs/plan/prop-list-inputs/plan.md` (this file)
+- `docs/plan/011-prop-list-inputs/plan.md` (this file)
 
 ### Out of scope
 

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { AUTH, PATHS, ROLE, SHELL } from "./constants";
 
 /**
- * App shell (docs/plan/app-shell): sidebar navigation + account menu on the
+ * App shell (docs/plan/034-app-shell): sidebar navigation + account menu on the
  * app surfaces (`/ui/**`, `/admin`), chrome-less public content (landing,
  * live, preview, auth), the anonymous `/admin` guard with its return path,
  * and the mobile drawer. Nothing here signs in — authenticated state is

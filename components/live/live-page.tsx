@@ -33,7 +33,7 @@ import {
   specTheme,
 } from "@/lib/theme/spec-theme";
 
-/** Data-source scope of the featured root (docs/plan/data-sources, D6). */
+/** Data-source scope of the featured root (docs/plan/043-data-sources, D6). */
 const LIVE_DATA_NAMESPACE = "featured";
 
 /**
@@ -137,7 +137,7 @@ export function LivePage({
       directives={appDirectives}
     >
       <main className="relative w-full">
-        {/* Data sources runtime (docs/plan/data-sources, D8): the featured
+        {/* Data sources runtime (docs/plan/043-data-sources, D8): the featured
                 root keeps its own namespace — its records never collide with a
                 published slug's. */}
         <QueryLoader spec={spec} namespace={LIVE_DATA_NAMESPACE} />

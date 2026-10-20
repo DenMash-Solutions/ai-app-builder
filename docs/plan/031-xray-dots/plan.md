@@ -30,7 +30,7 @@ Replace the x-ray chip system (permanent `key · Type` chips, quiet/container ti
   - `editor.spec.ts` "x-ray labels mark boxless elements and never overflow the canvas" → boxless ghost gets a dot; dots add no canvas overflow (lane/hierarchy assertions removed)
   - `prompt-scope.spec.ts` "x-ray chips pick and scope like the canvas" → "x-ray dots pin, highlight, and scope": dot click pins + outline; `+` scopes (✓ toggles off); pick-armed dot click selects; Escape clears pins
   - `shortcuts.spec.ts` — chip visibility assertion → `[data-xray-dot]`
-- `docs/plan/xray-chip-pick/plan.md` — one-line "superseded by x-ray-dots" note
+- `docs/plan/027-xray-chip-pick/plan.md` — one-line "superseded by x-ray-dots" note
 
 ### Out of scope
 

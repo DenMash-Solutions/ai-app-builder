@@ -10,7 +10,7 @@ import {
  * keyed by canonical tag). Serving maps the route locale → an artifact via the
  * same fallback chain as the copy merge (exact → base → seed), so a page is
  * never un-renderable for a locale it merely lacks a translation for.
- * Contract: `docs/plan/spec-languages/convention.md` → "Publish-time bake".
+ * Contract: `docs/plan/038-spec-languages/convention.md` → "Publish-time bake".
  */
 
 export type SpecKind = "content" | "stateful";

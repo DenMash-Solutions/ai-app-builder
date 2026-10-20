@@ -4,7 +4,7 @@ import type { Theme } from "@/lib/theme";
 import { specThemeInitScript } from "@/lib/theme/spec-theme";
 
 /**
- * Public-surface sibling of ThemeInit (docs/plan/tool-rail-and-spec-theme):
+ * Public-surface sibling of ThemeInit (docs/plan/042-tool-rail-and-spec-theme):
  * applies the SPEC's default theme pre-paint — but only when the visitor has
  * no stored decision (ThemeInit, rendered earlier in the layout, already
  * applies one). Runs while the parser reads it (server-rendered

@@ -1,4 +1,4 @@
-// D7 (docs/plan/catalog-icons): catalog-level computed functions. The model
+// D7 (docs/plan/040-catalog-icons): catalog-level computed functions. The model
 // prompt auto-lists their names, and specs may call them anywhere an
 // expression is allowed — props or action params — as
 // `{ "$computed": "<name>", "args": { … } }`.
@@ -96,7 +96,7 @@ export function sliceItems(args: Record<string, unknown>): unknown {
 
 /**
  * Next/previous page number, clamped — how press actions must move `/page`
- * (D2 of docs/plan/responsive-ui): the page state itself can never reach
+ * (D2 of docs/plan/041-responsive-ui): the page state itself can never reach
  * −1 or past the end, so label and slice always agree. Delta applies to the
  * clamped page (what the user sees), then the result is clamped again.
  * - `delta`: steps to move (Next: 1, Previous: −1); non-number → 0.
@@ -114,7 +114,7 @@ export function stepPage(args: Record<string, unknown>): unknown {
 
 /**
  * "Page 1 of 2" — the pagination position label (D2 of
- * docs/plan/responsive-ui): 1-based numbers with the true page count, unlike
+ * docs/plan/041-responsive-ui): 1-based numbers with the true page count, unlike
  * a `{"$template"}` which interpolates raw state and cannot compute bounds.
  * Specs use it as a Text `text` prop.
  */
@@ -125,7 +125,7 @@ export function pageLabel(args: Record<string, unknown>): unknown {
 
 /** Computed functions handed to every `<JSONUIProvider>` (playground,
  *  spec page, live pages). Pagination moves `/page` through `stepPage` and
- *  labels it with `pageLabel` (D2, docs/plan/responsive-ui). */
+ *  labels it with `pageLabel` (D2, docs/plan/041-responsive-ui). */
 export const PLAYGROUND_FUNCTIONS = {
   filterItems,
   sliceItems,

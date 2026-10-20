@@ -71,7 +71,7 @@ export function parseSpecJson(text: string): ParseSpecResult {
     return { ok: false, error: PARSE_SPEC_ERRORS.invalidShape };
   }
 
-  // Data sources (docs/plan/data-sources, D3): the import seam validates
+  // Data sources (docs/plan/043-data-sources, D3): the import seam validates
   // the data blocks too — a pasted spec with dangling references or
   // credential-shaped config is rejected with its issue list.
   const dataIssues = validateDataSources(raw as Spec);

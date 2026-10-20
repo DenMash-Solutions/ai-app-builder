@@ -13,7 +13,7 @@
 - **ALWAYS** ask clarifying questions if requirements are unclear
 - **ALWAYS** include examples in clarifying questions for better understanding
 - **ALWAYS** include the best approach for each question
-- **PERSIST** the preview to `docs/plan/{kebab-feature}/plan.md` (template: `docs/plan/_template.md`) — a plan that exists only in chat is lost (see `feature-plan.md`)
+- **PERSIST** the preview to `docs/plan/{NNN}-{kebab-feature}/plan.md` (template: `docs/plan/_template.md`) — a plan that exists only in chat is lost (see `feature-plan.md`)
 - **ON SCOPE CHANGE** (descope/add) → update the plan file in the same turn, not just the reply
 - **NEVER** skip this step unless user explicitly requests direct implementation
 - **WAIT** for user approval before proceeding to implementation
@@ -114,7 +114,7 @@ When you see these patterns → STOP AND READ LESSONS:
 ### 5. IMPLEMENTATION PREVIEW & CLARIFICATION (MANDATORY)
 
 - **Show detailed preview** of what you plan to implement
-- **Persist it** to `docs/plan/{feature}/plan.md` before code (see `feature-plan.md`)
+- **Persist it** to `docs/plan/{NNN}-{kebab-feature}/plan.md` before code (see `feature-plan.md`)
 - **Ask clarifying questions** if requirements are unclear
 - **Include examples** in clarifying questions
 - **Wait for user approval** before proceeding
@@ -123,7 +123,7 @@ When you see these patterns → STOP AND READ LESSONS:
 
 1. **STOP** - Don't write code yet
 2. **PREVIEW** - Show implementation plan and ask clarifying questions
-3. **PERSIST** - Write the plan to `docs/plan/{feature}/plan.md`; update it on every scope change
+3. **PERSIST** - Write the plan to `docs/plan/{NNN}-{kebab-feature}/plan.md`; update it on every scope change
 4. **READ** - lessons/implementation-checklist.md
 5. **RESEARCH** - existing codebase patterns
 6. **VERIFY** - compliance with all rules

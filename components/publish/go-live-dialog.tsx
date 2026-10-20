@@ -124,7 +124,7 @@ function GoLiveContent({
 
   const handleSubmit = async (): Promise<void> => {
     if (!user) return;
-    // Data sources (docs/plan/data-sources, D3): validation-before-publish
+    // Data sources (docs/plan/043-data-sources, D3): validation-before-publish
     // — the head revision's data blocks must resolve before a version
     // ships (same rule as generate/import).
     const headSpec = entry.revisions[entry.head]?.spec ?? entry.spec;

@@ -5,7 +5,7 @@ import { mockGenerate, waitForMsw } from "./helpers";
 import { THEME_UI_LINES } from "./msw/fixture";
 
 /**
- * Spec-driven theme (docs/plan/tool-rail-and-spec-theme): the design carries
+ * Spec-driven theme (docs/plan/042-tool-rail-and-spec-theme): the design carries
  * its theme (`state.theme`) and toggles it with the ThemeSwitcher. The
  * canvas scopes `dark` to the design (app chrome keeps its own theme);
  * chrome-less routes (preview, public serving) theme the page itself, and

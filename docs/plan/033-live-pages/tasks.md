@@ -1,6 +1,6 @@
 # Live Pages — Task Board
 
-Updated as work progresses (checkbox states are the source of truth; see plan: `docs/plan/live-pages/plan.md`).
+Updated as work progresses (checkbox states are the source of truth; see plan: `docs/plan/033-live-pages/plan.md`).
 
 Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 

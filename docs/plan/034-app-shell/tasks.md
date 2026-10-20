@@ -1,6 +1,6 @@
 # App Shell — Tasks
 
-Plan: `docs/plan/app-shell/plan.md` (Status: implemented)
+Plan: `docs/plan/034-app-shell/plan.md` (Status: implemented)
 
 Legend: `[ ]` pending · `[~]` in progress · `[x]` done
 

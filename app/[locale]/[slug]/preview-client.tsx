@@ -234,7 +234,7 @@ export default function PreviewPage({
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
-      {/* Data sources runtime (docs/plan/data-sources, D6/D8): the slug
+      {/* Data sources runtime (docs/plan/043-data-sources, D6/D8): the slug
                   scopes this design's records — owner preview and published
                   visitor share one per-browser store for the same design. */}
       <QueryLoader spec={spec} namespace={slug} />
