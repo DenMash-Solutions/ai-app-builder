@@ -1,4 +1,5 @@
 import type { Spec } from "@json-render/core";
+import { checkApiAuth } from "./api-auth";
 import { checkApiBaseUrl } from "./api-url";
 import {
   API_CONFIG_KEYS,
@@ -88,16 +89,21 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
               'The "supabase" provider takes no config — omit "config" (project URL and keys come from the app environment); rows are scoped to the signed-in visitor by RLS.',
           });
         }
-        // Per-provider config policy (api-data-source plan D2): the api
-        // provider's endpoint is the one value a spec IS allowed to declare
-        // — but only in its validated https shape, with no room for headers,
-        // auth or query values (Lane 2 owns credentials).
+        // Per-provider config policy (api-data-source plan D2, extended by
+        // keyed-api-lane plan 050): the api provider accepts the validated
+        // endpoint, the optional itemsPath pointer, and the shape-only
+        // `auth` ref — headers and query values stay impossible, and key
+        // VALUES are rejected by construction (auth carries only
+        // type/ref/header; anything else fails checkApiAuth).
         if (parsed.data.provider === DATA_SOURCE_PROVIDERS.api) {
+          const allowed = (API_CONFIG_KEYS as readonly string[])
+            .map((key) => `"${key}"`)
+            .join(", ");
           for (const key of Object.keys(config)) {
             if (!(API_CONFIG_KEYS as readonly string[]).includes(key)) {
               issues.push({
                 path: `${path}.config.${key}`,
-                message: `The "api" provider takes only "baseUrl" and "itemsPath" — remove "${key}".`,
+                message: `The "api" provider takes only ${allowed} — remove "${key}".`,
               });
             }
           }
@@ -118,6 +124,15 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
               message:
                 '"itemsPath" must be a JSON pointer into the response, e.g. "/data".',
             });
+          }
+          if (config.auth !== undefined) {
+            const authProblem = checkApiAuth(config.auth);
+            if (authProblem) {
+              issues.push({
+                path: `${path}.config.auth`,
+                message: authProblem,
+              });
+            }
           }
         }
       }

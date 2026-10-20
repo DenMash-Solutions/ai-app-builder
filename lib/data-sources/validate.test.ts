@@ -139,7 +139,7 @@ describe("validateDataSources", () => {
     expect(issues[0].message).toContain("https");
   });
 
-  test("rejects unexpected config keys on an api data source (headers/auth are Lane 2)", () => {
+  test("rejects unexpected config keys on an api data source (headers/query stay out)", () => {
     const issues = validateDataSources(
       withBlocks({
         dataSources: {
@@ -155,7 +155,9 @@ describe("validateDataSources", () => {
     );
     expect(issues).toHaveLength(1);
     expect(issues[0].path).toBe("dataSources.shop.config.headers");
-    expect(issues[0].message).toContain('takes only "baseUrl" and "itemsPath"');
+    expect(issues[0].message).toContain(
+      'takes only "baseUrl", "itemsPath", "auth"',
+    );
   });
 
   test("rejects a malformed itemsPath (must be a JSON pointer)", () => {
@@ -172,6 +174,87 @@ describe("validateDataSources", () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].path).toBe("dataSources.shop.config.itemsPath");
     expect(issues[0].message).toContain("JSON pointer");
+  });
+
+  test("accepts a shape-only auth ref (keyed API lane 050)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: {
+            provider: "api",
+            config: {
+              baseUrl: "https://shop.example",
+              auth: { type: "bearer", ref: "shop_api" },
+            },
+          },
+        },
+        resources: {
+          products: { dataSource: "shop", schema: { title: "string" } },
+        },
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  test("accepts a named-header auth declaration", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: {
+            provider: "api",
+            config: {
+              baseUrl: "https://shop.example",
+              auth: { type: "header", header: "X-Api-Key", ref: "shop" },
+            },
+          },
+        },
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  test("rejects malformed auth declarations with a path at config.auth", () => {
+    const cases: Array<Record<string, unknown>> = [
+      { type: "bearer" }, // no ref
+      { type: "bearer", ref: "Weather!" }, // uppercase/punctuation
+      { type: "query", ref: "weather" }, // unsupported style
+      { type: "header", ref: "shop" }, // header name missing
+      { type: "bearer", ref: "shop", header: "X-K" }, // header on bearer
+    ];
+    for (const auth of cases) {
+      const issues = validateDataSources(
+        withBlocks({
+          dataSources: {
+            shop: {
+              provider: "api",
+              config: { baseUrl: "https://shop.example", auth },
+            },
+          },
+        }),
+      );
+      expect(issues.length).toBeGreaterThan(0);
+      expect(issues[0].path).toBe("dataSources.shop.config.auth");
+    }
+  });
+
+  test("rejects a key VALUE hidden inside auth (unknown field)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: {
+            provider: "api",
+            config: {
+              baseUrl: "https://shop.example",
+              auth: { type: "bearer", ref: "shop", key: "sk-123" },
+            },
+          },
+        },
+      }),
+    );
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues[0].path).toBe("dataSources.shop.config.auth");
+    expect(issues[0].message).toContain('remove "key"');
+    expect(issues[0].message).toContain("never live in specs");
   });
 
   test("localStorage keeps its provider-specific config keys", () => {

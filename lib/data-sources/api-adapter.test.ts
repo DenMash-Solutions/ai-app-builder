@@ -259,3 +259,95 @@ describe("createApiAdapter", () => {
     });
   });
 });
+
+describe("keyed data sources (Lane 2 proxy, plan 050)", () => {
+  const keyedDef: DataSourceDef = {
+    provider: "api",
+    config: {
+      baseUrl: "https://shop.example/v1",
+      auth: { type: "bearer", ref: "shop" },
+    },
+  };
+  const keyed = (fetchImpl: ApiFetch | null) =>
+    createApiAdapter(keyedDef, context, () => fetchImpl);
+
+  test("auth.ref rewrites requests to /api/data-proxy with {ref, path}", async () => {
+    const { fetchImpl, calls } = fakeFetch(() => json([lamp]));
+    const adapter = keyed(fetchImpl);
+    await adapter.initialize();
+    expect(await adapter.list(resource)).toEqual([lamp]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("/api/data-proxy");
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].body).toMatchObject({
+      ref: "shop",
+      path: "/v1/products",
+      method: "GET",
+    });
+  });
+
+  test("writes carry the inner record through the proxy body", async () => {
+    const { fetchImpl, calls } = fakeFetch(() =>
+      json({ ...lamp, id: "server-7" }, 201),
+    );
+    const adapter = keyed(fetchImpl);
+    await adapter.initialize();
+    await adapter.create(resource, { title: "Lamp", price: 10 });
+    expect(calls[0].body).toMatchObject({
+      ref: "shop",
+      path: "/v1/products",
+      method: "POST",
+    });
+    const inner = (calls[0].body as { body?: Record<string, unknown> }).body;
+    expect(inner).toMatchObject({ title: "Lamp", price: 10 });
+  });
+
+  test("an unconfigured auth ref fails unavailable naming the ref", async () => {
+    const { fetchImpl } = fakeFetch(() =>
+      json({ error: "unknown_ref", ref: "shop" }, 404),
+    );
+    const adapter = keyed(fetchImpl);
+    await adapter.initialize();
+    await expect(adapter.list(resource)).rejects.toMatchObject({
+      code: DATA_ERROR_CODES.unavailable,
+      message: expect.stringContaining('auth ref "shop"'),
+    });
+  });
+
+  test("a genuine upstream 404 through the proxy still reads as notFound", async () => {
+    const { fetchImpl } = fakeFetch(() => json({ error: "nope" }, 404));
+    const adapter = keyed(fetchImpl);
+    await adapter.initialize();
+    // Missing records stay null through the proxy (contract unchanged).
+    expect(await adapter.get(resource, "ghost")).toBeNull();
+    await expect(adapter.delete(resource, "ghost")).rejects.toMatchObject({
+      code: DATA_ERROR_CODES.notFound,
+    });
+  });
+
+  test("initialize rejects a malformed auth declaration (defense in depth)", async () => {
+    const adapter = createApiAdapter(
+      {
+        provider: "api",
+        config: {
+          baseUrl: "https://shop.example",
+          auth: { type: "bearer", ref: "shop", key: "sk-123" },
+        },
+      },
+      context,
+      () => null,
+    );
+    await expect(adapter.initialize()).rejects.toMatchObject({
+      code: DATA_ERROR_CODES.malformed,
+    });
+  });
+
+  test("keyless sources still fetch the absolute URL directly (Lane 1 regression)", async () => {
+    const { fetchImpl, calls } = fakeFetch(() => json([lamp]));
+    const adapter = createApiAdapter(def, context, () => fetchImpl);
+    await adapter.initialize();
+    await adapter.list(resource);
+    expect(calls[0].url).toBe("https://shop.example/v1/products");
+    expect(calls[0].method).toBe("GET");
+  });
+});

@@ -3,20 +3,28 @@ import type {
   AdapterContext,
   DataSourceAdapter,
 } from "./adapter";
+import { checkApiAuth } from "./api-auth";
+import type { ApiKeyAuth } from "./api-auth";
 import { checkApiBaseUrl, normalizeApiBaseUrl } from "./api-url";
 import { validateRecord } from "./record-validate";
 import { DATA_SOURCE_PROVIDERS, DATA_ERROR_CODES, DataError } from "./types";
 import type { DataSourceDef, NamedResourceDef } from "./types";
 
 /**
- * Milestone 3 adapter (docs/plan/048-api-data-source): a plain HTTPS JSON API,
- * fetched DIRECTLY by the visitor's browser (Lane 1 — keyless public
- * endpoints, no server route, no egress worker). The spec declares the
- * origin (`config.baseUrl`), the resource's `collection` is the path
- * segment, and the standard REST verbs map onto the provider-independent
- * CRUD contract — the query manager and `data_mutate` stay blind to all of
- * it. The fetch resolver is injectable so unit tests run on a fake without
- * a network (the supabase adapter's surface-mock pattern).
+ * Milestone 3 adapter (docs/plan/048-api-data-source): a plain HTTPS JSON
+ * API. Lane 1 fetches DIRECTLY from the visitor's browser (keyless public
+ * endpoints, no server route, no egress worker); Lane 2
+ * (docs/plan/050-keyed-api-lane) adds keyed sources: when the spec's
+ * `config.auth` declares a ref, every request is rewritten to
+ * `POST /api/data-proxy` with `{ ref, path, method, body }` and the
+ * server injects the origin-bound key — the browser never holds one. Only
+ * auth-declared sources take the proxy; keyless stays browser-direct
+ * (decision 3). The spec declares the origin (`config.baseUrl`), the
+ * resource's `collection` is the path segment, and the standard REST verbs
+ * map onto the provider-independent CRUD contract — the query manager and
+ * `data_mutate` stay blind to all of it. The fetch resolver is injectable
+ * so unit tests run on a fake without a network (the supabase adapter's
+ * surface-mock pattern).
  *
  * The URL is policed at the three validation seams AND here (defense in
  * depth, mirroring the supabase config check): https outside localhost, no
@@ -29,6 +37,12 @@ export type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
 /** Bounds every request so a hanging API cannot pin `pending` forever. */
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/** The server route keyed sources route through (same-origin, relative). */
+const DATA_PROXY_PATH = "/api/data-proxy";
+
+/** The proxy's `unknown_ref` body marker (route + adapter agree on it). */
+const UNKNOWN_REF_ERROR = "unknown_ref";
+
 const CAPABILITIES: AdapterCapabilities = {
   list: true,
   get: true,
@@ -40,6 +54,7 @@ const CAPABILITIES: AdapterCapabilities = {
 interface ApiConfig {
   baseUrl?: unknown;
   itemsPath?: unknown;
+  auth?: unknown;
 }
 
 const resolveCollection = (resource: NamedResourceDef): string =>
@@ -55,6 +70,58 @@ const defaultResolveFetch = (): ApiFetch | null =>
   typeof globalThis.fetch === "function"
     ? (url: string, init?: RequestInit) => globalThis.fetch(url, init)
     : null;
+
+/**
+ * Lane 2 transport (050): rewrite every request to the server proxy as
+ * `POST /api/data-proxy` with `{ ref, path, method, body }` — the client
+ * sends a PATH only (the absolute URL was composed from the spec's
+ * baseUrl, which the proxy neither needs nor trusts) and no credential of
+ * any kind. The proxy's response is handed back untouched so the whole
+ * error-normalization pipeline above keeps working verbatim; the one
+ * exception is `unknown_ref`, which names the missing server config in a
+ * developer-facing diagnostic instead of a generic 404.
+ */
+function proxyFetchFor(ref: string, underlying: ApiFetch): ApiFetch {
+  return async (url: string, init: RequestInit = {}) => {
+    const path = new URL(url).pathname;
+    const verb = (init.method ?? "GET").toUpperCase();
+    const response = await underlying(DATA_PROXY_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ref,
+        path,
+        method: verb,
+        body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      }),
+      signal: init.signal,
+    });
+    if (response.status === 404) {
+      const text = await response.text().catch(() => "");
+      let unknownRef = false;
+      try {
+        unknownRef =
+          (JSON.parse(text) as { error?: unknown }).error === UNKNOWN_REF_ERROR;
+      } catch {
+        // A genuine upstream 404 (missing record) — pass it through below.
+      }
+      if (unknownRef) {
+        throw new DataError(
+          DATA_ERROR_CODES.unavailable,
+          `This deployment holds no API key for auth ref "${ref}" — configure DATA_PROXY_${ref.toUpperCase()}_ORIGIN and DATA_PROXY_${ref.toUpperCase()}_KEY on the server.`,
+        );
+      }
+      return new Response(text === "" ? null : text, {
+        status: 404,
+        headers: {
+          "Content-Type":
+            response.headers.get("Content-Type") ?? "application/json",
+        },
+      });
+    }
+    return response;
+  };
+}
 
 /**
  * HTTP status → the shared `DataError` codes the mirror already branches
@@ -117,6 +184,9 @@ async function requestJson(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
+    // Already-normalized failures (the Lane 2 proxy's unknown-ref
+    // diagnostic, thrown inside the fetch layer) keep their message.
+    if (error instanceof DataError) throw error;
     const name = error instanceof Error ? error.name : "";
     if (name === "TimeoutError" || name === "AbortError") {
       throw new DataError(
@@ -193,6 +263,7 @@ export function createApiAdapter(
   /** Canonical base (no trailing slash) — undefined until initialized. */
   let baseUrl: string | undefined;
   let itemsPath: string | undefined;
+  let authRef: string | undefined;
   let fetchImpl: ApiFetch | null | undefined;
 
   const requireReady = (): { base: string; fetch: ApiFetch } => {
@@ -267,6 +338,17 @@ export function createApiAdapter(
           '"itemsPath" must be a JSON pointer into the response, e.g. "/data".',
         );
       }
+      // Lane 2 (050): an auth declaration is shape-only (checkApiAuth
+      // rejects unknown fields, so no key value can hide in it) and routes
+      // every request through the server proxy, which holds the key.
+      let auth: ApiKeyAuth | undefined;
+      if (config.auth !== undefined) {
+        const authProblem = checkApiAuth(config.auth);
+        if (authProblem) {
+          throw new DataError(DATA_ERROR_CODES.malformed, authProblem);
+        }
+        auth = config.auth as ApiKeyAuth;
+      }
       const resolved = resolveFetch();
       if (!resolved) {
         throw new DataError(
@@ -277,7 +359,9 @@ export function createApiAdapter(
       baseUrl = normalizeApiBaseUrl(config.baseUrl as string);
       itemsPath =
         typeof config.itemsPath === "string" ? config.itemsPath : undefined;
-      fetchImpl = resolved;
+      authRef = auth?.ref;
+      fetchImpl =
+        authRef !== undefined ? proxyFetchFor(authRef, resolved) : resolved;
     },
 
     async list(resource: NamedResourceDef): Promise<Record<string, unknown>[]> {
@@ -375,6 +459,7 @@ export function createApiAdapter(
     async dispose(): Promise<void> {
       baseUrl = undefined;
       itemsPath = undefined;
+      authRef = undefined;
       fetchImpl = null;
     },
   };

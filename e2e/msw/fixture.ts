@@ -891,7 +891,7 @@ export const THEME_UI_LINES: string[] = [
  * logical label; the connection itself is app-configured.
  */
 const todoUiLines = (
-  dataSourceName: "localTodos" | "dbTodos" | "apiTodos",
+  dataSourceName: string,
   provider: DataSourceProvider,
   config: Record<string, unknown> = {},
 ): string[] => [
@@ -1164,6 +1164,13 @@ export const TODO_UI_LINES_SUPABASE = todoUiLines("dbTodos", "supabase");
 export const TODO_UI_LINES_API = todoUiLines("apiTodos", "api", {
   baseUrl: "http://localhost:3000/api-public",
 });
+// keyed-api-lane (050): the same design over a KEYED API. The spec's
+// config.auth declares the ref (shape only, no value); the adapter routes
+// every request through /api/data-proxy and the browser never holds a key.
+export const TODO_UI_LINES_API_KEYED = todoUiLines("keyedTodos", "api", {
+  baseUrl: "https://api.example.test",
+  auth: { type: "bearer", ref: "weather" },
+});
 
 /**
  * Standalone api-provider fixture whose only query points at a collection
@@ -1207,6 +1214,57 @@ export const API_ERROR_UI_LINES: string[] = [
       type: COMPONENT.text,
       props: { text: TODO.error, className: "api-error" },
       visible: { $state: "/queries/brokenList/status", eq: "error" },
+      children: [],
+    },
+  }),
+];
+
+/**
+ * Keyed-API fixture whose auth ref the deployment has NOT configured —
+ * the proxy answers `unknown_ref` and the adapter names the missing
+ * server config in the friendly error branch (050 decision 4).
+ */
+export const API_UNSET_REF_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.dataSources,
+    value: {
+      apiUnsetRef: {
+        provider: "api",
+        config: {
+          baseUrl: "https://api.example.test",
+          auth: { type: "bearer", ref: "unset" },
+        },
+      },
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.resources,
+    value: { keyed: { dataSource: "apiUnsetRef", collection: "todos" } },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.queries,
+    value: { unsetRefList: { resource: "keyed", operation: "list" } },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "api-unset-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("api-unset-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical" },
+      children: ["api-unset-text"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("api-unset-text"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.error, className: "api-unset-ref" },
+      visible: { $state: "/queries/unsetRefList/status", eq: "error" },
       children: [],
     },
   }),

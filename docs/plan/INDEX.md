@@ -56,7 +56,8 @@ row in the same turn as any status change** (rule:
 | 046 | [database-provider](046-database-provider/plan.md) | implemented | 2026-10-19 |
 | 047 | [form-validation-gating](047-form-validation-gating/plan.md) | implemented | 2026-10-19 |
 | 048 | [api-data-source](048-api-data-source/plan.md) | implemented | 2026-10-19 |
-| 049 | [plan-organization](049-plan-organization/plan.md) | approved | 2026-10-20 |
+| 049 | [plan-organization](049-plan-organization/plan.md) | implemented | 2026-10-20 |
+| 050 | [keyed-api-lane](050-keyed-api-lane/plan.md) | implemented | 2026-10-20 |
 
-_49 plans: 44 implemented · 2 approved (`033`, `049`) · 2 draft (`015`,
+_50 plans: 46 implemented · 1 approved (`033`) · 2 draft (`015`,
 `035`) · 1 rejected (`026`)._

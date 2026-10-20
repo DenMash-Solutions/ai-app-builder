@@ -11,6 +11,21 @@ interface MockWindow {
   __GENERATE_CALLS__?: number;
   /** Prompt of the most recent intercepted /api/generate request. */
   __LAST_GENERATE_PROMPT__?: string;
+  /** The most recent intercepted /api/data-proxy call (keyed lane, 050). */
+  __LAST_PROXY__?: {
+    ref: string;
+    path: string;
+    method: string;
+    clientSentAuth: boolean;
+  };
+  /** Last non-GET proxy call — the post-mutation refresh re-GETs after
+   *  every write, so the write itself needs its own slot. */
+  __LAST_PROXY_WRITE__?: {
+    ref: string;
+    path: string;
+    method: string;
+    clientSentAuth: boolean;
+  };
   __MSW_READY__?: boolean;
 }
 
@@ -19,6 +34,11 @@ const mockWindow = window as unknown as MockWindow;
 /** The public API's own store for the api-provider journeys (M3). */
 let apiTodos: Array<{ id: string; title: string; done: boolean }> = [
   { id: "api-1", title: "Ship M3", done: false },
+];
+
+/** The KEYED API's store (Lane 2, 050) — reachable only through the proxy. */
+let keyedTodos: Array<{ id: string; title: string; done: boolean }> = [
+  { id: "key-1", title: "Keyed seed", done: false },
 ];
 
 const worker = setupWorker(
@@ -85,6 +105,59 @@ const worker = setupWorker(
   http.get("*/api-public/failing", () =>
     HttpResponse.json({ error: "boom" }, { status: 500 }),
   ),
+  // --- keyed API lane (050): the server proxy's stand-in. The browser POSTs
+  // {ref, path, method, body} and NEVER a key; this handler plays the real
+  // route's part — only the configured ref "weather" resolves, and the
+  // store below is served exactly as the key-injecting origin would.
+  http.post("*/api/data-proxy", async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as {
+      ref?: unknown;
+      path?: unknown;
+      method?: unknown;
+      body?: unknown;
+    };
+    const ref = typeof body.ref === "string" ? body.ref : "";
+    const path = typeof body.path === "string" ? body.path : "";
+    const method = typeof body.method === "string" ? body.method : "GET";
+    const clientSentAuth =
+      // Invariant the journey asserts: the client holds no credential —
+      // any auth header riding this call would be a key leak.
+      request.headers.get("authorization") !== null ||
+      request.headers.get("x-api-key") !== null;
+    const seen = { ref, path, method, clientSentAuth };
+    mockWindow.__LAST_PROXY__ = seen;
+    if (method !== "GET") mockWindow.__LAST_PROXY_WRITE__ = seen;
+    if (ref !== "weather") {
+      return HttpResponse.json({ error: "unknown_ref", ref }, { status: 404 });
+    }
+    const id = path.startsWith("/todos/") ? path.slice("/todos/".length) : null;
+    if (method === "GET" && path === "/todos") {
+      return HttpResponse.json(keyedTodos);
+    }
+    if (method === "GET" && id !== null) {
+      const todo = keyedTodos.find((item) => item.id === id);
+      return todo
+        ? HttpResponse.json(todo)
+        : HttpResponse.json({ error: "nope" }, { status: 404 });
+    }
+    if (method === "POST" && path === "/todos") {
+      const record = body.body as (typeof keyedTodos)[number];
+      keyedTodos = [...keyedTodos, record];
+      return HttpResponse.json(record, { status: 201 });
+    }
+    if (method === "PATCH" && id !== null) {
+      const patch = body.body as Partial<(typeof keyedTodos)[number]>;
+      keyedTodos = keyedTodos.map((todo) =>
+        todo.id === id ? { ...todo, ...patch } : todo,
+      );
+      return HttpResponse.json(keyedTodos.find((todo) => todo.id === id));
+    }
+    if (method === "DELETE" && id !== null) {
+      keyedTodos = keyedTodos.filter((todo) => todo.id !== id);
+      return new Response(null, { status: 204 });
+    }
+    return HttpResponse.json({ error: "nope" }, { status: 404 });
+  }),
 );
 
 void worker

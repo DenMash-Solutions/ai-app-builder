@@ -62,11 +62,14 @@ export const CREDENTIAL_CONFIG_KEYS = [
 
 /**
  * The only config keys the "api" provider accepts (api-data-source plan
- * D2): the endpoint a spec IS allowed to declare, and an optional JSON
- * pointer that unwraps enveloped list responses. Everything else — headers,
- * auth, query values — belongs to Lane 2 (server-held configuration).
+ * D2, grown by keyed-api-lane plan 050): the endpoint a spec IS allowed
+ * to declare, an optional JSON pointer that unwraps enveloped list
+ * responses, and — Lane 2 — the shape-only `auth` ref that routes the
+ * source through the key-injecting server proxy. Headers and query values
+ * remain impossible; key VALUES live only in server env pairs
+ * (`DATA_PROXY_<REF>_*`), never in a spec.
  */
-export const API_CONFIG_KEYS = ["baseUrl", "itemsPath"] as const;
+export const API_CONFIG_KEYS = ["baseUrl", "itemsPath", "auth"] as const;
 
 /**
  * Field types a resource `schema` may declare (validated before writes,
@@ -94,13 +97,13 @@ export const dataSourceDefSchema = z
         DATA_SOURCE_PROVIDERS.api,
       ])
       .describe(
-        'Storage provider — "localStorage" for per-browser data, "supabase" for the project database (rows scoped to the signed-in visitor, authorization enforced by RLS), "api" for a public, unauthenticated HTTPS JSON API declared in the spec (config: {"baseUrl": "https://…"})',
+        'Storage provider — "localStorage" for per-browser data, "supabase" for the project database (rows scoped to the signed-in visitor, authorization enforced by RLS), "api" for an HTTPS JSON API declared in the spec (config: {"baseUrl": "https://…"}; for keyed APIs add {"auth": {"type": "bearer", "ref": "name"}} and the deployment injects the key server-side)',
       ),
     config: z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment), and api endpoints must be public, unauthenticated HTTPS (keys belong to server-held configuration, not specs)',
+        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment). api endpoints are public, unauthenticated HTTPS unless config.auth declares a server-held key ref ({ "type": "bearer", "ref": "weather" } or {"type": "header", "header": "X-API-Key", "ref": "shop"}) — the VALUE lives only in server configuration, never in specs',
       ),
   })
   .strict();

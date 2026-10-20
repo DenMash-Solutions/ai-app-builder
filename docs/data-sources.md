@@ -159,7 +159,7 @@ Four policies (`select/insert/update/delete … to authenticated using (user_id 
 
 ## API provider (M3)
 
-**Milestone:** M3 (`docs/plan/048-api-data-source/plan.md`) — reads and writes a plain HTTPS JSON API **directly from the visitor's browser** (Lane 1: keyless, public endpoints — no server route, no proxy):
+**Milestone:** M3 (`docs/plan/048-api-data-source/plan.md`) — reads and writes a plain HTTPS JSON API **directly from the visitor's browser** (Lane 1: keyless, public endpoints — no server route, no proxy; Lane 2 adds keyed APIs via the server proxy — see [Keyed APIs](#keyed-apis--lane-2-docsplan050-keyed-api-laneplanmd) below):
 
 ```jsonc
 "dataSources": {
@@ -172,7 +172,7 @@ Four policies (`select/insert/update/delete … to authenticated using (user_id 
 
 ### Config
 
-Only two keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required) and `itemsPath` (optional JSON pointer that unwraps an enveloped list response). Anything else — headers, auth, query values — is a validation issue; credential-shaped keys remain globally rejected. **Lane 2** (server-held keys, origin-registered injection) is explicitly out of scope for M3.
+Three keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required), `itemsPath` (optional JSON pointer that unwraps an enveloped list response) and — since Lane 2 — `auth` (the shape-only keyed-API declaration below). Anything else (headers, query values) is a validation issue; credential-shaped keys remain globally rejected, and `auth` itself cannot carry a key value: it accepts only `type`, `ref` and `header`, so anything value-shaped fails `checkApiAuth` at the seams and again in the adapter.
 
 ### Endpoint policy (seams + adapter, defense in depth)
 
@@ -199,3 +199,49 @@ Only two keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required) and `itemsP
 ### Spot-check (M3 verification)
 
 A plain-language Pokédex generation against `https://pokeapi.co/api/v2/pokemon/` exercised the provider end to end (live list reads through the browser-direct fetch; loading/error/empty branches covered by the e2e journeys). Derived per-item URLs must use the registered composition — `{"$concat": [base, {"$item": "id"}, ".png"]}` — because JavaScript inside `$template` silently resolves to `""`; the recipe line in `lib/playground/styling-rules.ts` teaches exactly this. Evidence log: `docs/plan/048-api-data-source/plan.md` (verification + incidents); general lesson: `.agents/lessons/template-derived-strings.md`.
+
+## Keyed APIs — Lane 2 (`docs/plan/050-keyed-api-lane/plan.md`)
+
+A spec may declare that an api data source needs a key. The declaration is **shape only** — the value lives in deployment env pairs and is injected by the server, so the browser never holds a credential and published specs stay secret-free:
+
+```jsonc
+"dataSources": {
+  "weatherApi": {
+    "provider": "api",
+    "config": {
+      "baseUrl": "https://api.weather.example",
+      "auth": { "type": "bearer", "ref": "weather" }
+    }
+  }
+}
+```
+
+`auth.type` is `"bearer"` (→ `Authorization: Bearer <key>`) or `"header"` with a named `header` (→ `X-API-Key: <key>`). Both fields are declarative for humans reading the spec — **the server's env pair decides how the key is actually sent**, so a spec can never change where or how a credential travels.
+
+### Server configuration (env pairs)
+
+Per ref, on the server (see `.env.example`):
+
+```bash
+DATA_PROXY_WEATHER_ORIGIN=https://api.weather.example  # bare https origin
+DATA_PROXY_WEATHER_KEY=…                               # the secret, server-only
+DATA_PROXY_WEATHER_HEADER=                             # optional; default Authorization: Bearer
+```
+
+Incomplete or invalid pairs (http on a public host, a path component, userinfo, private-address literals, bad header names) are skipped — the ref then reads as *unconfigured*.
+
+### How a keyed request travels
+
+1. The adapter (with `config.auth`) rewrites every CRUD request to `POST /api/data-proxy` with `{ ref, path, method, body }` — a path, never a URL.
+2. The route (`app/api/data-proxy/route.ts`) resolves the ref in its env pairs, enforces that the path stays on that pair's **configured origin**, injects the auth header from its own config, and fetches with `redirect: "error"` (no key-bearing redirect hops), a 10 s timeout and a 2 MB response cap.
+3. Upstream statuses/bodies pass through untouched — the adapter's existing error normalization maps them exactly as in Lane 1, so the mirror, branches, `$item` params and pending behave identically.
+
+### Security posture (why no egress worker is needed here)
+
+- **The client never names a URL.** A key is only ever sent to its env-paired origin; an attacker cannot steer the proxy at their own host to harvest it.
+- **The client never holds a key.** No key material in the spec, in localStorage, or in any browser-visible response (specs are published as public HTML/JSON).
+- **Only auth-declared sources use the proxy** — keyless stays browser-direct (Lane 1 unchanged), so the SSRF surface exists solely for deployment-configured origins.
+- The key appears in no log line and no error body; an unconfigured ref answers `unknown_ref` (404) and the adapter's diagnostic names the ref plus the env vars to set.
+- Out of scope for v1 (plan 050): per-user BYO keys (Supabase + UI), query-param auth, OAuth — the transport swap behind the adapter seam is the compatible foundation for all three.
+
+e2e: the MSW worker stands in for the proxy (`*/api/data-proxy` handler) and asserts the client call carries **no** auth header; unit tests cover the route's origin enforcement, key redaction, caps and verb allowlist (`app/api/data-proxy/route.test.ts`, `lib/data-proxy/refs.test.ts`).

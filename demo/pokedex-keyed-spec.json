@@ -1,0 +1,166 @@
+{
+  "root": "dex-root",
+  "elements": {
+    "dex-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "lg" },
+      "children": [
+        "dex-heading",
+        "dex-count",
+        "dex-loading",
+        "dex-error",
+        "dex-empty",
+        "dex-grid",
+        "direct-heading",
+        "direct-note",
+        "direct-loading",
+        "direct-error",
+        "direct-ok"
+      ]
+    },
+    "dex-heading": {
+      "type": "Heading",
+      "props": { "text": "Pokédex — via keyed proxy", "level": "h1" },
+      "children": []
+    },
+    "dex-count": {
+      "type": "Text",
+      "props": { "text": { "$state": "/queries/pokedexList/count" } },
+      "children": []
+    },
+    "dex-loading": {
+      "type": "Text",
+      "props": { "text": "Loading the dex…", "className": "dex-loading" },
+      "visible": { "$state": "/queries/pokedexList/status", "eq": "loading" },
+      "children": []
+    },
+    "dex-error": {
+      "type": "Text",
+      "props": {
+        "text": "The dex is unreachable right now.",
+        "className": "dex-error"
+      },
+      "visible": { "$state": "/queries/pokedexList/status", "eq": "error" },
+      "children": []
+    },
+    "dex-empty": {
+      "type": "Text",
+      "props": { "text": "No Pokémon in the dex.", "className": "dex-empty" },
+      "visible": [
+        { "$state": "/queries/pokedexList/count", "eq": 0 },
+        { "$state": "/queries/pokedexList/status", "eq": "success" }
+      ],
+      "children": []
+    },
+    "dex-grid": {
+      "type": "Grid",
+      "props": { "columns": 3, "gap": "md", "className": "grid-cols-2" },
+      "repeat": { "statePath": "/queries/pokedexList/data", "key": "name" },
+      "children": ["dex-cell"]
+    },
+    "dex-cell": {
+      "type": "Card",
+      "props": {
+        "centered": true,
+        "className": "dex-card h-full transition-shadow hover:shadow-md"
+      },
+      "children": ["dex-body"]
+    },
+    "dex-body": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm", "align": "center" },
+      "children": ["dex-img", "dex-name"]
+    },
+    "dex-img": {
+      "type": "Image",
+      "props": {
+        "src": { "$item": "image" },
+        "alt": { "$item": "name" },
+        "width": null,
+        "height": null
+      },
+      "children": []
+    },
+    "dex-name": {
+      "type": "Text",
+      "props": {
+        "text": { "$item": "name" },
+        "className": "dex-name uppercase tracking-wide font-semibold text-center"
+      },
+      "children": []
+    },
+    "direct-heading": {
+      "type": "Heading",
+      "props": { "text": "Direct call — without the key", "level": "h2" },
+      "children": []
+    },
+    "direct-note": {
+      "type": "Text",
+      "props": {
+        "text": "This section reads http://localhost:4100 straight from the browser, with no Authorization header. The API refuses it — only the proxy above ever holds the key.",
+        "className": "direct-note"
+      },
+      "children": []
+    },
+    "direct-loading": {
+      "type": "Text",
+      "props": {
+        "text": "Calling the API directly…",
+        "className": "direct-loading"
+      },
+      "visible": { "$state": "/queries/directList/status", "eq": "loading" },
+      "children": []
+    },
+    "direct-error": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/queries/directList/error/message" },
+        "className": "direct-error"
+      },
+      "visible": { "$state": "/queries/directList/status", "eq": "error" },
+      "children": []
+    },
+    "direct-ok": {
+      "type": "Text",
+      "props": {
+        "text": "Unexpected: the direct call succeeded — the API should refuse keyless callers.",
+        "className": "direct-ok"
+      },
+      "visible": { "$state": "/queries/directList/status", "eq": "success" },
+      "children": []
+    }
+  },
+  "dataSources": {
+    "pokedex": {
+      "provider": "api",
+      "config": {
+        "baseUrl": "http://localhost:4100",
+        "itemsPath": "/results",
+        "auth": { "type": "bearer", "ref": "pokedex" }
+      }
+    },
+    "pokedexDirect": {
+      "provider": "api",
+      "config": {
+        "baseUrl": "http://localhost:4100",
+        "itemsPath": "/results"
+      }
+    }
+  },
+  "resources": {
+    "pokemon": {
+      "dataSource": "pokedex",
+      "collection": "pokemon",
+      "schema": { "name": "string", "image": "string" }
+    },
+    "pokemonDirect": {
+      "dataSource": "pokedexDirect",
+      "collection": "pokemon",
+      "schema": { "name": "string", "image": "string" }
+    }
+  },
+  "queries": {
+    "pokedexList": { "resource": "pokemon", "operation": "list" },
+    "directList": { "resource": "pokemonDirect", "operation": "list" }
+  }
+}

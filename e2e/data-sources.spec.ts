@@ -4,8 +4,10 @@ import { PATHS, PROMPTS, ROLE, TODO } from "./constants";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
 import {
   API_ERROR_UI_LINES,
+  API_UNSET_REF_UI_LINES,
   TODO_UI_LINES,
   TODO_UI_LINES_API,
+  TODO_UI_LINES_API_KEYED,
   TODO_UI_LINES_SUPABASE,
 } from "./msw/fixture";
 import { deleteGenuiRecords, serviceClient } from "./db";
@@ -505,5 +507,114 @@ test.describe("data sources — API provider (api, browser-direct)", () => {
     await expect(page.getByText(TODO.error)).toBeVisible();
     await expect(page.locator(".api-error")).toBeVisible();
     await expect(page.getByText(TODO.empty)).toHaveCount(0);
+  });
+});
+
+test.describe("data sources — keyed API (Lane 2 proxy)", () => {
+  /** What the browser sent to the proxy — read back from the MSW worker. */
+  const lastProxyCall = (page: Page) =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __LAST_PROXY__?: {
+              ref: string;
+              path: string;
+              method: string;
+              clientSentAuth: boolean;
+            };
+            __LAST_PROXY_WRITE__?: {
+              ref: string;
+              path: string;
+              method: string;
+              clientSentAuth: boolean;
+            };
+          }
+        ).__LAST_PROXY__,
+    );
+
+  const lastProxyWrite = (page: Page) =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __LAST_PROXY_WRITE__?: {
+              ref: string;
+              path: string;
+              method: string;
+              clientSentAuth: boolean;
+            };
+          }
+        ).__LAST_PROXY_WRITE__,
+    );
+
+  test("a keyed source routes through the proxy with no key in the browser", async ({
+    page,
+  }) => {
+    // The keyed store is only served through /api/data-proxy — a plain
+    // browser-direct fetch to the spec's baseUrl would find no handler
+    // and fail, so a rendered list PROVES the proxy transport.
+    await mockGenerate(page, { lines: TODO_UI_LINES_API_KEYED });
+    await page.goto(PATHS.ui);
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+    await expect(
+      page.getByRole(ROLE.heading, { name: TODO.heading }),
+    ).toBeVisible();
+
+    // List read through the proxy (GET /todos), then a round-trip write.
+    await expect(page.getByText("Keyed seed")).toBeVisible();
+    await expect(count(page)).toHaveText("1");
+    await addTodo(page, TODO.first);
+    await expect(count(page)).toHaveText("2");
+
+    // The write itself rode the proxy with the ref + path and NO
+    // client-held credential; the manager's post-write refresh re-GETs.
+    expect(await lastProxyWrite(page)).toMatchObject({
+      ref: "weather",
+      path: "/todos",
+      method: "POST",
+      clientSentAuth: false,
+    });
+    expect(await lastProxyCall(page)).toMatchObject({
+      ref: "weather",
+      path: "/todos",
+      method: "GET",
+      clientSentAuth: false,
+    });
+
+    // Reload: the design re-attaches and re-reads through the proxy —
+    // nothing was stored locally, so the page shows exactly what the
+    // keyed origin serves afresh (its own seed again).
+    await page.reload();
+    await expect(
+      page.getByRole(ROLE.heading, { name: TODO.heading }),
+    ).toBeVisible();
+    await expect(page.getByText("Keyed seed")).toBeVisible();
+    await expect(page.getByText(TODO.first)).toHaveCount(0);
+    await expect(count(page)).toHaveText("1");
+    expect(await lastProxyCall(page)).toMatchObject({
+      ref: "weather",
+      path: "/todos",
+      method: "GET",
+      clientSentAuth: false,
+    });
+  });
+
+  test("an unconfigured auth ref degrades to the friendly error branch", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { lines: API_UNSET_REF_UI_LINES });
+    await page.goto(PATHS.ui);
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+
+    // unknown_ref → the adapter's DataError → the mirror's error branch,
+    // with the page otherwise intact.
+    await expect(page.getByText(TODO.error)).toBeVisible();
+    await expect(page.locator(".api-unset-ref")).toBeVisible();
+    expect(await lastProxyCall(page)).toMatchObject({ ref: "unset" });
   });
 });
