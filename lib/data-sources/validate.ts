@@ -1,5 +1,7 @@
 import type { Spec } from "@json-render/core";
+import { checkApiBaseUrl } from "./api-url";
 import {
+  API_CONFIG_KEYS,
   CREDENTIAL_CONFIG_KEYS,
   DATA_SOURCE_PROVIDERS,
   dataSourceDefSchema,
@@ -85,6 +87,38 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
             message:
               'The "supabase" provider takes no config — omit "config" (project URL and keys come from the app environment); rows are scoped to the signed-in visitor by RLS.',
           });
+        }
+        // Per-provider config policy (api-data-source plan D2): the api
+        // provider's endpoint is the one value a spec IS allowed to declare
+        // — but only in its validated https shape, with no room for headers,
+        // auth or query values (Lane 2 owns credentials).
+        if (parsed.data.provider === DATA_SOURCE_PROVIDERS.api) {
+          for (const key of Object.keys(config)) {
+            if (!(API_CONFIG_KEYS as readonly string[]).includes(key)) {
+              issues.push({
+                path: `${path}.config.${key}`,
+                message: `The "api" provider takes only "baseUrl" and "itemsPath" — remove "${key}".`,
+              });
+            }
+          }
+          const baseUrlProblem = checkApiBaseUrl(config.baseUrl);
+          if (baseUrlProblem) {
+            issues.push({
+              path: `${path}.config.baseUrl`,
+              message: baseUrlProblem,
+            });
+          }
+          const { itemsPath } = config;
+          if (
+            itemsPath !== undefined &&
+            (typeof itemsPath !== "string" || !itemsPath.startsWith("/"))
+          ) {
+            issues.push({
+              path: `${path}.config.itemsPath`,
+              message:
+                '"itemsPath" must be a JSON pointer into the response, e.g. "/data".',
+            });
+          }
         }
       }
     }

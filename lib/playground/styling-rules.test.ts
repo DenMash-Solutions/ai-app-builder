@@ -104,7 +104,13 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain('"$computed": "stepPage"');
     expect(STYLING_RULES).toContain('"delta": 1');
     expect(STYLING_RULES).toContain('"delta": -1');
-    expect(STYLING_RULES).not.toContain('"$math": "add"');
+    // Scoped to the pagination rule itself (other rules may use $math — the
+    // derived-strings rule does): the page stepper must stay computed.
+    const paginationRule =
+      STYLING_RULES.split("\n").find((line) =>
+        line.includes("Paginate a list"),
+      ) ?? "";
+    expect(paginationRule).not.toContain('"$math"');
     expect(STYLING_RULES).toContain('"$computed": "sliceItems"');
     expect(STYLING_RULES).toContain('"source": {"$state": "/filtered-items"}');
     expect(STYLING_RULES).toContain("TWO press actions in order");
@@ -201,9 +207,9 @@ describe("STYLING_RULES", () => {
 
   test("documents the supabase provider line, its empty config and scoping", () => {
     // M2 (docs/plan/database-provider, T8): the provider line offers both
-    // stores with the same declarative shape.
+    // stores with the same declarative shape (M3 extended it with "api").
     expect(STYLING_RULES).toContain(
-      '{"provider": "localStorage"|"supabase", "config": {}}',
+      '{"provider": "localStorage"|"supabase"|"api", "config": {}}',
     );
     // The database provider is app-configured — a model must never emit
     // connection details into a spec.
@@ -211,6 +217,27 @@ describe("STYLING_RULES", () => {
     // Per-visitor means signed-in rows, with the app handling the session.
     expect(STYLING_RULES).toContain("per signed-in visitor");
     expect(STYLING_RULES).toContain("signed in automatically");
+  });
+
+  test("documents the api provider line: spec-declared baseUrl, REST mapping, no keys (api-data-source)", () => {
+    // M3 (docs/plan/api-data-source): the endpoint is the ONE value the
+    // spec declares — validated https, plain public URLs only.
+    expect(STYLING_RULES).toContain(
+      '"config": {"baseUrl": "https://…"} with an optional "itemsPath": "/data"',
+    );
+    expect(STYLING_RULES).toContain(
+      'the resource "collection" becomes the URL path segment',
+    );
+    expect(STYLING_RULES).toContain(
+      "map create/update/delete onto POST/PATCH/DELETE at that collection",
+    );
+    // Security stance (Lane 1): keyless public endpoints, never credentials.
+    expect(STYLING_RULES).toContain(
+      "never put keys, tokens or query strings in the spec",
+    );
+    expect(STYLING_RULES).toContain("authenticated APIs are unsupported");
+    // Read-first steering for REST collections.
+    expect(STYLING_RULES).toContain("prefer list/get reads");
   });
 
   test("gates form submits via watch-driven validateForm + $cond disabled (form-validation-gating)", () => {
@@ -243,5 +270,19 @@ describe("STYLING_RULES", () => {
     // …while button disabling is enforced app-side, never spec-wired.
     expect(STYLING_RULES).toContain("disable themselves automatically");
     expect(STYLING_RULES).toContain("no wiring required");
+  });
+
+  test("teaches derived strings via $concat and bans JS inside $template (pokeapi steer)", () => {
+    // Steer experiment (docs/plan/api-data-source verification, 2026-10-19):
+    // fresh gens on 3.1 Lite (×2) emitted JS inside $template ("${$index +
+    // 1}" → silently "") and 3.5 Lite dropped the image src entirely; the
+    // plain-language steer that fixed it emitted $concat + $math. The recipe
+    // must teach the composition AND name the anti-pattern.
+    expect(STYLING_RULES).toContain(
+      'NEVER write JavaScript inside a {"$template"}',
+    );
+    expect(STYLING_RULES).toContain('"$concat"');
+    expect(STYLING_RULES).toContain('{"$math": "add"');
+    expect(STYLING_RULES).toContain("silently becomes an empty string");
   });
 });

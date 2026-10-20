@@ -2,7 +2,12 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { PATHS, PROMPTS, ROLE, TODO } from "./constants";
 import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
-import { TODO_UI_LINES, TODO_UI_LINES_SUPABASE } from "./msw/fixture";
+import {
+  API_ERROR_UI_LINES,
+  TODO_UI_LINES,
+  TODO_UI_LINES_API,
+  TODO_UI_LINES_SUPABASE,
+} from "./msw/fixture";
 import { deleteGenuiRecords, serviceClient } from "./db";
 import { canSeed, e2eEnv } from "./env";
 
@@ -429,5 +434,76 @@ test.describe("data sources — RLS boundary (supabase)", () => {
     const denial = (await insert.json()) as { code?: string; message?: string };
     expect(denial.code).toBe("42501");
     expect(denial.message).toContain("row-level security");
+  });
+});
+
+test.describe("data sources — API provider (api, browser-direct)", () => {
+  /** Same todo design, data source swapped to the browser-direct API. */
+  async function generateTodosApi(page: Page): Promise<void> {
+    await mockGenerate(page, { lines: TODO_UI_LINES_API });
+    await page.goto(PATHS.ui);
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+    await expect(
+      page.getByRole(ROLE.heading, { name: TODO.heading }),
+    ).toBeVisible();
+  }
+
+  test("reads a public API browser-direct and round-trips a write", async ({
+    page,
+  }) => {
+    await generateTodosApi(page);
+
+    // The seeded row comes from the MSW-answered API — no storage involved
+    // (the adapter fetched http://localhost:3000/api-public/todos itself).
+    await expect(page.getByText("Ship M3")).toBeVisible();
+    await expect(count(page)).toHaveText("1");
+
+    // Create: POST to the collection, then the manager's refresh re-reads.
+    await addTodo(page, TODO.first);
+    await expect(count(page)).toHaveText("2");
+
+    // Complete: PATCH the record — mark shown, button gone.
+    await row(page, TODO.first)
+      .getByRole(ROLE.button, { name: TODO.doneLabel })
+      .click();
+    await expect(row(page, TODO.first).getByText(TODO.doneMark)).toBeVisible();
+    await expect(
+      row(page, TODO.first).getByRole(ROLE.button, { name: TODO.doneLabel }),
+    ).toHaveCount(0);
+
+    // Delete: back to the seed — every verb of the REST mapping exercised.
+    await row(page, TODO.first)
+      .getByRole(ROLE.button, { name: TODO.deleteLabel })
+      .click();
+    await expect(page.getByText(TODO.first)).toHaveCount(0);
+    await expect(count(page)).toHaveText("1");
+
+    // Reload re-reads the API from scratch — the design re-attaches and
+    // renders exactly what the endpoint serves (seed only: the deleted
+    // row stays deleted, nothing was stored locally).
+    await page.reload();
+    await expect(
+      page.getByRole(ROLE.heading, { name: TODO.heading }),
+    ).toBeVisible();
+    await expect(page.getByText("Ship M3")).toBeVisible();
+    await expect(count(page)).toHaveText("1");
+  });
+
+  test("a failing API shows the friendly error branch, not a broken page", async ({
+    page,
+  }) => {
+    await mockGenerate(page, { lines: API_ERROR_UI_LINES });
+    await page.goto(PATHS.ui);
+    await waitForMsw(page);
+    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+
+    // The collection always answers 500 → normalized `unavailable` →
+    // the mirror's error branch, with the page otherwise intact.
+    await expect(page.getByText(TODO.error)).toBeVisible();
+    await expect(page.locator(".api-error")).toBeVisible();
+    await expect(page.getByText(TODO.empty)).toHaveCount(0);
   });
 });

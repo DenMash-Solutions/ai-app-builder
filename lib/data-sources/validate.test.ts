@@ -100,6 +100,80 @@ describe("validateDataSources", () => {
     expect(issues[0].message).toContain("RLS");
   });
 
+  test("accepts an api data source with a validated https baseUrl", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: {
+            provider: "api",
+            config: { baseUrl: "https://shop.example/v1", itemsPath: "/data" },
+          },
+        },
+        resources: {
+          products: { dataSource: "shop", schema: { title: "string" } },
+        },
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  test("rejects an api data source without baseUrl", () => {
+    const issues = validateDataSources(
+      withBlocks({ dataSources: { shop: { provider: "api", config: {} } } }),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("dataSources.shop.config.baseUrl");
+    expect(issues[0].message).toContain('"baseUrl"');
+  });
+
+  test("rejects http baseUrls outside localhost (api policy)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: { provider: "api", config: { baseUrl: "http://shop.example" } },
+        },
+      }),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("dataSources.shop.config.baseUrl");
+    expect(issues[0].message).toContain("https");
+  });
+
+  test("rejects unexpected config keys on an api data source (headers/auth are Lane 2)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: {
+            provider: "api",
+            config: {
+              baseUrl: "https://shop.example",
+              headers: { "X-Key": "nope" },
+            },
+          },
+        },
+      }),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("dataSources.shop.config.headers");
+    expect(issues[0].message).toContain('takes only "baseUrl" and "itemsPath"');
+  });
+
+  test("rejects a malformed itemsPath (must be a JSON pointer)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          shop: {
+            provider: "api",
+            config: { baseUrl: "https://shop.example", itemsPath: "data" },
+          },
+        },
+      }),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("dataSources.shop.config.itemsPath");
+    expect(issues[0].message).toContain("JSON pointer");
+  });
+
   test("localStorage keeps its provider-specific config keys", () => {
     const issues = validateDataSources(
       withBlocks({

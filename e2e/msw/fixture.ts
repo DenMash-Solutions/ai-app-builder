@@ -891,8 +891,9 @@ export const THEME_UI_LINES: string[] = [
  * logical label; the connection itself is app-configured.
  */
 const todoUiLines = (
-  dataSourceName: "localTodos" | "dbTodos",
+  dataSourceName: "localTodos" | "dbTodos" | "apiTodos",
   provider: DataSourceProvider,
+  config: Record<string, unknown> = {},
 ): string[] => [
   line({
     op: PATCH_OP.add,
@@ -902,7 +903,7 @@ const todoUiLines = (
   line({
     op: PATCH_OP.add,
     path: PATCH_PATH.dataSources,
-    value: { [dataSourceName]: { provider, config: {} } },
+    value: { [dataSourceName]: { provider, config } },
   }),
   line({
     op: PATCH_OP.add,
@@ -1158,6 +1159,58 @@ const todoUiLines = (
 
 export const TODO_UI_LINES = todoUiLines("localTodos", "localStorage");
 export const TODO_UI_LINES_SUPABASE = todoUiLines("dbTodos", "supabase");
+// api-data-source (M3): the same todo design over a browser-direct HTTP
+// API — baseUrl on the app origin so the MSW worker intercepts it.
+export const TODO_UI_LINES_API = todoUiLines("apiTodos", "api", {
+  baseUrl: "http://localhost:3000/api-public",
+});
+
+/**
+ * Standalone api-provider fixture whose only query points at a collection
+ * the MSW worker always answers with 500 — the friendly error branch.
+ */
+export const API_ERROR_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.dataSources,
+    value: {
+      apiBroken: {
+        provider: "api",
+        config: { baseUrl: "http://localhost:3000/api-public" },
+      },
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.resources,
+    value: { broken: { dataSource: "apiBroken", collection: "failing" } },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.queries,
+    value: { brokenList: { resource: "broken", operation: "list" } },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "api-error-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("api-error-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical" },
+      children: ["api-error-text"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("api-error-text"),
+    value: {
+      type: COMPONENT.text,
+      props: { text: TODO.error, className: "api-error" },
+      visible: { $state: "/queries/brokenList/status", eq: "error" },
+      children: [],
+    },
+  }),
+];
 
 /**
  * Text-free fixture for the rail journey: normalizeSpecCopy lifts element

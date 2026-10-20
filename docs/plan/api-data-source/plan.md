@@ -1,6 +1,6 @@
 # API Data Source — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-19
 
 ## Goal
@@ -52,9 +52,9 @@ keyless public APIs, browser-direct** (user decisions, 2026-10-19).
 - Recipe (`styling-rules.ts`): provider line gains `{"provider": "api",
   "config": {"baseUrl": "…"}}`; guidance on read-first patterns, error
   branch reuse, and that writes target standard REST endpoints only
-- Unit tests: adapter CRUD + errors via MSW (same pattern as
-  `supabase-adapter.test.ts`), URL-shape/cfg validation cases, recipe
-  assertions
+- Unit tests: adapter CRUD + errors with an injectable fake `fetch` (same
+  DI pattern as `supabase-adapter.test.ts`, which fakes the client surface —
+  no MSW in unit scope), URL-shape/cfg validation cases, recipe assertions
 - e2e journey: api-provider fixture (baseUrl on the app origin + MSW route
   interception) — list renders, error branch on 500, `data_mutate` write
   round-trip
@@ -133,18 +133,36 @@ keyless public APIs, browser-direct** (user decisions, 2026-10-19).
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`
-- [ ] Adapter unit tests (MSW): list/get/create/update/delete happy paths;
-      non-2xx → `DataError` codes; `itemsPath` unwrapping; arbitrary https
-      origin accepted
-- [ ] Validation tests: `api` config with credential-shaped key rejected;
-      missing baseUrl rejected; http rejected outside localhost; localhost
-      http accepted; userinfo/fragment/private-IP-literal rejected
-- [ ] Recipe test: provider line + read-first/write guidance present
-- [ ] e2e: api fixture journey (list render, error branch, mutate +
-      refresh) with MSW intercepting the app-origin baseUrl
-- [ ] MCP steer spot-check: plain-language prompt pointing the todo entry at
-      a public API renders list + error branches correctly
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e` — format/lint/tsc clean; **551/551 unit**; production build green; **109/109 e2e across all three projects**
+- [x] Adapter unit tests (injectable fake `fetch`): list/get/create/update/delete happy paths; non-2xx → `DataError` codes; `itemsPath` unwrapping; arbitrary https origin accepted — `api-adapter.test.ts`, `api-url.test.ts`
+- [x] Validation tests: credential-shaped key rejected; missing baseUrl rejected; http rejected outside localhost; localhost http accepted; userinfo/fragment/private-IP-literal rejected — `api-url.test.ts`, `validate.test.ts`
+- [x] Recipe test: provider line + read-first/write guidance present — `styling-rules.test.ts` (plus the derived-strings rule added from the steer finding, with its own test)
+- [x] e2e: api fixture journeys (list render, error branch, mutate + refresh) with MSW intercepting the app-origin baseUrl — two journeys in `e2e/data-sources.spec.ts`
+- [x] MCP steer spot-check — executed as a plain-language Pokédex generation against
+  `https://pokeapi.co/api/v2/pokemon/` + sprite URLs (2026-10-19): pre-recipe runs
+  chose the api provider with live reads but **0/3** derived sprite URLs (JS inside
+  `$template` → silently empty ×2; `src` omitted ×1); a plain-language steer one-shot
+  the registered composition (`$concat` + `$math` on `$index`, 20/20 sprites → 200);
+  the recipe line then let fresh gens one-shot correct specs (**2/2** on 3.1 Lite:
+  `$concat`+`$item`, and `$item: image`). Open observation: both post-recipe gens
+  seeded static state instead of declaring the api provider (n=2 with a
+  prompt-reconstruction confound — controlled A/B needed before any attribution)
+
+### Verification incidents (recorded during the gate run)
+
+- `next build` ran while `next dev` was serving → Turbopack's persistent cache kept
+  replaying stale `Unknown regular expression flags` errors from the recipe line's
+  pre-fix window until `.next` was wiped (file on disk was valid — tsc green the
+  whole time). Manifested as 3 admin-write e2e failures that no DB/token/policy
+  probe could reproduce: token A/B (old + fresh) both 201 for `uis`/`page_versions`
+  inserts; only an orphan `ui_id` → 42501, exactly the F2 `WITH CHECK` working.
+- Residual e2e flake (independent of M3): the admin's `uis?select=*` pulls **every**
+  row with full `revisions` (table grows per run — 92 rows at verification time) →
+  a sync cycle took ~7s, past the roundtrip's 5s dot budget; publish then raced its
+  own push → 42501. Fixed test-side: `waitForRemoteRow` service-role poll gates
+  `publishOpenEntry`, 20s budgets on the dot/fresh-pull assertions. Follow-ups:
+  visitor `uis` rows are never swept (only admin leftovers are), and sync's
+  admin-sized pulls deserve a metadata-first/columns-limited query.
 
 ## Status log
 
@@ -153,3 +171,6 @@ keyless public APIs, browser-direct** (user decisions, 2026-10-19).
 | 2026-10-19 | plan drafted (post lessons-grep + json-render skill audit) |
 | 2026-10-19 | architecture re-set after reviewing the enterprise reference plan: browser-direct keyless lane, spec-declared endpoints, keyed lane deferred |
 | 2026-10-19 | approved (browser-direct keyless lane; spec-declared endpoints; Lane 2 keyed APIs deferred) |
+| 2026-10-19 | implemented — adapter, config/URL policy, recipe line, docs appendix, MSW api journeys in the working tree |
+| 2026-10-19 | steer spot-check executed (Pokédex, 3 models): derived-string salience gap found → recipe line + `.agents/lessons/template-derived-strings.md` added; fresh gens one-shot 2/2 |
+| 2026-10-19 | verification incidents resolved (build-while-dev cache poisoning; sync-trip timing gate) — gates green: 551 unit, build, **109/109 e2e** |

@@ -14,10 +14,11 @@ import type { Spec } from "@json-render/core";
 /** The catalog action that creates/updates/deletes records (D2). */
 export const DATA_MUTATE_ACTION = "data_mutate";
 
-/** Storage providers the adapter registry knows (D3; M2 adds the database). */
+/** Storage providers the adapter registry knows (D3; M2 database, M3 API). */
 export const DATA_SOURCE_PROVIDERS = {
   localStorage: "localStorage",
   supabase: "supabase",
+  api: "api",
 } as const;
 
 export type DataSourceProvider =
@@ -60,6 +61,14 @@ export const CREDENTIAL_CONFIG_KEYS = [
 ] as const;
 
 /**
+ * The only config keys the "api" provider accepts (api-data-source plan
+ * D2): the endpoint a spec IS allowed to declare, and an optional JSON
+ * pointer that unwraps enveloped list responses. Everything else — headers,
+ * auth, query values — belongs to Lane 2 (server-held configuration).
+ */
+export const API_CONFIG_KEYS = ["baseUrl", "itemsPath"] as const;
+
+/**
  * Field types a resource `schema` may declare (validated before writes,
  * D3/T5). Kept to JSON primitives — every provider can store those.
  */
@@ -82,15 +91,16 @@ export const dataSourceDefSchema = z
       .enum([
         DATA_SOURCE_PROVIDERS.localStorage,
         DATA_SOURCE_PROVIDERS.supabase,
+        DATA_SOURCE_PROVIDERS.api,
       ])
       .describe(
-        'Storage provider — "localStorage" for per-browser data, "supabase" for the project database (rows scoped to the signed-in visitor, authorization enforced by RLS)',
+        'Storage provider — "localStorage" for per-browser data, "supabase" for the project database (rows scoped to the signed-in visitor, authorization enforced by RLS), "api" for a public, unauthenticated HTTPS JSON API declared in the spec (config: {"baseUrl": "https://…"})',
       ),
     config: z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage. Never put credentials here — credential-shaped keys are rejected, and the supabase provider takes no config at all (project URL and keys come from the app environment)',
+        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment), and api endpoints must be public, unauthenticated HTTPS (keys belong to server-held configuration, not specs)',
       ),
   })
   .strict();

@@ -99,7 +99,7 @@ Records are **per browser, per design** — never shared between visitors or des
 
 ## Limitations (by design)
 
-- **No sharing, ever**: records are always the visitor's own — per-browser with localStorage, per signed-in visitor with supabase (RLS). There is no cross-visitor access on either provider. Published `content` pages with data blocks are `stateful` and need JavaScript.
+- **No sharing of stored records, ever**: records are always the visitor's own — per-browser with localStorage, per signed-in visitor with supabase (RLS). There is no cross-visitor access on either storage provider; the api provider (M3) differs in kind — it reads public upstream data every visitor sees identically and stores nothing. Published `content` pages with data blocks are `stateful` and need JavaScript.
 - **Per-document singleton**: one manager per page; multiple `<QueryLoader>`s of the same namespace dedupe reads, but M1 targets one data-bearing surface per document.
 - **localStorage is synchronous**: the loading mirror lasts microseconds (localStorage never yields) — the loading branch is unit-covered and paints for the async supabase provider (M2 e2e).
 - **No credentials, ever**: credential-shaped config keys are rejected at every ingest seam.
@@ -156,3 +156,46 @@ Four policies (`select/insert/update/delete … to authenticated using (user_id 
 ### Adapter notes
 
 `lib/data-sources/supabase-adapter.ts` — factory injectable with a resolver (`createSupabaseAdapter(def, context, resolveClient?)`, defaulting to a dynamic import of `@/lib/supabase/client`), so tests drive a structural fake PostgREST client (no network, no real supabase-js). The factory is registered in `adapter-registry.ts` `FACTORIES` (plus the `registerFactory` seam for tests). Deferred: Realtime updates (cross-device live refresh) is a follow-up milestone.
+
+## API provider (M3)
+
+**Milestone:** M3 (`docs/plan/api-data-source/plan.md`) — reads and writes a plain HTTPS JSON API **directly from the visitor's browser** (Lane 1: keyless, public endpoints — no server route, no proxy):
+
+```jsonc
+"dataSources": {
+  "shopApi": {
+    "provider": "api",
+    "config": { "baseUrl": "https://shop.example/v1", "itemsPath": "/data" }
+  }
+}
+```
+
+### Config
+
+Only two keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required) and `itemsPath` (optional JSON pointer that unwraps an enveloped list response). Anything else — headers, auth, query values — is a validation issue; credential-shaped keys remain globally rejected. **Lane 2** (server-held keys, origin-registered injection) is explicitly out of scope for M3.
+
+### Endpoint policy (seams + adapter, defense in depth)
+
+`checkApiBaseUrl` (`lib/data-sources/api-url.ts`) runs at all three ingest seams and again in the adapter's `initialize`:
+
+- **https only** — plain http allowed for `localhost`/`127.0.0.1` (dev/e2e)
+- no `user:pass@` userinfo, no `?query` (it would bypass the credential-key check), no `#fragment`
+- no literal private/link-local/metadata addresses (10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16, 0/8, unique-local/link-local IPv6)
+- hostname-based SSRF is bounded by the browser itself: CORS decides which origins answer. Lane 1's transport decision — a browser fetch is confined to the visitor's own network perspective; the enterprise reference plan's "server-side always" assumed a hardened egress worker this app deliberately does not build.
+
+### Semantics
+
+- `collection` → URL path segment: `GET|POST baseUrl/<collection>`, `GET|PATCH|DELETE baseUrl/<collection>/<id>` (both segments URL-encoded)
+- Reads: `list` expects a JSON array (or an `itemsPath`-unwrapped one); `get` returns `null` on 404 (missing reads are not errors). Responses pass the shared `record-validate` schema check like every other provider
+- Writes: `create` = POST (a valid echoed record wins over the client-generated one); `update` = read-merge-validate-PATCH (same partial-patch semantics as supabase, validation strictly before the write); `delete` = DELETE
+- Error normalization to shared codes: 401/403/429/5xx/network/CORS → `unavailable`, 404 → `not_found`, 400/422 → `invalid_record`, non-JSON body → `malformed` — upstream detail never reaches the UI
+- 15 s request timeout so a hanging API cannot pin `pending` forever
+- The mirror, `$item` params, empty/error branches, validation gating and pending behave exactly as on the storage providers — the query manager never learns what a fetch is
+
+### Adapter notes
+
+`lib/data-sources/api-adapter.ts` — factory injectable with a fetch resolver (`createApiAdapter(def, context, resolveFetch?)`, defaulting to `globalThis.fetch`), so unit tests drive a scripted fake that asserts the exact URL/method/body per call (no network). No caching, no query-param plumbing, no cross-tab events (there is no shared store to observe) — post-mutation `refreshResource` is the freshness mechanism.
+
+### Spot-check (M3 verification)
+
+A plain-language Pokédex generation against `https://pokeapi.co/api/v2/pokemon/` exercised the provider end to end (live list reads through the browser-direct fetch; loading/error/empty branches covered by the e2e journeys). Derived per-item URLs must use the registered composition — `{"$concat": [base, {"$item": "id"}, ".png"]}` — because JavaScript inside `$template` silently resolves to `""`; the recipe line in `lib/playground/styling-rules.ts` teaches exactly this. Evidence log: `docs/plan/api-data-source/plan.md` (verification + incidents); general lesson: `.agents/lessons/template-derived-strings.md`.
