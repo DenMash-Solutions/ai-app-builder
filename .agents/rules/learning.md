@@ -87,6 +87,17 @@ This file serves as the central entry point for all lessons learned and problem-
 - Fixed dark islands: scope `.dark` vars per element (`ACTION_BUTTON_CLASS` pattern)
 - Element screenshots (uid) over page screenshots; verify freshness before debugging
 
+#### **[template-derived-strings.md](../lessons/template-derived-strings.md)** - DERIVED STRINGS & $TEMPLATE ANTI-PATTERN
+
+- `$template` interpolates `${/state/paths}` only — missing path = "" silently
+- Derived strings (URL/labels from `$item`/`$index`) → `$concat` + `$math`, never JS inside `${…}`
+
+#### **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)** - DEV-SERVER CACHE & E2E FAILURE TRIAGE
+
+- Never `next build` while `next dev` serves the same `.next` — stale Turbopack cache replays dead parse errors across restarts; disk bytes + `tsc` are ground truth
+- RLS `42501` with healthy-token probes → race with the parent row, not the policy — probe REST A/B first, gate async work on the database (service-role poll), never on status-dot text
+- Trace `_monotonicTime` is milliseconds — sanity-check derived spans against wall-clock before theorizing
+
 ## 🚨 Critical Insights (Feature Organization)
 
 ### **Architecture Classification**
@@ -141,6 +152,9 @@ Before writing ANY code, follow this exact sequence:
 - Playwright finds 0 but a11y tree shows the name → **[jsx-whitespace-names.md](../lessons/jsx-whitespace-names.md)**
 - MCP screenshot contradicts a change you just made → **[mcp-verification.md](../lessons/mcp-verification.md)**
 - Fixed-dark component invisible in light theme → **[mcp-verification.md](../lessons/mcp-verification.md)**
+- A URL/image prop renders with a gap (`…/…png`) → JS inside `$template`; only `${/paths}` interpolate → **[template-derived-strings.md](../lessons/template-derived-strings.md)**
+- e2e failures began right after a build/restart → stale `.next` cache replay; verify disk bytes + wipe cache → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)**
+- `42501`/stuck status dot while probes show healthy tokens → sync race; gate on the DB, not UI status text → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)**
 
 ### **Green Flags** → Continue with confidence
 

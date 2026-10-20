@@ -128,6 +128,18 @@
 **Lesson Reference**: `implementation-protocol.md` Step 0 — "BEFORE CREATING ANY PLAN — CHECK LESSONS + RELATED SKILLS FIRST"
 **Prevention**: Before drafting any `docs/plan/**`: (1) `grep -r "<topic>" .agents/lessons/`, (2) load the matching skill via the `skill` tool, (3) only then draft. For any REJECT/CONFIRM conclusion drawn from a grep: read the enclosing context / re-grep with a broad pattern before recording it.
 
+### 22. Blaming the Model Instead of the Prompt Vocabulary (NEW)
+
+**Problem**: Pokédex steer test — fresh gens emitted `{"$template": "…${$index + 1}.png"}` (JS inside a template that only interpolates `${/state/paths}` → silently "") or dropped the image entirely; I concluded "lite-model adherence gap" when the actual gap was the RECIPE never teaching the registered-directive composition (`$concat` + `$math`) for derived strings — a plain-language steer ("the number is the Pokemon's position in the list") made the model one-shot the correct spec
+**Lesson Reference**: `template-derived-strings.md`
+**Prevention**: Silent-empty bindings → suspect JS-inside-`$template` first (read the STORED spec, not the pixels); "model won't do X" after ONE attempt → grep the prompt for the composition before blaming the model; when steering, state the DATA relationship in plain language, never the syntax
+
+### 23. Ran `bun run build` Over a Live `next dev`, Then Chased the Wrong Symptom (NEW)
+
+**Problem**: Started a production `next build` while `next dev` was serving the same `.next` → Turbopack's persistent cache got poisoned; three authed e2e tests then failed (`42501` on publish, sync dot stuck at "Syncing") and the dev log replayed `Unknown regular expression flags` parse errors for a file that was **valid on disk** (tsc green; the mangled `ahpst` variant existed only in cache). Despite failures starting in exactly that run, I probed tokens → DB → policy for a long detour before reading the server log's parse errors and grepping the file bytes; I also misread Playwright trace timestamps as seconds (a "6867s span" in a 70s run).
+**Lesson Reference**: `.agents/lessons/dev-server-e2e-triage.md`
+**Prevention**: Never build while dev serves the same `.next` (stop dev first, or wipe `.next` after); when e2e failures begin right after an environment action, read the dev log FIRST and verify disk bytes (`grep`/`tsc`) before editing anything a parser blames; RLS `42501` with identical old/new-token probe results = race with the parent row → gate async e2e waits on the database (service-role poll), never on status-dot text; sanity-check trace spans (ms) against wall-clock.
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -262,6 +274,9 @@ When I see these → STOP and check lessons:
 - **NEW**: Writing a feature plan only in chat → must persist to `docs/plan/{feature}/plan.md` (`feature-plan.md`)
 - **NEW**: About to write a plan file → lessons grep + related skill load FIRST (`implementation-protocol` Step 0, mistake #21)
 - **NEW**: About to reject an option based on a grep result → re-grep broad + read enclosing context first (weak filter = false negative, mistake #21)
+- **NEW**: Concluding "model adherence gap" from one generated spec → check whether the recipe teaches the composition (`template-derived-strings.md`, mistake #22)
+- **NEW**: e2e admin-write failures (`42501`, stuck sync dot) starting right after a build → stale `.next` cache + sync race — log first, disk bytes before edits, gate on the DB (`dev-server-e2e-triage.md`, mistake #23)
+- **NEW**: About to run `bun run build` with `next dev` still up → stop dev first (or expect to wipe `.next`) (`dev-server-e2e-triage.md`, mistake #23)
 
 ## ⚡ Quick Recovery Commands
 
