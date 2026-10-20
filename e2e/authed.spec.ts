@@ -35,6 +35,7 @@ import {
   deleteTestRow,
   restoreFeaturedIfRecovery,
   TEST_PROMPT_PREFIX,
+  waitForRemoteRow,
 } from "./db";
 import { BASE_URL, canSeed, hasAdminAuth, hasUserAuth, statePath } from "./env";
 
@@ -56,12 +57,25 @@ import { BASE_URL, canSeed, hasAdminAuth, hasUserAuth, statePath } from "./env";
 /** Mutating suites refuse to run when another run holds the lock. */
 const skipMutating = process.env.E2E_SKIP_MUTATING === "1";
 
+/**
+ * A genuinely fresh visitor context. In this Playwright version
+ * `browser.newContext()` inherits the project's `use.storageState` (the
+ * shared admin session), so every manual context must opt out explicitly —
+ * verified: inherited → admin cookies, explicit empty → 0 cookies/origins.
+ * Without it, "fresh visitors" share the admin's RLS identity and
+ * per-user isolation can never be observed.
+ */
+const FRESH_STATE = { cookies: [], origins: [] };
+
 /** Publishes the currently open entry at `slug` via the go-live dialog. */
 async function publishOpenEntry(
   page: Page,
   prompt: string,
   slug: string,
 ): Promise<void> {
+  // Publish's RLS WITH CHECK needs the owned uis row (audit F2) — gate on the
+  // sync push landing in the account instead of racing the client debounce.
+  await waitForRemoteRow(prompt);
   await openHistory(page);
   await historyRow(page, prompt)
     .getByRole(ROLE.button, { name: PUBLISH.goLive(prompt) })
@@ -123,8 +137,12 @@ test.describe("authenticated — admin identity", () => {
     try {
       entryId = await generateUnique(page, prompt);
 
-      // Push: the status dot settles on "Saved to account".
-      await expect(page.locator(`[aria-label="${SYNC.saved}"]`)).toBeVisible();
+      // Push: the status dot settles on "Saved to account". Admin-sized
+      // pulls (every uis row, full revisions) push the cycle past 5s as the
+      // table grows — budget accordingly (sync-trip timeout).
+      await expect(page.locator(`[aria-label="${SYNC.saved}"]`)).toBeVisible({
+        timeout: 20_000,
+      });
 
       // Pull: a FRESH context (empty localStorage) must receive the entry
       // from the account — a true server roundtrip, not a local echo.
@@ -136,7 +154,9 @@ test.describe("authenticated — admin identity", () => {
         const freshPage = await fresh.newPage();
         await freshPage.goto(PATHS.ui);
         await openHistory(freshPage);
-        await expect(historyRow(freshPage, prompt)).toBeVisible();
+        await expect(historyRow(freshPage, prompt)).toBeVisible({
+          timeout: 20_000,
+        });
         await historyRow(freshPage, prompt)
           .getByRole(ROLE.button, { name: entryRowName(prompt) })
           .click();
@@ -191,6 +211,7 @@ test.describe("authenticated — admin identity", () => {
       const noJs = await browser.newContext({
         baseURL,
         javaScriptEnabled: false,
+        storageState: FRESH_STATE,
       });
       const noJsPage = await noJs.newPage();
       try {
@@ -261,7 +282,10 @@ test.describe("authenticated — admin identity", () => {
 
       // A FRESH visitor gets the design with an EMPTY per-browser store —
       // the author's record never leaks across namespaces.
-      const visitor = await browser.newContext({ baseURL: BASE_URL });
+      const visitor = await browser.newContext({
+        baseURL: BASE_URL,
+        storageState: FRESH_STATE,
+      });
       try {
         const visitorPage = await visitor.newPage();
         await visitorPage.goto(`/en/${slug}`);
@@ -285,7 +309,10 @@ test.describe("authenticated — admin identity", () => {
       }
 
       // …while ANOTHER fresh visitor starts empty again (per-browser store).
-      const second = await browser.newContext({ baseURL: BASE_URL });
+      const second = await browser.newContext({
+        baseURL: BASE_URL,
+        storageState: FRESH_STATE,
+      });
       try {
         const secondPage = await second.newPage();
         await secondPage.goto(`/en/${slug}`);
@@ -343,9 +370,15 @@ test.describe("authenticated — admin identity", () => {
       // Go live — the dialog validates the data blocks before publishing (D3).
       await publishOpenEntry(page, prompt, slug);
 
-      // A FRESH visitor (transparent anonymous session) starts EMPTY — the
-      // author's rows are invisible: RLS, not browser storage, enforces it.
-      const visitor = await browser.newContext({ baseURL: BASE_URL });
+      // A FRESH visitor starts EMPTY — and it must be FRESH for real: with
+      // no override this context inherits the project's admin session, the
+      // author's rows become the visitor's own rows, and RLS can never be
+      // observed. What's asserted here: the author's rows are invisible —
+      // RLS, not browser storage, enforces it.
+      const visitor = await browser.newContext({
+        baseURL: BASE_URL,
+        storageState: FRESH_STATE,
+      });
       try {
         const visitorPage = await visitor.newPage();
         await visitorPage.goto(`/en/${slug}`);
@@ -370,7 +403,10 @@ test.describe("authenticated — admin identity", () => {
       }
 
       // …while ANOTHER fresh visitor sees neither session's rows.
-      const second = await browser.newContext({ baseURL: BASE_URL });
+      const second = await browser.newContext({
+        baseURL: BASE_URL,
+        storageState: FRESH_STATE,
+      });
       try {
         const secondPage = await second.newPage();
         await secondPage.goto(`/en/${slug}`);

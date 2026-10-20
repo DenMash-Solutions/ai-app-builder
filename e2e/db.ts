@@ -283,6 +283,39 @@ export async function deleteTestRow(uiId: string | undefined): Promise<void> {
 }
 
 /**
+ * Polls until the entry's `uis` row exists in the account — the AUTHORITATIVE
+ * "sync push landed" gate for tests that write `page_versions` next: publish's
+ * WITH CHECK requires the owned row (audit F2), and a race against it surfaces
+ * as a bare 42501 ("Could not publish"). The UI dot can't gate this reliably:
+ * its debounce plus admin-sized `uis?select=*` pulls (an admin sees EVERY row,
+ * growing per run) push the full cycle past 5s (sync-trip timeout).
+ * Best-effort silent without the service-role key, like the other helpers.
+ */
+export async function waitForRemoteRow(
+  prompt: string,
+  timeoutMs = 20_000,
+): Promise<void> {
+  if (!canSeed) return;
+  const svc = serviceClient();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data, error } = await svc
+      .from("uis")
+      .select("id")
+      .eq("prompt", prompt)
+      .limit(1);
+    if (!error && data && data.length > 0) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `[e2e] account row for prompt "${prompt.slice(0, 40)}…" missing ` +
+          `after ${timeoutMs}ms${error ? ` (${error.message})` : ""}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
  * Service-role cleanup for data-source records (docs/plan/database-provider):
  * scoped by the namespaces THIS test minted (design uuid, published slug).
  * Never a bare table sweep and never the shared "local" namespace — a real
