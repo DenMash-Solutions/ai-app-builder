@@ -351,3 +351,154 @@ describe("keyed data sources (Lane 2 proxy, plan 050)", () => {
     expect(calls[0].method).toBe("GET");
   });
 });
+
+describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
+  const pokedexBase = {
+    provider: "api",
+    config: {
+      baseUrl: "https://pokeapi.example/api/v2",
+      itemDetail: { path: "/pokemon/{id}" },
+    },
+  } as const;
+  const pokedex: NamedResourceDef = {
+    name: "pokemon",
+    dataSource: "pokedex",
+    collection: "pokemon",
+  };
+  // pokeapi list-row convention: no `id`, just name + a url carrying it.
+  const row = (n: number) => ({
+    name: `pkmn-${n}`,
+    url: `https://pokeapi.example/api/v2/pokemon/${n}/`,
+  });
+  const detail = (n: number) => ({
+    id: n,
+    label: `Pokemon ${n}`,
+    types: ["grass", "poison"],
+    typeKey: "grass",
+  });
+
+  test("fans one detail read per row through the keyed proxy and merges", async () => {
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      const path = (call.body as { path?: string }).path;
+      if (path === "/api/v2/pokemon") return json([row(1), row(2)]);
+      const id = Number(path?.split("/").pop());
+      return json(detail(id));
+    });
+    const adapter = createApiAdapter(
+      {
+        ...pokedexBase,
+        config: {
+          ...pokedexBase.config,
+          auth: { type: "bearer", ref: "pokedex" },
+        },
+      },
+      context,
+      () => fetchImpl,
+    );
+    await adapter.initialize();
+    const rows = await adapter.list(pokedex);
+    // 1 list + 2 detail reads — every request rode the keyed proxy.
+    expect(calls).toHaveLength(3);
+    expect(calls.every((c) => c.url === "/api/data-proxy")).toBe(true);
+    expect(
+      calls.slice(1).map((c) => (c.body as { path: string }).path),
+    ).toEqual(["/api/v2/pokemon/1", "/api/v2/pokemon/2"]);
+    // Each row merged: base fields kept, detail fields added.
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({ ...row(1), ...detail(1) });
+    expect(rows[1]).toEqual({ ...row(2), ...detail(2) });
+  });
+
+  test("resolves the id from row.id first, else the last url segment", async () => {
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      if (call.url === "https://pokeapi.example/api/v2/pokemon")
+        return json([{ id: 7, name: "by-id" }, row(3)]);
+      const id = Number(call.url.split("/").pop());
+      return json(detail(id));
+    });
+    const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
+    await adapter.initialize();
+    await adapter.list(pokedex);
+    expect(
+      calls.slice(1).map((c) => c.url.replace("https://pokeapi.example", "")),
+    ).toEqual(["/api/v2/pokemon/7", "/api/v2/pokemon/3"]);
+  });
+
+  test("the detail wins on field collisions (merge order)", async () => {
+    const { fetchImpl } = fakeFetch((call) => {
+      if (call.url === "https://pokeapi.example/api/v2/pokemon")
+        return json([{ ...row(1), label: "list-label" }]);
+      return json({ ...detail(1), label: "detail-label" });
+    });
+    const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
+    await adapter.initialize();
+    const rows = await adapter.list(pokedex);
+    expect(rows[0].label).toBe("detail-label");
+  });
+
+  test("a failed detail degrades to the base row — the list still succeeds", async () => {
+    const { fetchImpl } = fakeFetch((call) => {
+      if (call.url === "https://pokeapi.example/api/v2/pokemon")
+        return json([row(1), row(2)]);
+      return call.url.endsWith("/1")
+        ? json({ error: "boom" }, 500)
+        : json(detail(2));
+    });
+    const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
+    await adapter.initialize();
+    const rows = await adapter.list(pokedex);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual(row(1)); // base row kept, no detail fields
+    expect(rows[1]).toEqual({ ...row(2), ...detail(2) });
+  });
+
+  test("a non-object detail body and an unresolvable id both keep the base row", async () => {
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      if (call.url === "https://pokeapi.example/api/v2/pokemon")
+        return json([{ name: "no-url" }, { ...row(2), url: "" }, row(3)]);
+      if (call.url.endsWith("/3")) return json("not-an-object");
+      return json(detail(2));
+    });
+    const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
+    await adapter.initialize();
+    const rows = await adapter.list(pokedex);
+    expect(rows[0]).toEqual({ name: "no-url" }); // no id/url → base row
+    expect(rows[1]).toEqual({ ...row(2), url: "" }); // empty url → base row
+    expect(rows[2]).toEqual(row(3)); // scalar detail → base row
+    // Only row 2 (id from its url) fired a detail read — rows 0/1 have no
+    // resolvable id, row 3's read degraded after the request.
+    expect(calls).toHaveLength(2);
+  });
+
+  test("keyless sources fan out direct (Lane 1 transport untouched)", async () => {
+    const { fetchImpl, calls } = fakeFetch((call) => {
+      if (call.url === "https://pokeapi.example/api/v2/pokemon")
+        return json([row(1)]);
+      return json(detail(1));
+    });
+    const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
+    await adapter.initialize();
+    const rows = await adapter.list(pokedex);
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://pokeapi.example/api/v2/pokemon",
+      "https://pokeapi.example/api/v2/pokemon/1",
+    ]);
+    expect(rows[0]).toEqual({ ...row(1), ...detail(1) });
+  });
+
+  test("initialize rejects a malformed itemDetail (defense in depth)", async () => {
+    for (const itemDetail of [{ path: "/pokemon" }, "nope", { path: 7 }]) {
+      const adapter = createApiAdapter(
+        {
+          provider: "api",
+          config: { baseUrl: "https://pokeapi.example", itemDetail },
+        },
+        context,
+        () => null,
+      );
+      await expect(adapter.initialize()).rejects.toMatchObject({
+        code: DATA_ERROR_CODES.malformed,
+      });
+    }
+  });
+});

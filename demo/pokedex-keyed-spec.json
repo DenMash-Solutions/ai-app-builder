@@ -6,21 +6,28 @@
       "props": { "direction": "vertical", "gap": "lg" },
       "children": [
         "dex-heading",
+        "dex-note",
         "dex-count",
         "dex-loading",
         "dex-error",
         "dex-empty",
-        "dex-grid",
-        "direct-heading",
-        "direct-note",
-        "direct-loading",
-        "direct-error",
-        "direct-ok"
+        "dex-grid"
       ]
     },
     "dex-heading": {
       "type": "Heading",
-      "props": { "text": "Pokédex — via keyed proxy", "level": "h1" },
+      "props": {
+        "text": "Pokédex — list first, then per-card detail",
+        "level": "h1"
+      },
+      "children": []
+    },
+    "dex-note": {
+      "type": "Text",
+      "props": {
+        "text": "One list read through the keyed proxy, then the adapter fans out one GET /pokemon/{id} per row through the same proxy — every card's color, chips, label and artwork come from its own detail call.",
+        "className": "dex-note"
+      },
       "children": []
     },
     "dex-count": {
@@ -61,72 +68,82 @@
     "dex-cell": {
       "type": "Card",
       "props": {
-        "centered": true,
-        "className": "dex-card h-full transition-shadow hover:shadow-md"
+        "className": {
+          "$cond": { "$item": "typeKey", "eq": "grass" },
+          "$then": "bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-900 h-full transition-shadow hover:shadow-md",
+          "$else": {
+            "$cond": { "$item": "typeKey", "eq": "fire" },
+            "$then": "bg-rose-50 dark:bg-rose-950 border-rose-200 dark:border-rose-900 h-full transition-shadow hover:shadow-md",
+            "$else": {
+              "$cond": { "$item": "typeKey", "eq": "water" },
+              "$then": "bg-sky-50 dark:bg-sky-950 border-sky-200 dark:border-sky-900 h-full transition-shadow hover:shadow-md",
+              "$else": {
+                "$cond": { "$item": "typeKey", "eq": "bug" },
+                "$then": "bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-900 h-full transition-shadow hover:shadow-md",
+                "$else": {
+                  "$cond": { "$item": "typeKey", "eq": "poison" },
+                  "$then": "bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-900 h-full transition-shadow hover:shadow-md",
+                  "$else": {
+                    "$cond": { "$item": "typeKey", "eq": "flying" },
+                    "$then": "bg-indigo-50 dark:bg-indigo-950 border-indigo-200 dark:border-indigo-900 h-full transition-shadow hover:shadow-md",
+                    "$else": "bg-muted/40 border-border h-full transition-shadow hover:shadow-md"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
-      "children": ["dex-body"]
+      "children": ["dex-row"]
     },
-    "dex-body": {
+    "dex-row": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "sm", "align": "center" },
-      "children": ["dex-img", "dex-name"]
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["dex-info", "dex-art"]
     },
-    "dex-img": {
+    "dex-info": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["dex-label", "dex-types"]
+    },
+    "dex-label": {
+      "type": "Text",
+      "props": {
+        "text": { "$item": "label" },
+        "className": "dex-name font-semibold tracking-wide"
+      },
+      "children": []
+    },
+    "dex-types": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex-wrap"
+      },
+      "repeat": { "statePath": { "$item": "types" } },
+      "children": ["dex-chip"]
+    },
+    "dex-chip": {
+      "type": "Badge",
+      "props": { "text": { "$item": "" }, "variant": "secondary" },
+      "children": []
+    },
+    "dex-art": {
       "type": "Image",
       "props": {
-        "src": { "$item": "image" },
-        "alt": { "$item": "name" },
+        "src": { "$item": "artwork" },
+        "alt": { "$item": "label" },
         "width": null,
-        "height": null
+        "height": null,
+        "className": "w-20 h-20 object-contain shrink-0"
       },
-      "children": []
-    },
-    "dex-name": {
-      "type": "Text",
-      "props": {
-        "text": { "$item": "name" },
-        "className": "dex-name uppercase tracking-wide font-semibold text-center"
-      },
-      "children": []
-    },
-    "direct-heading": {
-      "type": "Heading",
-      "props": { "text": "Direct call — without the key", "level": "h2" },
-      "children": []
-    },
-    "direct-note": {
-      "type": "Text",
-      "props": {
-        "text": "This section reads http://localhost:4100 straight from the browser, with no Authorization header. The API refuses it — only the proxy above ever holds the key.",
-        "className": "direct-note"
-      },
-      "children": []
-    },
-    "direct-loading": {
-      "type": "Text",
-      "props": {
-        "text": "Calling the API directly…",
-        "className": "direct-loading"
-      },
-      "visible": { "$state": "/queries/directList/status", "eq": "loading" },
-      "children": []
-    },
-    "direct-error": {
-      "type": "Text",
-      "props": {
-        "text": { "$state": "/queries/directList/error/message" },
-        "className": "direct-error"
-      },
-      "visible": { "$state": "/queries/directList/status", "eq": "error" },
-      "children": []
-    },
-    "direct-ok": {
-      "type": "Text",
-      "props": {
-        "text": "Unexpected: the direct call succeeded — the API should refuse keyless callers.",
-        "className": "direct-ok"
-      },
-      "visible": { "$state": "/queries/directList/status", "eq": "success" },
       "children": []
     }
   },
@@ -136,14 +153,8 @@
       "config": {
         "baseUrl": "http://localhost:4100",
         "itemsPath": "/results",
+        "itemDetail": { "path": "/pokemon/{id}" },
         "auth": { "type": "bearer", "ref": "pokedex" }
-      }
-    },
-    "pokedexDirect": {
-      "provider": "api",
-      "config": {
-        "baseUrl": "http://localhost:4100",
-        "itemsPath": "/results"
       }
     }
   },
@@ -151,16 +162,10 @@
     "pokemon": {
       "dataSource": "pokedex",
       "collection": "pokemon",
-      "schema": { "name": "string", "image": "string" }
-    },
-    "pokemonDirect": {
-      "dataSource": "pokedexDirect",
-      "collection": "pokemon",
-      "schema": { "name": "string", "image": "string" }
+      "schema": { "name": "string", "url": "string" }
     }
   },
   "queries": {
-    "pokedexList": { "resource": "pokemon", "operation": "list" },
-    "directList": { "resource": "pokemonDirect", "operation": "list" }
+    "pokedexList": { "resource": "pokemon", "operation": "list" }
   }
 }

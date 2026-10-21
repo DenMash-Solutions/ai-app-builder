@@ -172,7 +172,7 @@ Four policies (`select/insert/update/delete … to authenticated using (user_id 
 
 ### Config
 
-Three keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required), `itemsPath` (optional JSON pointer that unwraps an enveloped list response) and — since Lane 2 — `auth` (the shape-only keyed-API declaration below). Anything else (headers, query values) is a validation issue; credential-shaped keys remain globally rejected, and `auth` itself cannot carry a key value: it accepts only `type`, `ref` and `header`, so anything value-shaped fails `checkApiAuth` at the seams and again in the adapter.
+Four keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required), `itemsPath` (optional JSON pointer that unwraps an enveloped list response), `auth` (the shape-only keyed-API declaration below) and `itemDetail` (the per-row detail fan-out below). Anything else (headers, query values) is a validation issue; credential-shaped keys remain globally rejected, and neither `auth` nor `itemDetail` can carry a key value: `auth` accepts only `type`, `ref` and `header`, so anything value-shaped fails `checkApiAuth` at the seams and again in the adapter.
 
 ### Endpoint policy (seams + adapter, defense in depth)
 
@@ -191,6 +191,30 @@ Three keys are accepted (`API_CONFIG_KEYS`): `baseUrl` (required), `itemsPath` (
 - Error normalization to shared codes: 401/403/429/5xx/network/CORS → `unavailable`, 404 → `not_found`, 400/422 → `invalid_record`, non-JSON body → `malformed` — upstream detail never reaches the UI
 - 15 s request timeout so a hanging API cannot pin `pending` forever
 - The mirror, `$item` params, empty/error branches, validation gating and pending behave exactly as on the storage providers — the query manager never learns what a fetch is
+
+### Per-row detail reads — `itemDetail` (`docs/plan/051-per-card-detail-reads/plan.md`)
+
+A list query may declare that each row wants its own detail document — "list first, then every card fetches its own record". One config key enables it:
+
+```jsonc
+"dataSources": {
+  "pokedex": {
+    "provider": "api",
+    "config": {
+      "baseUrl": "https://pokeapi.example/api/v2",
+      "itemsPath": "/results",
+      "itemDetail": { "path": "/pokemon/{id}" },
+      "auth": { "type": "bearer", "ref": "pokedex" } // details ride the SAME transport
+    }
+  }
+}
+```
+
+- **Fan-out**: after `list()` resolves N rows, the adapter issues one detail `GET` per row, in parallel, through the same transport as the list (the keyed proxy when `auth` is declared — each call is an observable `POST /api/data-proxy` in the network panel), then merges `{ ...row, ...detail }` (detail wins on collisions) before schema validation and the mirror write. The spec needs no per-card code: cards stay plain bindings.
+- **`{id}` resolution** per row: the row's own `id` (string or number), else the last path segment of a string `row.url` (`.../pokemon/25/` → `25`). The placeholder is mandatory (`{id}` anywhere in the path); a path without it would fetch the same detail N times, so validation rejects it.
+- **Degradation**: a missing id, a non-object detail body, or a failed detail read keeps the base row and `console.warn`s — one flaky detail never blanks a gallery that already loaded. Because rows are schema-validated after the merge, a resource schema must be satisfiable by the base row alone (declare identity fields, not detail-only ones).
+- Works on both lanes (keyless direct and keyed proxy); shape-only like `auth` — details can never carry credentials either.
+- Live proof: the keyed Pokédex demo (`demo/pokedex-keyed-spec.json` + `demo/keyed-pokedex-server.ts`) — 1 list + 12 detail reads through the proxy, cards rendering detail-only fields (type colors, chips, label, artwork).
 
 ### Adapter notes
 

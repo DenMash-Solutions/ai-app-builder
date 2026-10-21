@@ -69,7 +69,12 @@ export const CREDENTIAL_CONFIG_KEYS = [
  * remain impossible; key VALUES live only in server env pairs
  * (`DATA_PROXY_<REF>_*`), never in a spec.
  */
-export const API_CONFIG_KEYS = ["baseUrl", "itemsPath", "auth"] as const;
+export const API_CONFIG_KEYS = [
+  "baseUrl",
+  "itemsPath",
+  "auth",
+  "itemDetail",
+] as const;
 
 /**
  * Field types a resource `schema` may declare (validated before writes,
@@ -103,7 +108,7 @@ export const dataSourceDefSchema = z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment). api endpoints are public, unauthenticated HTTPS unless config.auth declares a server-held key ref ({ "type": "bearer", "ref": "weather" } or {"type": "header", "header": "X-API-Key", "ref": "shop"}) — the VALUE lives only in server configuration, never in specs',
+        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment). api endpoints are public, unauthenticated HTTPS unless config.auth declares a server-held key ref ({ "type": "bearer", "ref": "weather" } or {"type": "header", "header": "X-API-Key", "ref": "shop"}) — the VALUE lives only in server configuration, never in specs. Optional {"itemDetail": {"path": "/pokemon/{id}"}} fans a list out: after the list loads, the client reads that path once per row (the literal "{id}" is filled from the row id, or the last url path segment) through the same transport and merges each detail over its row — "list first, then each card fetches its own detail"',
       ),
   })
   .strict();

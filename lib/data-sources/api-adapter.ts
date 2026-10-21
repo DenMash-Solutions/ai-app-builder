@@ -55,6 +55,7 @@ interface ApiConfig {
   baseUrl?: unknown;
   itemsPath?: unknown;
   auth?: unknown;
+  itemDetail?: unknown;
 }
 
 const resolveCollection = (resource: NamedResourceDef): string =>
@@ -233,6 +234,77 @@ function pickPointer(value: unknown, pointer: string): unknown {
   return current;
 }
 
+/** The per-row placeholder in an `itemDetail.path` template (plan 051). */
+const ITEM_DETAIL_PLACEHOLDER = "{id}";
+
+/**
+ * The id an `itemDetail` read uses for one list row: the row's own `id`
+ * (string or number) when present, else the last path segment of a string
+ * `row.url` (paginated list conventions — `.../pokemon/25/` → `25`).
+ * `null` when neither exists: the row then keeps its base data.
+ */
+function itemIdOf(row: unknown): string | null {
+  if (!isPlainObject(row)) return null;
+  const { id, url } = row;
+  if (typeof id === "string" && id !== "") return id;
+  if (typeof id === "number" && Number.isFinite(id)) return String(id);
+  if (typeof url === "string") {
+    const segments = url.split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    if (last !== undefined && last !== "") return last;
+  }
+  return null;
+}
+
+/**
+ * "List first, then each card fetches its own detail" (plan 051): after the
+ * list resolves, read `itemDetail.path` once per row — through the SAME
+ * transport the list used (the keyed proxy when `auth` is declared: the
+ * fetch seam was already wrapped in `initialize`) — and merge
+ * `{ ...row, ...detail }`, the detail winning on collisions. Every failure
+ * degrades to the base row (a flaky detail must not blank a gallery that
+ * already loaded): a missing id, a non-object detail body, or a thrown
+ * read all keep the row and `console.warn`. Rows are schema-validated
+ * AFTER the merge, so a resource schema must be satisfiable by the base
+ * row alone — degradation-safe by construction.
+ */
+async function readItemDetails(
+  rows: unknown[],
+  template: string,
+  getDetail: (path: string) => Promise<unknown>,
+): Promise<unknown[]> {
+  return Promise.all(
+    rows.map(async (row, index) => {
+      const id = itemIdOf(row);
+      if (id === null) {
+        console.warn(
+          `[api-adapter] itemDetail: row ${index} has no id or url — keeping the base row.`,
+        );
+        return row;
+      }
+      const path = template
+        .split(ITEM_DETAIL_PLACEHOLDER)
+        .join(encodeURIComponent(id));
+      try {
+        const detail = await getDetail(path);
+        if (!isPlainObject(detail)) {
+          console.warn(
+            `[api-adapter] itemDetail: the detail for "${id}" is not a JSON object — keeping the base row.`,
+          );
+          return row;
+        }
+        return isPlainObject(row) ? { ...row, ...detail } : row;
+      } catch (error) {
+        console.warn(
+          `[api-adapter] itemDetail: the detail read for "${id}" failed — keeping the base row.`,
+          error,
+        );
+        return row;
+      }
+    }),
+  );
+}
+
 /**
  * Prefer the API's echoed record when it validates against the resource
  * schema (with the primary key guaranteed); otherwise `null` and the
@@ -264,6 +336,7 @@ export function createApiAdapter(
   let baseUrl: string | undefined;
   let itemsPath: string | undefined;
   let authRef: string | undefined;
+  let itemDetailPath: string | undefined;
   let fetchImpl: ApiFetch | null | undefined;
 
   const requireReady = (): { base: string; fetch: ApiFetch } => {
@@ -338,6 +411,26 @@ export function createApiAdapter(
           '"itemsPath" must be a JSON pointer into the response, e.g. "/data".',
         );
       }
+      // Per-row detail fan-out (051): { "path": "/pokemon/{id}" } — a
+      // request path that must carry the literal placeholder, or every row
+      // would fetch the same detail.
+      if (config.itemDetail !== undefined) {
+        const detail = config.itemDetail;
+        const valid =
+          typeof detail === "object" &&
+          detail !== null &&
+          !Array.isArray(detail) &&
+          typeof (detail as { path?: unknown }).path === "string" &&
+          (detail as { path: string }).path.startsWith("/") &&
+          (detail as { path: string }).path.includes(ITEM_DETAIL_PLACEHOLDER);
+        if (!valid) {
+          throw new DataError(
+            DATA_ERROR_CODES.malformed,
+            '"itemDetail" must be an object like {"path": "/pokemon/{id}"} — a "/"-prefixed request path containing the literal "{id}" placeholder, which is filled per row.',
+          );
+        }
+        itemDetailPath = (detail as { path: string }).path;
+      }
       // Lane 2 (050): an auth declaration is shape-only (checkApiAuth
       // rejects unknown fields, so no key value can hide in it) and routes
       // every request through the server proxy, which holds the key.
@@ -376,7 +469,18 @@ export function createApiAdapter(
             : 'The API list response is not a JSON array — declare "itemsPath" to unwrap an envelope.',
         );
       }
-      return rows.map((row, index) => {
+      // Per-row detail reads (051): "list first, then each card fetches its
+      // own detail" — the fan-out runs here so specs stay plain bindings.
+      // It rides `getJson`, i.e. the SAME transport as the list (the keyed
+      // proxy when `auth` is declared); each failure keeps its base row.
+      let detailed: unknown[] = rows;
+      if (itemDetailPath !== undefined) {
+        const { base } = requireReady();
+        detailed = await readItemDetails(rows, itemDetailPath, (path) =>
+          getJson(`${base}${path}`),
+        );
+      }
+      return detailed.map((row, index) => {
         if (!isPlainObject(row)) {
           throw new DataError(
             DATA_ERROR_CODES.malformed,
@@ -460,6 +564,7 @@ export function createApiAdapter(
       baseUrl = undefined;
       itemsPath = undefined;
       authRef = undefined;
+      itemDetailPath = undefined;
       fetchImpl = null;
     },
   };

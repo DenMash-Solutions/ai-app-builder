@@ -58,6 +58,7 @@ row in the same turn as any status change** (rule:
 | 048 | [api-data-source](048-api-data-source/plan.md) | implemented | 2026-10-19 |
 | 049 | [plan-organization](049-plan-organization/plan.md) | implemented | 2026-10-20 |
 | 050 | [keyed-api-lane](050-keyed-api-lane/plan.md) | implemented | 2026-10-20 |
+| 051 | [per-card-detail-reads](051-per-card-detail-reads/plan.md) | implemented | 2026-10-20 |
 
-_50 plans: 46 implemented · 1 approved (`033`) · 2 draft (`015`,
+_51 plans: 47 implemented · 1 approved (`033`) · 2 draft (`015`,
 `035`) · 1 rejected (`026`)._

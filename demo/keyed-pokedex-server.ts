@@ -1,42 +1,63 @@
 /**
  * Keyed Pokédex wrapper — live spot-check server for the keyed API lane
- * (docs/plan/050-keyed-api-lane). A deliberately PROTECTED API around
- * pokeapi.co: every endpoint but /health requires
- * `Authorization: Bearer <DEMO_KEY>`, which is exactly the situation the
- * keyed lane exists for — the browser can never hold that key, so a
- * design reading this API through the keyed lane must route through the
- * app's /api/data-proxy route (server-held env pairs inject the header).
+ * (docs/plan/050) and the per-card detail fan-out (docs/plan/051). A
+ * deliberately PROTECTED API around pokeapi.co: every endpoint but /health
+ * requires `Authorization: Bearer <DEMO_KEY>`, which is exactly the
+ * situation the keyed lane exists for — the browser can never hold that
+ * key, so a design reading this API through the keyed lane must route
+ * through the app's /api/data-proxy route (server-held env pairs inject
+ * the header).
  *
- * The /pokemon response enriches each row with `image` (official artwork
- * URL derived from the id in `url` — derived SERVER-side, so the spec
- * itself needs no string surgery, per template-derived-strings).
+ * Route map (the 051 approach: list first, then one detail read per card):
+ *   GET /pokemon        — pokeapi's list envelope forwarded as-is
+ *                         (itemsPath "/results" unwraps it in the spec)
+ *   GET /pokemon/{id}   — pokeapi's detail, SHAPED server-side for cards:
+ *                         label (Title-Case), types (display labels),
+ *                         typeKey (first type — anchors the card color),
+ *                         artwork URL, height/weight in m/kg, trimmed
+ *                         stats; upstream's huge `moves` is dropped.
+ *                         Shaping happens HERE so the spec binds plain
+ *                         fields — no $template/string surgery client-side
+ *                         (template-derived-strings lesson).
  *
- * CORS IS enabled (demo decision) so the spec's second, keyless
- * browser-direct section (Lane 1 style) receives a *readable* 401 instead
- * of an opaque CORS failure — the UI then renders the real adapter
- * message. The API stays protected either way: no header → 401,
- * regardless of origin.
+ * CORS IS enabled (demo convenience kept from 050) so hand-testing the
+ * keyless 401 contrast from a browser tab stays readable. The API stays
+ * protected either way: no header → 401, regardless of origin.
  *
  * Run:      bun run demo/keyed-pokedex-server.ts            (port 4100)
  * Pair it:  DATA_PROXY_POKEDEX_ORIGIN=http://localhost:4100
  *           DATA_PROXY_POKEDEX_KEY=pkdex-demo-key-2026      (dev server env)
  * Design:   demo/pokedex-keyed-spec.json — import it via the playground's
- *           History drawer → "Import JSON" (config.auth.ref = "pokedex").
+ *           History drawer → "Import JSON" (config.auth.ref = "pokedex";
+ *           config.itemDetail fans each list row out to /pokemon/{id}).
  *
  * Logs the presence of a key, never its value.
  */
 
 const PORT = 4100;
 const DEMO_KEY = "pkdex-demo-key-2026";
-const POKEAPI_LIST = "https://pokeapi.co/api/v2/pokemon?limit=12";
-const ARTWORK_BASE =
-  "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
+const POKEAPI = "https://pokeapi.co/api/v2";
+const POKEAPI_LIST = `${POKEAPI}/pokemon?limit=12`;
 
-/** PokeAPI official-artwork URL for a row's id — "" when unparseable. */
-const artworkUrl = (url: string): string => {
-  const id = url.match(/\/(\d+)\/?$/)?.[1];
-  return id ? `${ARTWORK_BASE}/${id}.png` : "";
-};
+/** "bulbasaur" → "Bulbasaur"; "mr-mime" → "Mr Mime" (server-side shaping). */
+const displayName = (name: string): string =>
+  name
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+/** pokeapi's detail payload — only the fields the shaping reads. */
+interface PokeDetail {
+  id: number;
+  name: string;
+  height: number; // decimetres
+  weight: number; // hectograms
+  types: { slot: number; type: { name: string } }[];
+  stats: { base_stat: number; stat: { name: string } }[];
+  sprites: {
+    other?: { "official-artwork"?: { front_default: string | null } };
+  };
+}
 
 /** Clone the response with CORS headers attached (demo decision — see header). */
 const withCors = (response: Response): Response => {
@@ -76,27 +97,41 @@ Bun.serve({
       );
     }
     if (pathname === "/pokemon") {
-      // Forward the public upstream; the envelope ({count, results}) is
-      // returned as-is, with each row enriched with its artwork URL — the
-      // design unwraps the envelope with itemsPath "/results".
+      // The list forwarded as-is — the design unwraps the envelope with
+      // itemsPath "/results" and reads each card's content from the
+      // per-row detail route below (051 fan-out).
       const upstream = await fetch(POKEAPI_LIST);
       if (!upstream.ok) {
         return withCors(
           Response.json({ error: "pokeapi upstream failure" }, { status: 502 }),
         );
       }
-      const data = (await upstream.json()) as {
-        count: number;
-        next: string | null;
-        previous: string | null;
-        results: { name: string; url: string }[];
-      };
+      return withCors(Response.json(await upstream.json()));
+    }
+    const detailId = pathname.match(/^\/pokemon\/(\d+)$/)?.[1];
+    if (detailId) {
+      const upstream = await fetch(`${POKEAPI}/pokemon/${detailId}`);
+      if (!upstream.ok) {
+        return withCors(
+          Response.json({ error: "pokeapi upstream failure" }, { status: 502 }),
+        );
+      }
+      const data = (await upstream.json()) as PokeDetail;
+      const typeKeys = data.types.map((entry) => entry.type.name);
       return withCors(
         Response.json({
-          ...data,
-          results: data.results.map((row) => ({
-            ...row,
-            image: artworkUrl(row.url),
+          id: data.id,
+          name: data.name,
+          label: displayName(data.name),
+          types: typeKeys.map(displayName), // display labels for chips
+          typeKey: typeKeys[0] ?? "unknown", // first type anchors the color
+          artwork:
+            data.sprites.other?.["official-artwork"]?.front_default ?? "",
+          height: data.height / 10, // decimetres → metres
+          weight: data.weight / 10, // hectograms → kilograms
+          stats: data.stats.map((entry) => ({
+            name: entry.stat.name,
+            value: entry.base_stat,
           })),
         }),
       );

@@ -156,7 +156,7 @@ describe("validateDataSources", () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].path).toBe("dataSources.shop.config.headers");
     expect(issues[0].message).toContain(
-      'takes only "baseUrl", "itemsPath", "auth"',
+      'takes only "baseUrl", "itemsPath", "auth", "itemDetail"',
     );
   });
 
@@ -255,6 +255,51 @@ describe("validateDataSources", () => {
     expect(issues[0].path).toBe("dataSources.shop.config.auth");
     expect(issues[0].message).toContain('remove "key"');
     expect(issues[0].message).toContain("never live in specs");
+  });
+
+  test("accepts a per-row itemDetail template (detail fan-out 051)", () => {
+    const issues = validateDataSources(
+      withBlocks({
+        dataSources: {
+          pokedex: {
+            provider: "api",
+            config: {
+              baseUrl: "https://pokeapi.example/api/v2",
+              itemDetail: { path: "/pokemon/{id}" },
+            },
+          },
+        },
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  test("rejects malformed itemDetail declarations at config.itemDetail", () => {
+    const cases: unknown[] = [
+      { path: "pokemon/{id}" }, // not "/"-prefixed
+      { path: "/pokemon" }, // no {id} placeholder — every row would fetch the same detail
+      { path: 7 }, // not a string
+      "/pokemon/{id}", // not an object
+      {}, // no path at all
+    ];
+    for (const itemDetail of cases) {
+      const issues = validateDataSources(
+        withBlocks({
+          dataSources: {
+            pokedex: {
+              provider: "api",
+              config: {
+                baseUrl: "https://pokeapi.example/api/v2",
+                itemDetail,
+              },
+            },
+          },
+        }),
+      );
+      expect(issues.length).toBeGreaterThan(0);
+      expect(issues[0].path).toBe("dataSources.pokedex.config.itemDetail");
+      expect(issues[0].message).toContain("{id}");
+    }
   });
 
   test("localStorage keeps its provider-specific config keys", () => {

@@ -134,6 +134,24 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
               });
             }
           }
+          // Per-row detail fan-out (051): shape-only like `auth` — the
+          // template must carry the literal "{id}" placeholder, or every
+          // row would fetch the same detail.
+          if (config.itemDetail !== undefined) {
+            const detail = config.itemDetail;
+            const template = isPlainObject(detail) ? detail.path : undefined;
+            const valid =
+              typeof template === "string" &&
+              template.startsWith("/") &&
+              template.includes("{id}");
+            if (!valid) {
+              issues.push({
+                path: `${path}.config.itemDetail`,
+                message:
+                  '"itemDetail" must be an object like {"path": "/pokemon/{id}"} — a "/"-prefixed request path containing the literal "{id}" placeholder, which is filled per row from the row id or the last url path segment.',
+              });
+            }
+          }
         }
       }
     }
