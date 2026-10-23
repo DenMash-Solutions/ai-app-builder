@@ -1,6 +1,6 @@
 # Server-Side Pagination — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-20
 
 ## Goal
@@ -179,3 +179,4 @@ browser-scale lists and stays untouched.
 | 2026-10-20 | plan drafted |
 | 2026-10-21 | scope amended — URL deep-link sync (`urlSync`, decision 9) + `pagination.pageParam` (decision 10), per "both" |
 | 2026-10-21 | approved |
+| 2026-10-22 | implemented — 609 unit + 111 e2e green; MCP live: paged reads via keyed proxy (`?offset=…&limit=…` in the proxy body), Prev/Next + "Page N of M" label, URL write-back `?page=2`, deep link `?page=3&limit=6` → first fetch `offset=12&limit=6` with no page-0 roundtrip |

@@ -2,8 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { createApiAdapter } from "./api-adapter";
 import type { ApiFetch } from "./api-adapter";
 import { DATA_ERROR_CODES } from "./types";
-import type { AdapterContext } from "./adapter";
-import type { DataSourceDef, NamedResourceDef } from "./types";
+import type { AdapterContext, DataSourceAdapter } from "./adapter";
+import type {
+  DataSourceDef,
+  ListReadOptions,
+  NamedResourceDef,
+  PagedRows,
+} from "./types";
 
 /**
  * A fake `fetch` over scripted responses — the supabase adapter's
@@ -51,6 +56,25 @@ const fakeFetch = (handler: Handler) => {
 
 const ready = async (fetchImpl: ApiFetch | null, cfg = def.config) =>
   createApiAdapter({ ...def, config: cfg }, context, () => fetchImpl);
+
+/** Narrow the adapter's list union to bare rows (non-paged reads, 052). */
+const listRows = async (
+  adapter: DataSourceAdapter,
+  resource: NamedResourceDef,
+  options?: ListReadOptions,
+): Promise<Record<string, unknown>[]> => {
+  const result = await adapter.list(resource, options);
+  if (!Array.isArray(result)) {
+    throw new Error("expected a non-paged list (bare rows)");
+  }
+  return result;
+};
+
+/** Narrow the adapter's list union to the paged shape (052). */
+const pagedOf = (result: Record<string, unknown>[] | PagedRows): PagedRows => {
+  if (Array.isArray(result)) throw new Error("expected a paged list");
+  return result;
+};
 
 const lamp = { id: "p1", title: "Lamp", price: 10 };
 
@@ -396,7 +420,7 @@ describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
       () => fetchImpl,
     );
     await adapter.initialize();
-    const rows = await adapter.list(pokedex);
+    const rows = await listRows(adapter, pokedex);
     // 1 list + 2 detail reads — every request rode the keyed proxy.
     expect(calls).toHaveLength(3);
     expect(calls.every((c) => c.url === "/api/data-proxy")).toBe(true);
@@ -432,7 +456,7 @@ describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
     });
     const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
     await adapter.initialize();
-    const rows = await adapter.list(pokedex);
+    const rows = await listRows(adapter, pokedex);
     expect(rows[0].label).toBe("detail-label");
   });
 
@@ -446,7 +470,7 @@ describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
     });
     const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
     await adapter.initialize();
-    const rows = await adapter.list(pokedex);
+    const rows = await listRows(adapter, pokedex);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual(row(1)); // base row kept, no detail fields
     expect(rows[1]).toEqual({ ...row(2), ...detail(2) });
@@ -461,7 +485,7 @@ describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
     });
     const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
     await adapter.initialize();
-    const rows = await adapter.list(pokedex);
+    const rows = await listRows(adapter, pokedex);
     expect(rows[0]).toEqual({ name: "no-url" }); // no id/url → base row
     expect(rows[1]).toEqual({ ...row(2), url: "" }); // empty url → base row
     expect(rows[2]).toEqual(row(3)); // scalar detail → base row
@@ -478,7 +502,7 @@ describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
     });
     const adapter = createApiAdapter(pokedexBase, context, () => fetchImpl);
     await adapter.initialize();
-    const rows = await adapter.list(pokedex);
+    const rows = await listRows(adapter, pokedex);
     expect(calls.map((c) => c.url)).toEqual([
       "https://pokeapi.example/api/v2/pokemon",
       "https://pokeapi.example/api/v2/pokemon/1",
@@ -500,5 +524,169 @@ describe("itemDetail fan-out (per-row detail reads, plan 051)", () => {
         code: DATA_ERROR_CODES.malformed,
       });
     }
+  });
+});
+
+describe("paged lists (server pagination, plan 052)", () => {
+  const pagedBase = {
+    provider: "api",
+    config: {
+      baseUrl: "https://pokeapi.example/api/v2",
+      itemsPath: "/results",
+    },
+  } as const;
+  const paged: NamedResourceDef = {
+    name: "pokemon",
+    dataSource: "pokedex",
+    collection: "pokemon",
+    schema: { name: "string" },
+  };
+  const rows12 = Array.from({ length: 12 }, (_, i) => ({ name: `p${i}` }));
+  const envelope = (extra: Record<string, unknown> = {}) => ({
+    count: 30,
+    next: null,
+    previous: null,
+    results: rows12,
+    ...extra,
+  });
+  const pagedAdapter = (fetchImpl: ApiFetch, cfg: Record<string, unknown>) => {
+    const adapter = createApiAdapter(
+      { ...pagedBase, config: { ...pagedBase.config, ...cfg } },
+      context,
+      () => fetchImpl,
+    );
+    return adapter.initialize().then(() => adapter);
+  };
+
+  test("offset mode translates page×limit into ?offset=&limit= and passes other params", async () => {
+    const { fetchImpl, calls } = fakeFetch(() => json(envelope()));
+    const adapter = await pagedAdapter(fetchImpl, {});
+    const result = await adapter.list(paged, {
+      params: { page: 1, limit: 12, type: "grass" },
+      pagination: { pageParam: "offset", totalPath: "/count" },
+    });
+    expect(calls[0].url).toBe(
+      "https://pokeapi.example/api/v2/pokemon?offset=12&limit=12&type=grass",
+    );
+    expect(Array.isArray(result)).toBe(false);
+    const pagedResult = pagedOf(result);
+    expect(pagedResult.rows).toHaveLength(12);
+    expect(pagedResult.page).toEqual({
+      page: 1,
+      maxPage: 2, // ceil(30/12) - 1
+      hasNext: true, // 1 < 2
+      hasPrev: true,
+    });
+  });
+
+  test('pageParam "page" sends the 1-based page instead of an offset', async () => {
+    const { fetchImpl, calls } = fakeFetch(() => json(envelope()));
+    const adapter = await pagedAdapter(fetchImpl, {});
+    const result = await adapter.list(paged, {
+      params: { page: 1, limit: 6 },
+      pagination: { pageParam: "page" },
+    });
+    expect(calls[0].url).toBe(
+      "https://pokeapi.example/api/v2/pokemon?page=2&limit=6",
+    );
+    const info = pagedOf(result).page;
+    expect(info).toMatchObject({ page: 1, maxPage: null, hasPrev: true });
+    expect(info.hasNext).toBe(false); // no totalPath → envelope's next: null
+  });
+
+  test("without totalPath the envelope's next answers hasNext", async () => {
+    const { fetchImpl } = fakeFetch(() =>
+      json(envelope({ count: undefined, next: "https://x/next" })),
+    );
+    const adapter = await pagedAdapter(fetchImpl, {});
+    const result = await adapter.list(paged, {
+      params: { page: 0, limit: 12 },
+      pagination: {},
+    });
+    expect(pagedOf(result).page).toMatchObject({
+      maxPage: null,
+      hasNext: true,
+    });
+    // A null next on the envelope reads as "last page"…
+    const { fetchImpl: lastFetch } = fakeFetch(() => json(envelope()));
+    const lastPage = await pagedAdapter(lastFetch, {});
+    const result2 = await lastPage.list(paged, {
+      params: { page: 3, limit: 12 },
+      pagination: {},
+    });
+    expect(pagedOf(result2).page).toMatchObject({
+      hasNext: false,
+      hasPrev: true,
+    });
+  });
+
+  test("no total and no next → the self-correcting full-page probe", async () => {
+    const { fetchImpl } = fakeFetch(() => json({ results: rows12 }));
+    const adapter = await pagedAdapter(fetchImpl, {});
+    const full = await adapter.list(paged, {
+      params: { page: 0, limit: 12 },
+      pagination: {},
+    });
+    expect(pagedOf(full).page).toMatchObject({
+      maxPage: null,
+      hasNext: true, // full page MAY have a successor
+    });
+    // A short page is provably the last — the probe flips off.
+    const { fetchImpl: shortFetch } = fakeFetch(() =>
+      json({ results: rows12.slice(0, 5) }),
+    );
+    const short = await pagedAdapter(shortFetch, {});
+    const result = await short.list(paged, {
+      params: { page: 5, limit: 12 },
+      pagination: {},
+    });
+    expect(pagedOf(result).page).toMatchObject({
+      hasNext: false, // short page — provably the last
+    });
+  });
+
+  test("a paged read without a sane limit param is a malformed error", async () => {
+    const { fetchImpl } = fakeFetch(() => json(envelope()));
+    const adapter = await pagedAdapter(fetchImpl, {});
+    await expect(
+      adapter.list(paged, {
+        params: { page: 0 },
+        pagination: {},
+      }),
+    ).rejects.toMatchObject({ code: DATA_ERROR_CODES.malformed });
+  });
+
+  test("non-paged lists with params pass them through raw", async () => {
+    const { fetchImpl, calls } = fakeFetch(() => json([lamp]));
+    const adapter = await ready(fetchImpl);
+    await adapter.initialize();
+    await listRows(adapter, resource, { params: { q: "lamp", page: 2 } });
+    expect(calls[0].url).toBe("https://shop.example/v1/products?q=lamp&page=2");
+  });
+
+  test("the keyed lane forwards pathname + search through the proxy body", async () => {
+    const { fetchImpl, calls } = fakeFetch(() => json(envelope()));
+    const adapter = createApiAdapter(
+      {
+        ...pagedBase,
+        config: {
+          ...pagedBase.config,
+          auth: { type: "bearer", ref: "pokedex" },
+        },
+      },
+      context,
+      () => fetchImpl,
+    );
+    await adapter.initialize();
+    await adapter.list(paged, {
+      params: { page: 2, limit: 12 },
+      pagination: { pageParam: "offset" },
+    });
+    expect(calls[0].url).toBe("/api/data-proxy");
+    expect(calls[0].body).toMatchObject({
+      ref: "pokedex",
+      path: "/api/v2/pokemon?offset=24&limit=12",
+      method: "GET",
+    });
   });
 });

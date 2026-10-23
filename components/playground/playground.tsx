@@ -113,6 +113,11 @@ import {
 } from "@/lib/data-sources/validate";
 import { withDataBlocksFromLines } from "@/lib/data-sources/stream-blocks";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
+import {
+  overlayUrlState,
+  specUrlSync,
+  urlSearchAfterStateChange,
+} from "@/lib/playground/url-sync";
 import { AddLanguageDialog } from "@/components/playground/add-language-dialog";
 import {
   SPEC_STATE_KEYS,
@@ -495,9 +500,21 @@ export function Playground({ initialRef }: PlaygroundProps) {
     // The design's language switcher highlights state.locale — keep it on
     // the language the canvas actually renders (the provider diffs this
     // into its runtime state; the stored spec is never touched).
-    return SPEC_STATE_KEYS.locale in merged
-      ? { ...merged, [SPEC_STATE_KEYS.locale]: contentLang }
-      : merged;
+    const seeded =
+      SPEC_STATE_KEYS.locale in merged
+        ? { ...merged, [SPEC_STATE_KEYS.locale]: contentLang }
+        : merged;
+    // Deep-link in (052, D9): declared urlSync keys overlay the seed
+    // BEFORE the canvas mounts — the first paged read already runs at the
+    // linked page. Client-only: window is absent during SSR (the seed
+    // renders there and the overlay joins on hydration).
+    return typeof window === "undefined"
+      ? seeded
+      : overlayUrlState(
+          seeded,
+          window.location.search,
+          specUrlSync(displayedSpec),
+        );
   }, [displayedSpec, contentLang]);
   // The design's own switcher writes state.locale at runtime — treat that as
   // a content-language selection so canvas and pill always agree (the pill's
@@ -508,6 +525,27 @@ export function Playground({ initialRef }: PlaygroundProps) {
   const handleCanvasStateChange = (
     changes: Array<{ path: string; value: unknown }>,
   ) => {
+    // Shareable deep links (052, D9): mirror the spec's declared urlSync
+    // keys into the browser URL in place (replaceState — no history
+    // spam), whatever else the change batch carries.
+    const urlSync = displayedSpec ? specUrlSync(displayedSpec) : [];
+    if (urlSync.length > 0 && typeof window !== "undefined") {
+      const nextSearch = urlSearchAfterStateChange(
+        window.location.search,
+        changes,
+        urlSync,
+      );
+      if (nextSearch !== null && nextSearch !== window.location.search) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${nextSearch}${window.location.hash}`,
+        );
+      }
+    }
+    // Locale pill: only for specs WITHOUT their own switcher (decision
+    // 13 — running both would double-fire).
+    if (displayedSpec && hasSwitchLanguageBinding(displayedSpec)) return;
     const change = changes.find(
       (candidate) =>
         candidate.path.replace(/^\//, "") === SPEC_STATE_KEYS.locale,
@@ -1357,11 +1395,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
     <JSONUIProvider
       registry={registry}
       initialState={canvasState}
-      onStateChange={
-        displayedSpec && hasSwitchLanguageBinding(displayedSpec)
-          ? undefined
-          : handleCanvasStateChange
-      }
+      onStateChange={handleCanvasStateChange}
       handlers={handlers}
       validationFunctions={{}}
       functions={PLAYGROUND_FUNCTIONS}

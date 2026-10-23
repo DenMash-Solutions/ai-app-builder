@@ -14,6 +14,9 @@ import type { Spec } from "@json-render/core";
 /** The catalog action that creates/updates/deletes records (D2). */
 export const DATA_MUTATE_ACTION = "data_mutate";
 
+/** The catalog action that re-runs a declared query (plan 052). */
+export const DATA_READ_ACTION = "data_read";
+
 /** Storage providers the adapter registry knows (D3; M2 database, M3 API). */
 export const DATA_SOURCE_PROVIDERS = {
   localStorage: "localStorage",
@@ -41,6 +44,40 @@ export const MUTATION_OPS = {
 } as const;
 
 export type MutationOp = (typeof MUTATION_OPS)[keyof typeof MUTATION_OPS];
+
+/**
+ * How a paged read spells its position in the REQUEST (plan 052): an
+ * offset-style API takes `?offset=page×limit&limit=…` (PokéAPI), a
+ * page-native API takes `?page=<1-based>&limit=…`.
+ */
+export const PAGINATION_PAGE_PARAMS = {
+  offset: "offset",
+  page: "page",
+} as const;
+
+export type PaginationPageParam =
+  (typeof PAGINATION_PAGE_PARAMS)[keyof typeof PAGINATION_PAGE_PARAMS];
+
+/** `queries.<name>.pagination` — the paged-read declaration (052, D5). */
+const paginationSchema = z
+  .object({
+    pageParam: z
+      .enum([PAGINATION_PAGE_PARAMS.offset, PAGINATION_PAGE_PARAMS.page])
+      .optional()
+      .describe(
+        '"offset" (default) sends the 0-based bound page as ?offset=page×limit; "page" sends it as a 1-based ?page=',
+      ),
+    totalPath: z
+      .string()
+      .regex(/^\/.+/, 'must be a "/"-prefixed JSON pointer')
+      .optional()
+      .describe(
+        'JSON pointer to the total row count in the response envelope, e.g. "/count" — without it the mirror still derives hasNext from the envelope\'s "next" field or a full-page probe',
+      ),
+  })
+  .strict();
+
+export type PaginationConfig = z.infer<typeof paginationSchema>;
 
 /**
  * Config keys that look like credentials are REJECTED by validation (D3):
@@ -167,7 +204,14 @@ export const queryDefSchema = z
     params: z
       .record(z.string(), z.unknown())
       .optional()
-      .describe('Operation params, e.g. {"id": "…"} for "get"'),
+      .describe(
+        'Operation params — literals or {"$state": "/path"} expressions resolved at run time, e.g. {"id": "…" } for "get" or {"page": {"$state": "/page"}, "limit": {"$state": "/limit"}} for a paged list',
+      ),
+    pagination: paginationSchema
+      .optional()
+      .describe(
+        "Paged read (list only): bound page/limit params are translated into the API's request shape and the mirror gains page/maxPage/hasNext/hasPrev for Next/Prev UI",
+      ),
   })
   .strict();
 
@@ -196,6 +240,37 @@ export const dataMutateParamsSchema = z
   .strict();
 
 export type DataMutateParams = z.infer<typeof dataMutateParamsSchema>;
+
+/** Params of the `data_read` action (052, D2). */
+export const dataReadParamsSchema = z
+  .object({
+    query: z.string().min(1).describe("Declared query name to re-run"),
+  })
+  .strict();
+
+export type DataReadParams = z.infer<typeof dataReadParamsSchema>;
+
+/** Pagination position a paged read derives (052, D5). */
+export interface QueryPageInfo {
+  /** 0-based page the read served (the bound `page` param). */
+  page: number;
+  /** Last 0-based page, or null when the API exposes no total. */
+  maxPage: number | null;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+/** A paged adapter read: rows plus their derived position. */
+export interface PagedRows {
+  rows: Record<string, unknown>[];
+  page: QueryPageInfo;
+}
+
+/** Per-read options an adapter may honor (052 — api paged reads). */
+export interface ListReadOptions {
+  params?: Record<string, unknown>;
+  pagination?: PaginationConfig;
+}
 
 /**
  * The spec's data blocks as they ride along the Spec type. `Spec` has no
@@ -255,6 +330,13 @@ export interface QueryMirror {
   /** True while a `data_mutate` write for this query's resource (and its
    *  post-write refresh) is running — specs branch busy UI on it. */
   pending: boolean;
+  /** Paged reads only (052): derived position — `page` is 0-based,
+   *  `maxPage` null when the API exposes no total; `hasNext`/`hasPrev`
+   *  drive Prev/Next visibility. Absent for non-paged queries. */
+  page?: number;
+  maxPage?: number | null;
+  hasNext?: boolean;
+  hasPrev?: boolean;
 }
 
 /** Reserved state namespace the query manager owns (D1). */

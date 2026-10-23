@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { AdapterRegistry } from "./adapter-registry";
 import { createLocalStorageAdapter } from "./local-storage-adapter";
-import { QueryManager, resolveRecordId } from "./query-manager";
+import {
+  QueryManager,
+  isStateParam,
+  resolveQueryParams,
+  resolveRecordId,
+} from "./query-manager";
 import {
   DATA_ERROR_CODES,
   DATA_SOURCE_PROVIDERS,
@@ -10,7 +15,7 @@ import {
 } from "./types";
 import type { DataSourceAdapter, AdapterCapabilities } from "./adapter";
 import type { QueryManagerConfig } from "./query-manager";
-import type { QueryMirror } from "./types";
+import type { ListReadOptions, PagedRows, QueryMirror } from "./types";
 import type { StateModel } from "@json-render/core";
 
 /** Map-backed Storage double (no DOM needed — plan T5/T6 DI). */
@@ -231,7 +236,9 @@ describe("QueryManager", () => {
     manager.attach(configB);
     release();
     await tick();
-    expect(listCalls()).toBe(1);
+    // The in-flight read is shared; the skipped attach coalesces into ONE
+    // trailing run — with the LAST requester's context (052).
+    expect(listCalls()).toBe(2);
   });
 
   test("a read that finishes after detach never writes (stale-write guard)", async () => {
@@ -400,5 +407,237 @@ describe("pending busy flag (action-loading-states)", () => {
     // A flag stuck true (surface unmounted mid-write) must not stamp the
     // next attach's mirrors — otherwise the design opens stuck-busy.
     expect(fresh[0].value.pending).toBe(false);
+  });
+});
+
+describe("QueryManager paged reads + data_read (plan 052)", () => {
+  /** Stub adapter whose list/get record their inputs (052 seams). */
+  function pagedStub(calls: {
+    lists: Array<ListReadOptions | undefined>;
+    gets: string[];
+    listImpl: (
+      opts: ListReadOptions | undefined,
+    ) => Promise<Record<string, unknown>[] | PagedRows>;
+    getImpl?: (id: string) => Promise<Record<string, unknown> | null>;
+  }) {
+    const capabilities: AdapterCapabilities = {
+      list: true,
+      get: true,
+      create: true,
+      update: true,
+      delete: true,
+    };
+    const adapter: DataSourceAdapter = {
+      provider: DATA_SOURCE_PROVIDERS.localStorage,
+      capabilities,
+      initialize: async () => {},
+      list: async (_resource, opts) => {
+        calls.lists.push(opts);
+        return calls.listImpl(opts);
+      },
+      get: async (_resource, id) => {
+        calls.gets.push(id);
+        return calls.getImpl ? calls.getImpl(id) : { title: `record-${id}` };
+      },
+      create: async (_resource, input) => input,
+      update: async (_resource, _id, patch) => patch,
+      delete: async () => {},
+      dispose: async () => {},
+    };
+    return new AdapterRegistry({
+      [DATA_SOURCE_PROVIDERS.localStorage]: () => adapter,
+    });
+  }
+
+  const pagedInfo = (page: number, maxPage: number | null) => ({
+    page,
+    maxPage,
+    hasNext: maxPage === null ? true : page < maxPage,
+    hasPrev: page > 0,
+  });
+
+  function pagedConfig(
+    writes: Write[],
+    read?: (path: string) => unknown,
+  ): QueryManagerConfig {
+    return {
+      namespace: "entry-1",
+      dataSources: { localTodos: { provider: "localStorage", config: {} } },
+      resources: {
+        todos: {
+          dataSource: "localTodos",
+          schema: { title: "string" },
+        },
+      },
+      queries: {
+        todoList: {
+          resource: "todos",
+          operation: "list",
+          params: { page: { $state: "/page" }, limit: 12 },
+          pagination: { totalPath: "/count" },
+        },
+      },
+      write: (path, value) => {
+        writes.push({ path, value: value as QueryMirror });
+      },
+      read,
+    };
+  }
+
+  test("resolves $state params through the read channel and mirrors the position", async () => {
+    const calls = {
+      lists: [] as Array<ListReadOptions | undefined>,
+      gets: [] as string[],
+      listImpl: async () => ({
+        rows: [{ title: "a" }, { title: "b" }],
+        page: pagedInfo(1, 4),
+      }),
+    };
+    const writes: Write[] = [];
+    const manager = new QueryManager(pagedStub(calls));
+    manager.attach(
+      pagedConfig(writes, (path) => (path === "/page" ? 1 : undefined)),
+    );
+    await tick();
+    expect(calls.lists[0]).toEqual({
+      params: { page: 1, limit: 12 },
+      pagination: { totalPath: "/count" },
+    });
+    const last = writes[writes.length - 1].value;
+    expect(last.status).toBe(QUERY_STATUSES.success);
+    expect(last.count).toBe(2);
+    expect(last.page).toBe(1);
+    expect(last.maxPage).toBe(4);
+    expect(last.hasNext).toBe(true);
+    expect(last.hasPrev).toBe(true);
+  });
+
+  test("get resolves a $state params.id through the same channel", async () => {
+    const calls = {
+      lists: [] as Array<ListReadOptions | undefined>,
+      gets: [] as string[],
+      listImpl: async () => [],
+    };
+    const writes: Write[] = [];
+    const manager = new QueryManager(pagedStub(calls));
+    manager.attach({
+      ...pagedConfig(writes, (path) => (path === "/record" ? "r7" : undefined)),
+      queries: {
+        todoItem: {
+          resource: "todos",
+          operation: "get",
+          params: { id: { $state: "/record" } },
+        },
+      },
+    });
+    await tick();
+    expect(calls.gets).toEqual(["r7"]);
+  });
+
+  test("non-paged queries keep the bare-array mirror (no pagination fields)", async () => {
+    const calls = {
+      lists: [] as Array<ListReadOptions | undefined>,
+      gets: [] as string[],
+      listImpl: async () => [{ title: "solo" }],
+    };
+    const writes: Write[] = [];
+    const manager = new QueryManager(pagedStub(calls));
+    manager.attach({
+      ...pagedConfig(writes),
+      queries: { todoList: { resource: "todos", operation: "list" } },
+    });
+    await tick();
+    expect(calls.lists[0]).toBeUndefined(); // no params → no options
+    const last = writes[writes.length - 1].value;
+    expect(last.page).toBeUndefined();
+    expect(last.hasNext).toBeUndefined();
+    expect(last.count).toBe(1);
+  });
+
+  test("runQuery re-runs the named query with freshly resolved params", async () => {
+    let page = 0;
+    const calls = {
+      lists: [] as Array<ListReadOptions | undefined>,
+      gets: [] as string[],
+      listImpl: async (opts?: ListReadOptions) => ({
+        rows: [{ title: "x" }],
+        page: pagedInfo(Number(opts?.params?.page ?? 0), 9),
+      }),
+    };
+    const writes: Write[] = [];
+    const manager = new QueryManager(pagedStub(calls));
+    manager.attach(pagedConfig(writes, () => page));
+    await tick();
+    page = 3;
+    await manager.runQuery("entry-1", "todoList");
+    expect(calls.lists).toHaveLength(2);
+    expect(calls.lists[1]?.params?.page).toBe(3);
+    const last = writes[writes.length - 1].value;
+    expect(last.page).toBe(3);
+  });
+
+  test("a runQuery during an in-flight read coalesces into one trailing run", async () => {
+    let page = 0;
+    let started = 0;
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((r) => {
+      releaseFirst = r;
+    });
+    const calls = {
+      lists: [] as Array<ListReadOptions | undefined>,
+      gets: [] as string[],
+      listImpl: async (opts?: ListReadOptions) => {
+        started += 1;
+        const pageNo = Number(opts?.params?.page ?? 0);
+        if (started === 1) await firstGate; // the attach read blocks
+        return { rows: [{ title: `p${pageNo}` }], page: pagedInfo(pageNo, 9) };
+      },
+    };
+    const writes: Write[] = [];
+    const manager = new QueryManager(pagedStub(calls));
+    manager.attach(pagedConfig(writes, () => page));
+    await tick(); // attach read in flight (blocked on the gate)
+    page = 2;
+    void manager.runQuery("entry-1", "todoList");
+    page = 4;
+    void manager.runQuery("entry-1", "todoList"); // coalesces
+    releaseFirst();
+    await tick();
+    await tick();
+    expect(started).toBe(2); // initial + ONE trailing run
+    expect(calls.lists[1]?.params?.page).toBe(4); // latest state won
+    const last = writes[writes.length - 1].value;
+    expect(last.page).toBe(4);
+  });
+
+  test("runQuery ignores unknown query names", async () => {
+    const calls = {
+      lists: [] as Array<ListReadOptions | undefined>,
+      gets: [] as string[],
+      listImpl: async () => [],
+    };
+    const writes: Write[] = [];
+    const manager = new QueryManager(pagedStub(calls));
+    manager.attach(pagedConfig(writes));
+    await tick();
+    await manager.runQuery("entry-1", "nope");
+    expect(calls.lists).toHaveLength(1); // only the attach read
+  });
+
+  test("resolveQueryParams keeps literals, resolves $state, needs a channel", () => {
+    const read = (path: string) => (path === "/page" ? 7 : undefined);
+    expect(
+      resolveQueryParams({ page: { $state: "/page" }, limit: 12 }, read),
+    ).toEqual({ page: 7, limit: 12 });
+    expect(resolveQueryParams({ id: "abc" }, read)).toEqual({ id: "abc" });
+    expect(resolveQueryParams(undefined, read)).toEqual({});
+    // No channel → the expression passes through (the adapter skips objects).
+    expect(resolveQueryParams({ x: { $state: "/page" } }, undefined)).toEqual({
+      x: { $state: "/page" },
+    });
+    expect(isStateParam({ $state: "/p" })).toBe(true);
+    expect(isStateParam({ $state: "/p", extra: 1 })).toBe(false);
+    expect(isStateParam("x")).toBe(false);
+    expect(isStateParam(null)).toBe(false);
   });
 });

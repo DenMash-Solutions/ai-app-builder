@@ -401,6 +401,7 @@ describe("supabase adapter", () => {
       done: true,
     });
     const records = await adapter.list(resource);
+    if (!Array.isArray(records)) throw new Error("expected bare rows");
     expect(records.map((r) => r.id)).toEqual([first.id, second.id]);
   });
 
@@ -413,7 +414,9 @@ describe("supabase adapter", () => {
       done: true,
     });
     expect(updated).toEqual({ ...record, done: true });
-    expect((await adapter.list(resource))[0]).toEqual(updated);
+    const reloaded = await adapter.list(resource);
+    if (!Array.isArray(reloaded)) throw new Error("expected bare rows");
+    expect(reloaded[0]).toEqual(updated);
   });
 
   test("update/delete on a missing id become notFound", async () => {

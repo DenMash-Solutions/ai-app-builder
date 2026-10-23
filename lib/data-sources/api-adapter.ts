@@ -7,8 +7,20 @@ import { checkApiAuth } from "./api-auth";
 import type { ApiKeyAuth } from "./api-auth";
 import { checkApiBaseUrl, normalizeApiBaseUrl } from "./api-url";
 import { validateRecord } from "./record-validate";
-import { DATA_SOURCE_PROVIDERS, DATA_ERROR_CODES, DataError } from "./types";
-import type { DataSourceDef, NamedResourceDef } from "./types";
+import {
+  DATA_SOURCE_PROVIDERS,
+  DATA_ERROR_CODES,
+  DataError,
+  PAGINATION_PAGE_PARAMS,
+} from "./types";
+import type {
+  DataSourceDef,
+  ListReadOptions,
+  NamedResourceDef,
+  PaginationConfig,
+  PagedRows,
+  QueryPageInfo,
+} from "./types";
 
 /**
  * Milestone 3 adapter (docs/plan/048-api-data-source): a plain HTTPS JSON
@@ -84,14 +96,17 @@ const defaultResolveFetch = (): ApiFetch | null =>
  */
 function proxyFetchFor(ref: string, underlying: ApiFetch): ApiFetch {
   return async (url: string, init: RequestInit = {}) => {
-    const path = new URL(url).pathname;
+    // Path + querystring (052): the client's own params (page/limit/…)
+    // are not secrets — they ride the proxy body verbatim so a keyed
+    // paged read reaches the upstream intact.
+    const { pathname, search } = new URL(url);
     const verb = (init.method ?? "GET").toUpperCase();
     const response = await underlying(DATA_PROXY_PATH, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ref,
-        path,
+        path: `${pathname}${search}`,
         method: verb,
         body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
       }),
@@ -238,6 +253,103 @@ function pickPointer(value: unknown, pointer: string): unknown {
 const ITEM_DETAIL_PLACEHOLDER = "{id}";
 
 /**
+ * Bound-param coercion (plan 052): seeded state arrives as numbers, but a
+ * URL-derived or stringly-typed value must still translate — numeric
+ * strings become numbers, everything else reads as not-a-number.
+ */
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+/**
+ * The request search for one paged/unpaged list (plan 052, D5/D10): the
+ * query def's run-resolved `params` become querystring entries — literals
+ * and bound values alike — and, when `pagination` is declared, the bound
+ * 0-based `page`/`limit` pair is translated into the API's request shape
+ * (offset-style `?offset=page×limit&limit=…` or 1-based `?page=&limit=…`;
+ * the arithmetic lives HERE because specs cannot compute). Paged reads
+ * require a sane numeric limit — a spec that binds neither page nor limit
+ * cannot page.
+ */
+function buildListSearch(
+  params: Record<string, unknown>,
+  pagination: PaginationConfig | undefined,
+): { search: string; page: number; limit: number | null } {
+  const search = new URLSearchParams();
+  let page = 0;
+  let limit: number | null = null;
+  if (pagination !== undefined) {
+    page = finiteNumber(params.page) ?? 0;
+    limit = finiteNumber(params.limit);
+    if (limit === null || limit <= 0) {
+      throw new DataError(
+        DATA_ERROR_CODES.malformed,
+        'A paged list needs a positive numeric "limit" param on the query, e.g. {"limit": {"$state": "/limit"}}.',
+      );
+    }
+    if (
+      (pagination.pageParam ?? PAGINATION_PAGE_PARAMS.offset) ===
+      PAGINATION_PAGE_PARAMS.page
+    ) {
+      search.set("page", String(page + 1)); // page-native APIs are 1-based
+    } else {
+      search.set("offset", String(page * limit)); // offset-style (PokéAPI)
+    }
+    search.set("limit", String(limit));
+  }
+  for (const [key, value] of Object.entries(params)) {
+    if (pagination !== undefined && (key === "page" || key === "limit")) {
+      continue; // already translated above
+    }
+    if (value === undefined || value === null) continue;
+    if (typeof value === "object") continue; // params are scalar or nothing
+    search.set(key, String(value));
+  }
+  const query = search.toString();
+  return { search: query === "" ? "" : `?${query}`, page, limit };
+}
+
+/**
+ * The mirror's derived position for one paged read (plan 052, D5) —
+ * every number here is arithmetic the SPEC cannot do:
+ * - `totalPath` (when declared) unwraps the envelope's total row count →
+ *   exact `maxPage`;
+ * - else an envelope `next` field (null = last page) answers `hasNext`;
+ * - else the self-correcting probe: a full page MAY have a successor, so
+ *   one extra empty fetch flips it off on an exact-last-full page.
+ * `hasPrev` is just "not the first page".
+ */
+function derivePageInfo(
+  payload: unknown,
+  rows: Record<string, unknown>[],
+  context: { page: number; limit: number | null; totalPath?: string },
+): QueryPageInfo {
+  const { page, limit, totalPath } = context;
+  const total =
+    totalPath !== undefined
+      ? finiteNumber(pickPointer(payload, totalPath))
+      : null;
+  const maxPage =
+    total !== null && limit !== null && limit > 0
+      ? Math.max(0, Math.ceil(total / limit) - 1)
+      : null;
+  let hasNext: boolean;
+  if (maxPage !== null) {
+    hasNext = page < maxPage;
+  } else if (isPlainObject(payload) && "next" in payload) {
+    hasNext = payload.next !== null && payload.next !== undefined;
+  } else {
+    hasNext = limit !== null ? rows.length === limit : rows.length > 0;
+  }
+  return { page, maxPage, hasNext, hasPrev: page > 0 };
+}
+
+/**
  * The id an `itemDetail` read uses for one list row: the row's own `id`
  * (string or number) when present, else the last path segment of a string
  * `row.url` (paginated list conventions — `.../pokemon/25/` → `25`).
@@ -353,8 +465,8 @@ export function createApiAdapter(
     return { base: baseUrl, fetch: fetchImpl };
   };
 
-  const collectionUrl = (resource: NamedResourceDef): string =>
-    `${requireReady().base}/${encodeURIComponent(resolveCollection(resource))}`;
+  const collectionUrl = (resource: NamedResourceDef, search = ""): string =>
+    `${requireReady().base}/${encodeURIComponent(resolveCollection(resource))}${search}`;
 
   const recordUrl = (resource: NamedResourceDef, id: string): string =>
     `${collectionUrl(resource)}/${encodeURIComponent(id)}`;
@@ -457,8 +569,14 @@ export function createApiAdapter(
         authRef !== undefined ? proxyFetchFor(authRef, resolved) : resolved;
     },
 
-    async list(resource: NamedResourceDef): Promise<Record<string, unknown>[]> {
-      const payload = await getJson(collectionUrl(resource));
+    async list(
+      resource: NamedResourceDef,
+      options?: ListReadOptions,
+    ): Promise<Record<string, unknown>[] | PagedRows> {
+      const params = options?.params ?? {};
+      const pagination = options?.pagination;
+      const { search, page, limit } = buildListSearch(params, pagination);
+      const payload = await getJson(collectionUrl(resource, search));
       const rows =
         itemsPath !== undefined ? pickPointer(payload, itemsPath) : payload;
       if (!Array.isArray(rows)) {
@@ -480,7 +598,7 @@ export function createApiAdapter(
           getJson(`${base}${path}`),
         );
       }
-      return detailed.map((row, index) => {
+      const validated = detailed.map((row, index) => {
         if (!isPlainObject(row)) {
           throw new DataError(
             DATA_ERROR_CODES.malformed,
@@ -490,6 +608,15 @@ export function createApiAdapter(
         validateRecord(resource, row);
         return row;
       });
+      if (pagination === undefined) return validated;
+      return {
+        rows: validated,
+        page: derivePageInfo(payload, validated, {
+          page,
+          limit,
+          totalPath: pagination.totalPath,
+        }),
+      };
     },
 
     async get(

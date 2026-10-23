@@ -269,3 +269,47 @@ Incomplete or invalid pairs (http on a public host, a path component, userinfo, 
 - Out of scope for v1 (plan 050): per-user BYO keys (Supabase + UI), query-param auth, OAuth — the transport swap behind the adapter seam is the compatible foundation for all three.
 
 e2e: the MSW worker stands in for the proxy (`*/api/data-proxy` handler) and asserts the client call carries **no** auth header; unit tests cover the route's origin enforcement, key redaction, caps and verb allowlist (`app/api/data-proxy/route.test.ts`, `lib/data-proxy/refs.test.ts`).
+
+## Server-side pagination (`docs/plan/052-server-pagination/plan.md`)
+
+Client-side paging (`sliceItems`/`stepPage` over a fully-fetched list, plan 041) can't scale past what one request returned. A paged query instead binds the **page position to spec state** and lets the *API* do the slicing:
+
+```jsonc
+"state": { "page": 0, "limit": 12 },          // page is 0-based in state
+"queries": {
+  "pokedexList": {
+    "resource": "pokemon",
+    "operation": "list",
+    "params": {                                // bound at run time via the state-read channel
+      "page": { "$state": "/page" },
+      "limit": { "$state": "/limit" }
+    },
+    "pagination": { "pageParam": "offset", "totalPath": "/count" }
+  }
+}
+```
+
+- **Request translation** (`pageParam`, decision 10) — the adapter does the arithmetic specs can't: `"offset"` (default) sends `?offset=page×limit&limit=…` (PokéAPI-style), `"page"` sends the **1-based** `?page=state+1&limit=…` for page-native APIs. Other bound params ride along untouched (future filters share the same `params` record).
+- **`params` resolution** — values may be `{"$state": "/path"}` expressions; the query manager resolves them through the surface's live state at run time (attach *and* `data_read`), so `get` may bind `params.id` the same way.
+- **Mirror fields** — a paged read's `/queries/<name>` mirror gains `page` (0-based), `maxPage` (`null` when the API exposes no total), `hasNext`/`hasPrev`. `hasNext` derives from, in order: the declared `totalPath` JSON pointer (exact), the envelope's own `next` field (`null` = last page), else a self-correcting full-page probe (a full page *may* have a successor — one extra empty fetch flips it off).
+- **Re-running: `data_read`** — `{ "action": "data_read", "params": { "query": "name" } }` re-runs one declared query (registered at runtime by `<QueryLoader>`, same lane as `data_mutate`). The canonical UI keeps `setState` pure and points a watcher at the page state:
+
+```jsonc
+"watch": { "/page": { "action": "data_read", "params": { "query": "pokedexList" } } },
+// Next/Prev:
+{ "type": "Button", "props": { "label": "Next" },
+  "visible": { "$state": "/queries/pokedexList/hasNext" },
+  "on": { "press": { "action": "setState", "params": {
+    "statePath": "/page",
+    "value": { "$computed": "stepPage",
+               "args": { "page": { "$state": "/page" },
+                         "maxPage": { "$state": "/queries/pokedexList/maxPage" },
+                         "delta": 1 } } } } } }
+```
+
+  `stepPage`/`pageLabel` now accept the mirror's direct `{ page, maxPage }` args (a `null` maxPage leaves the top unclamped — `hasNext` hides Next — and the label reads `"Page 3"` without the "of Y" half). Rapid page changes **coalesce into one trailing fetch** that re-resolves params when it runs (last state wins), and the supersession counter keeps only the freshest result.
+- **URL deep links (`urlSync`)** — `"urlSync": ["page", "limit"]` at the spec root projects those keys into the browser query string: `?page=2&limit=12` overlays the state seed *before* the first read (1-based URL ↔ 0-based state, ±1 in `lib/playground/url-sync.ts`, never in the spec), and page changes write back via `history.replaceState` (no history spam). Playground only; `popstate` restore is out of scope.
+- **Validation** — `pagination` is list-only, `totalPath` must be a `"/"`-prefixed pointer, and a paged query must bind both `page` and `limit` params.
+- **Limits** — offset/1-based-page shapes only (no cursors); transport is the same keyed/keyless adapter seam, and a keyed paged read forwards `pathname + search` through the proxy body.
+
+Demo: `demo/pokedex-keyed-spec.json` — paged PokéAPI list through the keyed wrapper, Next/Prev + label, and a shareable `?page=…&limit=…` URL.

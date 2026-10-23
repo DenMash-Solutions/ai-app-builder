@@ -1,9 +1,17 @@
 {
   "root": "dex-root",
+  "state": { "page": 0, "limit": 12 },
+  "urlSync": ["page", "limit"],
   "elements": {
     "dex-root": {
       "type": "Stack",
       "props": { "direction": "vertical", "gap": "lg" },
+      "watch": {
+        "/page": {
+          "action": "data_read",
+          "params": { "query": "pokedexList" }
+        }
+      },
       "children": [
         "dex-heading",
         "dex-note",
@@ -11,13 +19,14 @@
         "dex-loading",
         "dex-error",
         "dex-empty",
-        "dex-grid"
+        "dex-grid",
+        "dex-footer"
       ]
     },
     "dex-heading": {
       "type": "Heading",
       "props": {
-        "text": "Pokédex — list first, then per-card detail",
+        "text": "Pokédex — paged list, then per-card detail",
         "level": "h1"
       },
       "children": []
@@ -25,14 +34,22 @@
     "dex-note": {
       "type": "Text",
       "props": {
-        "text": "One list read through the keyed proxy, then the adapter fans out one GET /pokemon/{id} per row through the same proxy — every card's color, chips, label and artwork come from its own detail call.",
+        "text": "One paged list read through the keyed proxy (page/limit bound to state → ?offset=…&limit=…), then the adapter fans out one GET /pokemon/{id} per row through the same proxy. Next/Prev move /page and a watcher re-runs the query; the URL mirrors the page, so ?page=2&limit=12 is a shareable deep link.",
         "className": "dex-note"
       },
       "children": []
     },
     "dex-count": {
       "type": "Text",
-      "props": { "text": { "$state": "/queries/pokedexList/count" } },
+      "props": {
+        "text": {
+          "$computed": "pageLabel",
+          "args": {
+            "page": { "$state": "/page" },
+            "maxPage": { "$state": "/queries/pokedexList/maxPage" }
+          }
+        }
+      },
       "children": []
     },
     "dex-loading": {
@@ -64,6 +81,75 @@
       "props": { "columns": 3, "gap": "md", "className": "grid-cols-2" },
       "repeat": { "statePath": "/queries/pokedexList/data", "key": "name" },
       "children": ["dex-cell"]
+    },
+    "dex-footer": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["dex-prev", "dex-page-label", "dex-next"]
+    },
+    "dex-prev": {
+      "type": "Button",
+      "props": { "label": "Previous", "leadingIcon": "chevron-left" },
+      "visible": { "$state": "/page", "gt": 0 },
+      "on": {
+        "press": {
+          "action": "setState",
+          "params": {
+            "statePath": "/page",
+            "value": {
+              "$computed": "stepPage",
+              "args": {
+                "page": { "$state": "/page" },
+                "maxPage": { "$state": "/queries/pokedexList/maxPage" },
+                "delta": -1
+              }
+            }
+          }
+        }
+      },
+      "children": []
+    },
+    "dex-page-label": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$computed": "pageLabel",
+          "args": {
+            "page": { "$state": "/page" },
+            "maxPage": { "$state": "/queries/pokedexList/maxPage" }
+          }
+        },
+        "className": "dex-page-label tabular-nums"
+      },
+      "children": []
+    },
+    "dex-next": {
+      "type": "Button",
+      "props": { "label": "Next", "trailingIcon": "chevron-right" },
+      "visible": { "$state": "/queries/pokedexList/hasNext" },
+      "on": {
+        "press": {
+          "action": "setState",
+          "params": {
+            "statePath": "/page",
+            "value": {
+              "$computed": "stepPage",
+              "args": {
+                "page": { "$state": "/page" },
+                "maxPage": { "$state": "/queries/pokedexList/maxPage" },
+                "delta": 1
+              }
+            }
+          }
+        }
+      },
+      "children": []
     },
     "dex-cell": {
       "type": "Card",
@@ -166,6 +252,14 @@
     }
   },
   "queries": {
-    "pokedexList": { "resource": "pokemon", "operation": "list" }
+    "pokedexList": {
+      "resource": "pokemon",
+      "operation": "list",
+      "params": {
+        "page": { "$state": "/page" },
+        "limit": { "$state": "/limit" }
+      },
+      "pagination": { "pageParam": "offset", "totalPath": "/count" }
+    }
   }
 }

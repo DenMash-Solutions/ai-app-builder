@@ -1,5 +1,6 @@
 "use client";
 
+import { getByPath } from "@json-render/core";
 import type { Spec, StateModel } from "@json-render/core";
 import { useActions, useStateStore } from "@json-render/react";
 import { useEffect } from "react";
@@ -11,9 +12,11 @@ import {
 import {
   DATA_ERROR_CODES,
   DATA_MUTATE_ACTION,
+  DATA_READ_ACTION,
   DataError,
   MUTATION_OPS,
   dataMutateParamsSchema,
+  dataReadParamsSchema,
   hasDataBlocks,
   withDataBlocks,
 } from "@/lib/data-sources/types";
@@ -67,8 +70,11 @@ export function QueryLoader({ spec, namespace }: QueryLoaderProps) {
       resources: resources ?? {},
       queries: queries ?? {},
       write: (path, value) => set(path, value),
+      // Paged params resolve here (052): {"$state": "/page"} on a query
+      // def reads the provider's live state at run time.
+      read: (path) => getByPath(getSnapshot(), path),
     });
-  }, [spec, namespace, set]);
+  }, [spec, namespace, set, getSnapshot]);
 
   useEffect(() => {
     if (!hasDataBlocks(spec)) return;
@@ -136,6 +142,20 @@ export function QueryLoader({ spec, namespace }: QueryLoaderProps) {
         // refresh can never leave the resource's mirrors stuck busy.
         queryManager.setPending(namespace, resourceName, false);
       }
+    });
+    // Server pagination (052, D2): re-run one declared query — the
+    // watcher on a page-state path fires it; params resolve fresh, and a
+    // read already in flight coalesces into one trailing run.
+    registerHandler(DATA_READ_ACTION, async (params) => {
+      const parsed = dataReadParamsSchema.safeParse(params);
+      if (!parsed.success) {
+        console.warn(
+          "[data-sources] data_read received invalid params",
+          parsed.error.issues,
+        );
+        return;
+      }
+      await queryManager.runQuery(namespace, parsed.data.query);
     });
   }, [registerHandler, namespace, getSnapshot, spec]);
 

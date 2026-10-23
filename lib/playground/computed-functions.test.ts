@@ -197,3 +197,33 @@ describe("pageLabel (D2 computed position label)", () => {
     expect(PLAYGROUND_FUNCTIONS.pageLabel).toBe(pageLabel);
   });
 });
+
+describe("server pagination args (plan 052 — mirror-supplied bounds)", () => {
+  test("an explicit numeric maxPage wins over any source bound", () => {
+    expect(stepPage({ page: 3, maxPage: 2, delta: 1 })).toBe(2);
+    expect(stepPage({ page: 1, maxPage: 4, delta: -1 })).toBe(0);
+    expect(pageLabel({ page: 4, maxPage: 8, limit: 12 })).toBe("Page 5 of 9");
+    // Explicit bound beats a contradicting source array.
+    expect(
+      stepPage({ source: ["a", "b"], page: 1, limit: 2, maxPage: 5, delta: 1 }),
+    ).toBe(2);
+  });
+
+  test("a present-but-null maxPage (API with no total) leaves the top unclamped", () => {
+    // Mirror maxPage null → Next is driven by hasNext visibility, not math.
+    expect(stepPage({ page: 0, maxPage: null, delta: 1 })).toBe(1);
+    expect(stepPage({ page: 7, maxPage: undefined, delta: 2 })).toBe(9);
+    // …but the floor still holds (Previous clamps at the first page).
+    expect(stepPage({ page: 0, maxPage: null, delta: -1 })).toBe(0);
+  });
+
+  test("pageLabel drops the 'of Y' half when the total is unknown", () => {
+    expect(pageLabel({ page: 1, maxPage: null })).toBe("Page 2");
+    expect(pageLabel({ page: 0, maxPage: undefined })).toBe("Page 1");
+  });
+
+  test("omitting maxPage entirely keeps the legacy one-page degradation", () => {
+    expect(pageLabel({ page: 0, limit: 2 })).toBe("Page 1 of 1");
+    expect(stepPage({ page: 1, delta: 1 })).toBe(0);
+  });
+});

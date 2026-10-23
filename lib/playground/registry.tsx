@@ -3,7 +3,7 @@
 import { defineRegistry } from "@json-render/react";
 import type { Components } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
-import { DATA_MUTATE_ACTION } from "@/lib/data-sources/types";
+import { DATA_MUTATE_ACTION, DATA_READ_ACTION } from "@/lib/data-sources/types";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 import { playgroundCatalog } from "./catalog";
@@ -60,6 +60,8 @@ const { registry } = defineRegistry(playgroundCatalog, {
     // data_mutate handler is registered at runtime inside the provider
     // tree by <QueryLoader> (auth-actions precedent).
     [DATA_MUTATE_ACTION]: async () => {},
+    // Same for data_read (052): <QueryLoader> registers the real re-run.
+    [DATA_READ_ACTION]: async () => {},
   },
 });
 

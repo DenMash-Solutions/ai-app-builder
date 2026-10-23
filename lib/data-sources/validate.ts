@@ -5,6 +5,7 @@ import {
   API_CONFIG_KEYS,
   CREDENTIAL_CONFIG_KEYS,
   DATA_SOURCE_PROVIDERS,
+  QUERY_OPERATIONS,
   dataSourceDefSchema,
   queryDefSchema,
   resourceDefSchema,
@@ -224,6 +225,26 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
                 : "none"
             }).`,
           });
+        }
+        // Paged reads (052): the adapter needs both bound params to build
+        // the request (?offset=page×limit&limit=… or ?page=&limit=…).
+        const { pagination, operation, params } = parsed.data;
+        if (pagination !== undefined) {
+          if (operation !== QUERY_OPERATIONS.list) {
+            issues.push({
+              path: `${path}.pagination`,
+              message:
+                '"pagination" applies to list queries only — "get" reads one record by id.',
+            });
+          }
+          for (const required of ["page", "limit"]) {
+            if (!(required in (params ?? {}))) {
+              issues.push({
+                path: `${path}.params.${required}`,
+                message: `A paged query must bind "${required}" — e.g. {"${required}": {"$state": "/${required}"}} (a literal number works too).`,
+              });
+            }
+          }
         }
       }
     }

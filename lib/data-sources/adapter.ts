@@ -1,7 +1,9 @@
 import type {
   DataSourceProvider,
   DataSourceDef,
+  ListReadOptions,
   NamedResourceDef,
+  PagedRows,
 } from "./types";
 
 /**
@@ -36,7 +38,16 @@ export interface DataSourceAdapter {
   /** Acquire the underlying store; throws `DataError(unavailable)`. */
   initialize(): Promise<void>;
 
-  list(resource: NamedResourceDef): Promise<Record<string, unknown>[]>;
+  /**
+   * Read a collection. `options` carries run-resolved query params; the
+   * api provider also honors `options.pagination` and then resolves to
+   * `{ rows, page }` (052) instead of a bare array — storage providers
+   * ignore both and always resolve to the array.
+   */
+  list(
+    resource: NamedResourceDef,
+    options?: ListReadOptions,
+  ): Promise<Record<string, unknown>[] | PagedRows>;
   get(
     resource: NamedResourceDef,
     id: string,

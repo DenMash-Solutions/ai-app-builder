@@ -353,3 +353,72 @@ describe("describeDataIssues", () => {
     expect(text).toContain("+1 more issue");
   });
 });
+
+describe("validateDataSources paged queries (plan 052)", () => {
+  const pagedQuery = (
+    extra: Record<string, unknown> = {},
+  ): Partial<DataSourcesSpec> => ({
+    ...goodBlocks,
+    queries: {
+      todoList: {
+        resource: "todos",
+        operation: "list",
+        params: { page: { $state: "/page" }, limit: { $state: "/limit" } },
+        pagination: { pageParam: "offset", totalPath: "/count" },
+        ...extra,
+      },
+    } as DataSourcesSpec["queries"],
+  });
+
+  test("a well-formed paged declaration is valid", () => {
+    expect(validateDataSources(withBlocks(pagedQuery()))).toEqual([]);
+  });
+
+  test("pagination on a get query is flagged", () => {
+    const issues = validateDataSources(
+      withBlocks(
+        pagedQuery({
+          operation: "get",
+          params: {
+            page: { $state: "/page" },
+            limit: { $state: "/limit" },
+            id: "r1",
+          },
+        }),
+      ),
+    );
+    expect(issues.map((i) => i.path)).toContain("queries.todoList.pagination");
+    expect(
+      issues.find((i) => i.path === "queries.todoList.pagination")?.message,
+    ).toContain("list queries only");
+  });
+
+  test("a paged query must bind both page and limit", () => {
+    const issues = validateDataSources(
+      withBlocks(pagedQuery({ params: { page: { $state: "/page" } } })),
+    );
+    expect(issues.map((i) => i.path)).toEqual([
+      "queries.todoList.params.limit",
+    ]);
+    expect(issues[0].message).toContain('bind "limit"');
+  });
+
+  test("rejects a malformed pagination block (pageParam, totalPath)", () => {
+    const badPageParam = validateDataSources(
+      withBlocks(pagedQuery({ pagination: { pageParam: "cursor" } })),
+    );
+    expect(
+      badPageParam.some((i) =>
+        i.path.startsWith("queries.todoList.pagination.pageParam"),
+      ),
+    ).toBe(true);
+    const badTotalPath = validateDataSources(
+      withBlocks(pagedQuery({ pagination: { totalPath: "count" } })),
+    );
+    expect(
+      badTotalPath.some((i) =>
+        i.path.startsWith("queries.todoList.pagination.totalPath"),
+      ),
+    ).toBe(true);
+  });
+});

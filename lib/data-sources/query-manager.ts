@@ -11,9 +11,11 @@ import {
 } from "./types";
 import type {
   DataSourceDef,
+  ListReadOptions,
   NamedResourceDef,
   QueryDef,
   QueryMirror,
+  QueryPageInfo,
   ResourceDef,
 } from "./types";
 
@@ -28,13 +30,18 @@ import type {
  * (state-ownership regression, T9).
  */
 
-/** What a surface hands the manager: config + a state-write channel. */
+/** What a surface hands the manager: config + state channels. */
 export interface QueryManagerConfig {
   namespace: string;
   dataSources: Record<string, DataSourceDef>;
   resources: Record<string, ResourceDef>;
   queries: Record<string, QueryDef>;
   write: (path: string, value: unknown) => void;
+  /** State-READ channel (052, D3): resolves `{"$state": "/path"}` query
+   *  params against the surface's live state at run time. Optional —
+   *  without it, expression params read as themselves (and the adapter
+   *  skips object-valued params). */
+  read?: (path: string) => unknown;
 }
 
 /** Minimal `StorageEvent` surface so tests can feed plain objects. */
@@ -71,6 +78,35 @@ export function resolveRecordId(
   return isId(id) ? String(id) : undefined;
 }
 
+/** True for the single-key `{"$state": "/path"}` query-param shape (052). */
+export function isStateParam(value: unknown): value is { $state: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    typeof (value as { $state?: unknown }).$state === "string"
+  );
+}
+
+/**
+ * Resolve a query def's `params` at run time (052, D3): `{"$state":
+ * "/path"}` entries read the surface's live state through the `read`
+ * channel; literals (and anything else) pass through untouched.
+ */
+export function resolveQueryParams(
+  params: Record<string, unknown> | undefined,
+  read: ((path: string) => unknown) | undefined,
+): Record<string, unknown> {
+  if (params === undefined) return {};
+  const resolved: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    resolved[key] =
+      isStateParam(value) && read !== undefined ? read(value.$state) : value;
+  }
+  return resolved;
+}
+
 type AttachedContext = QueryManagerConfig;
 
 export class QueryManager {
@@ -88,6 +124,15 @@ export class QueryManager {
   // Last value written per query (mirror shape) so setPending can rewrite
   // the current mirror with a fresh flag without a state-read channel.
   private readonly lastMirrors = new Map<string, QueryMirror>();
+  // Trailing-run coalescing (052, D2): a `data_read` (or refresh) that
+  // arrives while a read is in flight queues ONE follow-up per key — it
+  // re-resolves params when it runs (last state wins) and runs with the
+  // LAST requester's context, so its mirrors land in the right store.
+  // Silent flag merges: any non-silent request wins.
+  private readonly rerunQueued = new Map<
+    string,
+    { ctx: AttachedContext; name: string; silent: boolean }
+  >();
   private listener: ((event: StorageEvent) => void) | null = null;
 
   constructor(registry: AdapterRegistry = adapterRegistry) {
@@ -144,6 +189,22 @@ export class QueryManager {
   }
 
   /**
+   * Re-run one declared query of a namespace — the `data_read` action's
+   * backend (052, D2). Non-silent, so the mirror shows its loading state;
+   * when a read is already in flight the request coalesces into ONE
+   * trailing run that re-resolves params against the latest state.
+   */
+  async runQuery(namespace: string, name: string): Promise<void> {
+    const loads: Promise<void>[] = [];
+    for (const ctx of this.contexts) {
+      if (ctx.namespace !== namespace) continue;
+      if (!(name in ctx.queries)) continue;
+      loads.push(this.loadQuery(ctx, name));
+    }
+    await Promise.all(loads);
+  }
+
+  /**
    * Cross-tab freshness (D6): another tab wrote a key in this design's
    * namespace → silently re-read the queries over that collection.
    */
@@ -179,6 +240,7 @@ export class QueryManager {
       // error would win by timing.
       this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
       this.inflight.delete(key);
+      this.rerunQueued.delete(key);
     }
     const namespaceStillUsed = [...this.contexts].some(
       (candidate) => candidate.namespace === ctx.namespace,
@@ -279,7 +341,17 @@ export class QueryManager {
       return;
     }
     const dedupeKey = `${ctx.namespace}:${name}`;
-    if (this.inflight.has(dedupeKey)) return;
+    if (this.inflight.has(dedupeKey)) {
+      // Coalesce onto one trailing run (052): it re-resolves params when
+      // it starts, so the LAST requested state wins.
+      const queued = this.rerunQueued.get(dedupeKey);
+      this.rerunQueued.set(dedupeKey, {
+        ctx,
+        name,
+        silent: (queued ? queued.silent : true) && options.silent === true,
+      });
+      return;
+    }
     this.inflight.add(dedupeKey);
     // Loads started after a detach supersede everything still in flight
     // for this key — the stale ones become silent (see detach).
@@ -300,23 +372,49 @@ export class QueryManager {
         ...resource,
         name: def.resource,
       };
+      const params = resolveQueryParams(def.params, ctx.read);
       let data: Record<string, unknown>[];
+      let page: QueryPageInfo | null = null;
       if (def.operation === QUERY_OPERATIONS.get) {
-        const id =
-          typeof def.params?.id === "string" ? def.params.id : undefined;
+        const idParam = params.id;
+        const id = isId(idParam) ? String(idParam) : undefined;
         if (id === undefined) {
           throw new DataError(
             DATA_ERROR_CODES.unsupported,
-            `Query "${name}" uses "get" but has no string params.id.`,
+            `Query "${name}" uses "get" but has no params.id (a literal or {"$state": "…"}).`,
           );
         }
         const record = await adapter.get(namedResource, id);
         data = record ? [record] : [];
       } else {
-        data = await adapter.list(namedResource);
+        const options: ListReadOptions | undefined =
+          def.pagination !== undefined
+            ? { params, pagination: def.pagination }
+            : Object.keys(params).length > 0
+              ? { params }
+              : undefined;
+        const result = await adapter.list(namedResource, options);
+        if (Array.isArray(result)) {
+          data = result;
+        } else {
+          data = result.rows;
+          page = result.page;
+        }
       }
       emit(
-        mirror({ data, status: QUERY_STATUSES.success, count: data.length }),
+        mirror({
+          data,
+          status: QUERY_STATUSES.success,
+          count: data.length,
+          ...(page !== null
+            ? {
+                page: page.page,
+                maxPage: page.maxPage,
+                hasNext: page.hasNext,
+                hasPrev: page.hasPrev,
+              }
+            : {}),
+        }),
       );
     } catch (error) {
       const dataError =
@@ -334,6 +432,17 @@ export class QueryManager {
       );
     } finally {
       this.inflight.delete(dedupeKey);
+      const queued = this.rerunQueued.get(dedupeKey);
+      if (queued !== undefined) {
+        this.rerunQueued.delete(dedupeKey);
+        // A surface that detached while the read ran must not re-enter
+        // (its adapter may already be disposed).
+        if (this.contexts.has(queued.ctx)) {
+          void this.loadQuery(queued.ctx, queued.name, {
+            silent: queued.silent,
+          });
+        }
+      }
     }
   }
 

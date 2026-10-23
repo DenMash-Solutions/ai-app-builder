@@ -49,6 +49,13 @@ export function filterItems(args: Record<string, unknown>): unknown {
  * everywhere: non-array `source` behaves as a one-page empty list, a
  * missing / non-positive / non-number `limit` degrades to "the whole
  * source is one page", a non-number `page` reads as 0.
+ *
+ * Server pagination (052) adds two explicit-arg paths: a numeric
+ * `maxPage` (a paged query's mirror supplies the true last page) wins
+ * over the source-derived bound; a present-but-null/undefined `maxPage`
+ * with NO source means "total unknown" — the page then clamps only below
+ * and `maxPage` reads as Infinity (the mirror's `hasNext` hides Next at
+ * the end; `pageLabel` drops the "of Y" half).
  */
 function pageWindow(args: Record<string, unknown>): {
   source: unknown[];
@@ -67,6 +74,22 @@ function pageWindow(args: Record<string, unknown>): {
     typeof args.page === "number" && Number.isFinite(args.page)
       ? Math.floor(args.page)
       : 0;
+  if (typeof args.maxPage === "number" && Number.isFinite(args.maxPage)) {
+    const explicit = Math.max(0, Math.floor(args.maxPage));
+    return {
+      source,
+      limit,
+      clamped: Math.min(Math.max(page, 0), explicit),
+      maxPage: explicit,
+    };
+  }
+  if (
+    "maxPage" in args &&
+    (args.maxPage === undefined || args.maxPage === null) &&
+    !("source" in args)
+  ) {
+    return { source, limit, clamped: Math.max(page, 0), maxPage: Infinity };
+  }
   const maxPage =
     limit > 0 ? Math.max(0, Math.ceil(source.length / limit) - 1) : 0;
   return {
@@ -116,11 +139,15 @@ export function stepPage(args: Record<string, unknown>): unknown {
  * "Page 1 of 2" — the pagination position label (D2 of
  * docs/plan/041-responsive-ui): 1-based numbers with the true page count, unlike
  * a `{"$template"}` which interpolates raw state and cannot compute bounds.
- * Specs use it as a Text `text` prop.
+ * Specs use it as a Text `text` prop. With server pagination (052) it
+ * takes the mirror's direct `{ page, maxPage }` args instead of a source
+ * array — a null maxPage (API with no total) yields just "Page 1".
  */
 export function pageLabel(args: Record<string, unknown>): unknown {
   const { clamped, maxPage } = pageWindow(args);
-  return `Page ${clamped + 1} of ${maxPage + 1}`;
+  return Number.isFinite(maxPage)
+    ? `Page ${clamped + 1} of ${maxPage + 1}`
+    : `Page ${clamped + 1}`;
 }
 
 /** Computed functions handed to every `<JSONUIProvider>` (playground,

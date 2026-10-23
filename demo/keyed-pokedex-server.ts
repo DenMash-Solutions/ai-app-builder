@@ -10,7 +10,9 @@
  *
  * Route map (the 051 approach: list first, then one detail read per card):
  *   GET /pokemon        — pokeapi's list envelope forwarded as-is
- *                         (itemsPath "/results" unwraps it in the spec)
+ *                         (itemsPath "/results" unwraps it in the spec);
+ *                         pagination params (?offset=…&limit=…, plan 052)
+ *                         ride through, paramless defaults to 12
  *   GET /pokemon/{id}   — pokeapi's detail, SHAPED server-side for cards:
  *                         label (Title-Case), types (display labels),
  *                         typeKey (first type — anchors the card color),
@@ -37,7 +39,8 @@
 const PORT = 4100;
 const DEMO_KEY = "pkdex-demo-key-2026";
 const POKEAPI = "https://pokeapi.co/api/v2";
-const POKEAPI_LIST = `${POKEAPI}/pokemon?limit=12`;
+/** No-param default for GET /pokemon — the first 12. */
+const POKEAPI_LIST_DEFAULT_LIMIT = 12;
 
 /** "bulbasaur" → "Bulbasaur"; "mr-mime" → "Mr Mime" (server-side shaping). */
 const displayName = (name: string): string =>
@@ -75,14 +78,14 @@ const withCors = (response: Response): Response => {
 Bun.serve({
   port: PORT,
   async fetch(request) {
-    const { pathname } = new URL(request.url);
+    const { pathname, search } = new URL(request.url);
     if (request.method === "OPTIONS") {
       return withCors(new Response(null, { status: 204 }));
     }
     const authorized =
       request.headers.get("authorization") === `Bearer ${DEMO_KEY}`;
     console.log(
-      `[pokedex-wrapper] ${request.method} ${pathname} — key ${authorized ? "present" : "MISSING/wrong"}`,
+      `[pokedex-wrapper] ${request.method} ${pathname}${search} — key ${authorized ? "present" : "MISSING/wrong"}`,
     );
 
     if (pathname === "/health") {
@@ -99,8 +102,12 @@ Bun.serve({
     if (pathname === "/pokemon") {
       // The list forwarded as-is — the design unwraps the envelope with
       // itemsPath "/results" and reads each card's content from the
-      // per-row detail route below (051 fan-out).
-      const upstream = await fetch(POKEAPI_LIST);
+      // per-row detail route below (051 fan-out). The client's own
+      // pagination params ride along verbatim (?offset=…&limit=… — plan
+      // 052); a paramless request keeps the first 12.
+      const query =
+        search === "" ? `?limit=${POKEAPI_LIST_DEFAULT_LIMIT}` : search;
+      const upstream = await fetch(`${POKEAPI}/pokemon${query}`);
       if (!upstream.ok) {
         return withCors(
           Response.json({ error: "pokeapi upstream failure" }, { status: 502 }),

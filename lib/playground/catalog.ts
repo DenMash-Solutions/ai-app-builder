@@ -4,7 +4,9 @@ import { schema } from "@json-render/react/schema";
 import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
 import {
   dataMutateParamsSchema,
+  dataReadParamsSchema,
   DATA_MUTATE_ACTION,
+  DATA_READ_ACTION,
 } from "@/lib/data-sources/types";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
@@ -179,6 +181,14 @@ export const playgroundCatalog = defineCatalog(schema, {
       params: dataMutateParamsSchema,
       description:
         'Persist a change to a declared resource (data sources): create ({ op: "create", resource, input }), update ({ op: "update", resource, id, input }), or delete ({ op: "delete", resource, id }). Requires top-level "dataSources"/"resources" declarations; lists bound to a query mirror ("/queries/<name>/data") refresh automatically. Build create/update input as an object whose fields read form state ({"input": {"title": {"$state": "/new-todo"}, "done": false}} — nested expressions resolve); inside a repeat pass the record id as ({"id": {"$item": "id"}}).',
+    },
+    // Server pagination (docs/plan/052): a re-run action over one declared
+    // query — the counterpart to data_mutate for reads. Registered at
+    // runtime by <QueryLoader> alongside it.
+    [DATA_READ_ACTION]: {
+      params: dataReadParamsSchema,
+      description:
+        'Re-run one declared query (data sources): { query: "name" }. For paged lists bind the query params to state — {"params": {"page": {"$state": "/page"}, "limit": {"$state": "/limit"}}, "pagination": {"pageParam": "offset", "totalPath": "/count"}} (pageParam "offset" sends ?offset=page×limit&limit=…, "page" sends 1-based ?page=…; totalPath is a JSON pointer to the response\'s total count) — then point a watcher at the page state: "watch": {"/page": {"action": "data_read", "params": {"query": "name"}}}. Next/Prev are plain setState actions moving /page with {"$computed": "stepPage"} (pass maxPage from the mirror); the mirror then exposes /queries/<name>/page (0-based), maxPage (null when the API has no total), hasNext/hasPrev (bind Next/Prev "visible" to them) and the label via {"$computed": "pageLabel", "args": {"page": {"$state": "/page"}, "maxPage": {"$state": "/queries/<name>/maxPage"}}}. Declare "urlSync": ["page", "limit"] at the spec root to deep-link and share the current page in the URL. Rapid page changes coalesce into one trailing fetch.',
     },
   },
 });
