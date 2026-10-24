@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import { startSync } from "@/lib/history/sync";
+import type { SyncClient } from "@/lib/history/sync";
 
 /**
  * Keeps the local playground history in sync with the account (`uis`) while a
@@ -16,7 +17,11 @@ export function SyncEngine() {
 
   useEffect(() => {
     if (loading || !user) return;
-    return startSync(supabase, user.id);
+    // The real client satisfies the slice structurally, but TS's checker
+    // explodes instantiating supabase's generic query builders against the
+    // narrow SyncClient (TS2589) — one cast at the single integration
+    // point, same adapter-boundary precedent as lib/publish/publish.ts.
+    return startSync(supabase as unknown as SyncClient, user.id);
   }, [loading, user, supabase]);
 
   return null;

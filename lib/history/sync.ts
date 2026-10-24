@@ -22,9 +22,15 @@ interface SelectResult extends QueryResult {
   data: unknown[] | null;
 }
 
-/** The slice of the Supabase client sync uses — mockable in tests. */
+/** The slice of the Supabase client sync uses — mockable in tests.
+ *  `select` returns a thenable builder: sync adds `.eq`/`.in` filters
+ *  before awaiting (plan 055 A: column-slimmed, owner-filtered pulls). */
+export interface SelectBuilder extends PromiseLike<SelectResult> {
+  eq(column: string, value: unknown): SelectBuilder;
+  in(column: string, values: unknown[]): SelectBuilder;
+}
 interface UisTable {
-  select(columns?: string): PromiseLike<SelectResult>;
+  select(columns?: string): SelectBuilder;
   upsert(rows: Record<string, unknown>[]): PromiseLike<QueryResult>;
   delete(): { in(column: string, ids: string[]): PromiseLike<QueryResult> };
 }
@@ -77,6 +83,23 @@ function isUisRow(value: unknown): value is UisRow {
     typeof row.name === "string" &&
     typeof row.slug === "string" &&
     typeof row.created_at === "string" &&
+    typeof row.updated_at === "string"
+  );
+}
+
+/** The slim compare-row pull's phase 1 returns (plan 055 A). */
+interface SlimRow {
+  id: string;
+  owner_id: string;
+  updated_at: string;
+}
+
+function isSlimRow(value: unknown): value is SlimRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<SlimRow>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
     typeof row.updated_at === "string"
   );
 }
@@ -137,18 +160,46 @@ export function startSync(
   const isOnline = () =>
     typeof navigator === "undefined" || navigator.onLine !== false;
 
-  /** Download remote-only / remote-newer entries (LWW). */
+  /** Download remote-only / remote-newer entries (LWW).
+   *
+   *  Two-phase (plan 055 A): phase 1 fetches only `id, owner_id,
+   *  updated_at` with a server-side owner filter — the LWW decision needs
+   *  nothing else; phase 2 pulls full rows (`revisions` included) solely
+   *  for ids that actually win the compare. Same merge semantics as the
+   *  old single full-table `select("*")`. */
   async function pull(): Promise<void> {
-    const { data, error } = await client.from("uis").select("*");
-    if (stopped || error) return;
-    for (const raw of data ?? []) {
+    const slim = await client
+      .from("uis")
+      .select("id, owner_id, updated_at")
+      .eq("owner_id", ownerId);
+    if (stopped || slim.error) return;
+
+    const localById = new Map(
+      getHistory().map((entry) => [entry.id, entry] as const),
+    );
+    const needIds: string[] = [];
+    for (const raw of slim.data ?? []) {
+      if (!isSlimRow(raw)) continue;
+      // Defense in depth (F7): the server filters by owner; re-check anyway.
+      if (raw.owner_id !== ownerId) continue;
+      const local = localById.get(raw.id);
+      if (!local || Date.parse(raw.updated_at) > local.updatedAt) {
+        needIds.push(raw.id);
+      }
+    }
+    if (needIds.length === 0) return;
+
+    const full = await client.from("uis").select("*").in("id", needIds);
+    if (stopped || full.error) return;
+    for (const raw of full.data ?? []) {
       if (!isUisRow(raw)) continue;
-      // Never adopt rows owned by another account. Admins see every `uis`
-      // row (`is_admin()` in the SELECT policy), so without this guard an
-      // admin's pull would copy other users' drafts into local history and
-      // the next push would re-upsert them with `owner_id = admin` — a
+      // Never adopt rows owned by another account (RLS audit F7): an admin
+      // sees every `uis` row under the SELECT policy, so without this guard
+      // an admin's pull would copy other users' drafts into local history
+      // and the next push would re-upsert them with `owner_id = admin` — a
       // silent ownership transfer (RLS can't block it: writing owner_id =
-      // self passes WITH CHECK for an admin). RLS audit finding F7.
+      // self passes WITH CHECK for an admin). Phase 1's server-side filter
+      // already excluded foreign rows; this re-check is defense in depth.
       if (raw.owner_id !== ownerId) continue;
       const remote = rowToEntry(raw);
       const local = getHistory().find((entry) => entry.id === remote.id);
@@ -169,15 +220,21 @@ export function startSync(
     const localIds = new Set(local.map((entry) => entry.id));
 
     // Only rows the remote copy is missing or older than — never clobber a
-    // fresher write from another device.
-    const { data, error } = await client.from("uis").select("*");
+    // fresher write from another device. Column-slimmed (plan 055 A): the
+    // compare reads `updated_at`, the guards read `owner_id`, the delete
+    // pass reads `id` — no `revisions` payloads. Deliberately UNfiltered by
+    // owner (decision 5): the F7 guard below must SEE foreign rows to
+    // refuse upserting them.
+    const { data, error } = await client
+      .from("uis")
+      .select("id, owner_id, updated_at");
     if (stopped) return;
     if (error) {
       setStatus("offline");
       return;
     }
     const remoteById = new Map(
-      (data ?? []).filter(isUisRow).map((row) => [row.id, row]),
+      (data ?? []).filter(isSlimRow).map((row) => [row.id, row]),
     );
     const payload = local
       .filter((entry) => {

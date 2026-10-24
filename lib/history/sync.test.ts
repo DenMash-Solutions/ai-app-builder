@@ -9,7 +9,7 @@ import {
 } from "./history";
 import type { HistoryEntry } from "./history";
 import { entryToRow, getSyncStatus, rowToEntry, startSync } from "./sync";
-import type { SyncClient } from "./sync";
+import type { SelectBuilder, SyncClient } from "./sync";
 
 function makeSpec(heading: string): Spec {
   return {
@@ -22,19 +22,69 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface RecordedSelect {
+  columns?: string;
+  filters: { kind: "eq" | "in"; column: string; values: unknown[] }[];
+}
+
 interface MockState {
   rows: Record<string, unknown>[];
   upserts: Record<string, unknown>[][];
   deletes: string[][];
+  /** Every awaited select, in order — column/filter pins (plan 055 A). */
+  selects: RecordedSelect[];
+}
+
+/** Explicitly annotated so the self-references in `eq`/`in` don't trip
+ *  TS's circular-initializer inference; cast to the real builder type. */
+interface MockSelectBuilder {
+  eq(column: string, value: unknown): MockSelectBuilder;
+  in(column: string, values: unknown[]): MockSelectBuilder;
+  then(
+    onfulfilled?: (value: { data: unknown[] | null; error: null }) => void,
+    onrejected?: (reason: unknown) => void,
+  ): Promise<unknown>;
 }
 
 function makeClient(state: MockState): SyncClient {
+  const select = (columns?: string): SelectBuilder => {
+    const filters: RecordedSelect["filters"] = [];
+    const record = (): { data: unknown[]; error: null } => {
+      state.selects.push({ columns, filters });
+      let rows = state.rows.map((row) => ({ ...row }));
+      for (const filter of filters) {
+        rows = rows.filter((row) =>
+          filter.kind === "eq"
+            ? row[filter.column] === filter.values[0]
+            : filter.values.includes(row[filter.column]),
+        );
+      }
+      if (columns !== undefined && columns !== "*") {
+        const keys = columns.split(",").map((key) => key.trim());
+        rows = rows.map((row) =>
+          Object.fromEntries(keys.map((key) => [key, row[key]])),
+        );
+      }
+      return { data: rows, error: null };
+    };
+    const builder: MockSelectBuilder = {
+      eq: (column, value) => {
+        filters.push({ kind: "eq", column, values: [value] });
+        return builder;
+      },
+      in: (column, values) => {
+        filters.push({ kind: "in", column, values });
+        return builder;
+      },
+      then: (onfulfilled, onrejected) =>
+        Promise.resolve(record()).then(onfulfilled, onrejected),
+    };
+    return builder as unknown as SelectBuilder;
+  };
+
   return {
     from: () => ({
-      select: async () => ({
-        data: state.rows.map((row) => ({ ...row })),
-        error: null,
-      }),
+      select,
       upsert: async (rows: Record<string, unknown>[]) => {
         state.upserts.push(rows);
         for (const row of rows) {
@@ -99,7 +149,7 @@ describe("sync", () => {
 
   beforeEach(() => {
     clearHistory();
-    state = { rows: [], upserts: [], deletes: [] };
+    state = { rows: [], upserts: [], deletes: [], selects: [] };
   });
 
   afterEach(() => {
@@ -276,6 +326,53 @@ describe("sync", () => {
     await sleep(30);
     expect(state.deletes.flat()).not.toContain(foreignId);
     expect(state.rows.find((r) => r.id === foreignId)).toBeDefined();
+    stop();
+  });
+
+  test("pull is two-phase and both sync calls are column-slimmed (055 A)", async () => {
+    const id = "99999999-9999-4999-8999-999999999999";
+    state.rows.push(remoteRow(id, { updatedAt: 7000 }));
+
+    const stop = startSync(makeClient(state), "owner-1", { debounceMs: 50 });
+    await sleep(20);
+
+    // Phase 1: LWW compare needs only the three scalar columns, filtered
+    // to our rows server-side.
+    expect(state.selects[0]).toEqual({
+      columns: "id, owner_id, updated_at",
+      filters: [{ kind: "eq", column: "owner_id", values: ["owner-1"] }],
+    });
+    // Phase 2: full rows fetched ONLY for the id that wins the compare.
+    expect(state.selects[1].columns).toBe("*");
+    expect(state.selects[1].filters).toEqual([
+      { kind: "in", column: "id", values: [id] },
+    ]);
+    // Push: slim and deliberately unfiltered — the F7 guard must still see
+    // foreign rows to refuse upserting them (decision 5).
+    expect(state.selects[2]).toEqual({
+      columns: "id, owner_id, updated_at",
+      filters: [],
+    });
+    // The merge still adopted the remote entry (semantics unchanged).
+    expect(getHistory().map((entry) => entry.id)).toContain(id);
+    stop();
+  });
+
+  test("no full-row fetch when nothing wins the compare (055 A)", async () => {
+    const id = "aaaaaaaa-4444-4888-8999-aaaaaaaaaaaa";
+    addEntry({
+      ...createEntry("already fresh local", makeSpec("v0")),
+      id,
+      updatedAt: 9000,
+    });
+    state.rows.push(remoteRow(id, { updatedAt: 1000 })); // older than local
+
+    const stop = startSync(makeClient(state), "owner-1", { debounceMs: 50 });
+    await sleep(20);
+
+    // Exactly pull-phase-1 + push: the `*` phase never runs.
+    expect(state.selects).toHaveLength(2);
+    expect(state.selects.filter((s) => s.columns === "*")).toHaveLength(0);
     stop();
   });
 });
