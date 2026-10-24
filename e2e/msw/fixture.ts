@@ -239,6 +239,11 @@ const PAGED_LIMIT = 5;
 export const PAGINATED_UI_LINES: string[] = [
   line({
     op: PATCH_OP.add,
+    path: PATCH_PATH.urlSync,
+    value: ["page"],
+  }),
+  line({
+    op: PATCH_OP.add,
     path: PATCH_PATH.state,
     value: {
       icons: PAGINATED_STATE_ITEMS,

@@ -272,6 +272,8 @@ export const PATCH_PATH = {
   dataSources: "/dataSources",
   resources: "/resources",
   queries: "/queries",
+  // Shareable deep links (docs/plan/052 D9): top-level extension member.
+  urlSync: "/urlSync",
 } as const;
 
 export const EDITOR = {

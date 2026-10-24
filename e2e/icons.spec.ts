@@ -190,6 +190,36 @@ test.describe("catalog icons", () => {
     );
   });
 
+  test("the preview slug syncs its page with the URL (052 D9, preview surface)", async ({
+    page,
+  }) => {
+    await generate(page, PAGINATED_UI_LINES);
+
+    // Open the read-only preview (the share surface).
+    await page.getByRole(ROLE.link, { name: PREVIEW.open }).click();
+    await expect(page).toHaveURL(/\/en\/[^/]+$/);
+    await waitForMsw(page);
+    const main = page.locator("main");
+    const label = main.getByText(/^Page \d+ of \d+$/);
+    const next = main.getByRole(ROLE.button, { name: "Next" });
+    await expect(label).toHaveText("Page 1 of 3", { timeout: 15000 });
+
+    // Shareable OUT: stepping on the slug route rewrites the URL in place
+    // (replaceState — no navigation), 1-based like the canvas.
+    await next.click();
+    await expect(label).toHaveText("Page 2 of 3");
+    await expect(page).toHaveURL(/\?page=2/);
+
+    // Deep-link IN: a fresh load at ?page=2 seeds the overlayed page — the
+    // label reads page 2 with no interaction (the list rows follow the
+    // spec's own seeded-slice pattern; the surface contract is label+URL).
+    await page.reload();
+    await waitForMsw(page);
+    await expect(
+      page.locator("main").getByText(/^Page \d+ of \d+$/),
+    ).toHaveText("Page 2 of 3", { timeout: 15000 });
+  });
+
   test("a generated grid scales from phone to desktop viewports", async ({
     page,
   }) => {

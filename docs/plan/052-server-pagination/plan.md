@@ -65,6 +65,17 @@ browser-scale lists and stays untouched.
   `history.replaceState` (in-place — no history spam). Helpers live in
   `lib/playground/url-sync.ts` (dependency-injected, unit-tested);
   the playground wires them
+- **Preview-surface wiring (2026-10-24, scope + per user "ok")**: the
+  slug route (`app/[locale]/[slug]/preview-client.tsx` — owner preview AND
+  the published share surface) gets BOTH halves from the same helpers:
+  `overlayUrlState` on the state seed before `localizeSpec`/provider mount
+  (client-only, same `typeof window` guard as the canvas), and the
+  urlSync write-back inside the existing `handleStateChange` — which runs
+  unconditionally now, while its locale-fallback branch stays guarded by
+  `hasSwitchLanguageBinding` (decision 13 semantics unchanged: the
+  URL mirror is `replaceState`, never a router push, so it cannot
+  double-fire the switch). Until now only the canvas (`playground.tsx`
+  D9) synced URLs; preview links always opened on page 1
 - Unit tests: adapter param building / page translation / envelope derivation
   / degradation, keyed path keeps `search`, `data_read` re-run + mirror
   fields + supersession, `pagination` validation, `pageLabel` direct args;
@@ -143,6 +154,16 @@ browser-scale lists and stays untouched.
     through — PokéAPI-style and page-native backends (`?page=2&limit=6`)
     are each one config line. Rejected: auto-detecting the backend shape
     (magic); always-offset (excludes page-native APIs).
+11. **The preview surface reuses the canvas wiring verbatim, via the same
+    two helpers** (2026-10-24): `preview-client.tsx` overlays the seed at
+    the same place the canvas does (before provider mount) and mirrors
+    writes back inside its existing `handleStateChange` — the seam
+    decision 13 already owns. Rejected: a shared "urlSync surface" hook
+    (two call sites, and the preview's locale-fallback guard differs from
+    the canvas's content-language pill — a hook would grow conditionals to
+    serve neither); rejected: `useSearchParams`-driven state (ties the
+    provider to Next's router lifecycle and re-renders on every replace —
+    the canvas deliberately keeps `window` out of React's hands).
 
 ## Verification
 
@@ -169,6 +190,13 @@ browser-scale lists and stays untouched.
       fetches `?offset=6&limit=6` on the FIRST read (single fetch, no
       page-0 roundtrip), label reads "Page 2 of …", and Next rewrites the
       URL to `?page=3&limit=6`
+- [x] Preview surface (2026-10-24, live MCP on entry `13e8aeaf`): slug route
+      opened at `?page=2` renders "Page 2 of 113" with Weedle first (the
+      linked page — no page-0 roundtrip); Next writes `?page=3` back into
+      the URL (label "Page 3 of 113", Pikachu = offset 24), zero console
+      errors; both surfaces share the `url-sync.ts` helpers (pinned by
+      their existing unit tests) + new e2e "the preview slug syncs its
+      page with the URL" (112 e2e green)
 - [ ] `docs/data-sources.md` gains the pagination section (`data_read`,
       `params`, `pagination`, mirror fields)
 
@@ -180,3 +208,6 @@ browser-scale lists and stays untouched.
 | 2026-10-21 | scope amended — URL deep-link sync (`urlSync`, decision 9) + `pagination.pageParam` (decision 10), per "both" |
 | 2026-10-21 | approved |
 | 2026-10-22 | implemented — 609 unit + 111 e2e green; MCP live: paged reads via keyed proxy (`?offset=…&limit=…` in the proxy body), Prev/Next + "Page N of M" label, URL write-back `?page=2`, deep link `?page=3&limit=6` → first fetch `offset=12&limit=6` with no page-0 roundtrip |
+| 2026-10-24 | scope +: preview-surface urlSync wiring (decision 11) — live verification found the slug route ignoring `?page=` and never writing the URL back (D9 was canvas-only); user approved with "ok" |
+| 2026-10-24 | preview wiring implemented — seed overlay before provider mount + write-back in the existing `handleStateChange` seam, decision-13 guard preserved |
+| 2026-10-24 | preview-surface verification PASSED — live MCP (`?page=2` → "Page 2 of 113" Weedle first; Next → `?page=3` + Pikachu), new e2e deep-link test, 639 unit + build + 112 e2e green; plan 052 extension complete |

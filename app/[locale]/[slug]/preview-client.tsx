@@ -21,6 +21,11 @@ import { LOCALES, routing } from "@/lib/i18n/routing";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { registry } from "@/lib/playground/registry";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
+import {
+  overlayUrlState,
+  specUrlSync,
+  urlSearchAfterStateChange,
+} from "@/lib/playground/url-sync";
 import type { LivePageData } from "@/lib/publish/featured";
 import { localizeSpec } from "@/lib/specs/localize";
 import {
@@ -184,7 +189,15 @@ export default function PreviewPage({
           ...baseState,
           [SPEC_THEME_STATE_KEY]: effectiveTheme(storedDecision, specDefault),
         };
-  const localized = localizeSpec(spec, state);
+  // Deep-link in (052, D9 — preview surface, decision 11): declared urlSync
+  // keys overlay the seed so the first paged read already runs at the linked
+  // page. Client-only: window is absent during SSR (the seed renders there
+  // and the overlay joins on hydration) — same guard as the canvas.
+  const seedState =
+    typeof window === "undefined"
+      ? state
+      : overlayUrlState(state, window.location.search, specUrlSync(spec));
+  const localized = localizeSpec(spec, seedState);
 
   // The state-write fallback (decision 13): specs that predate the declared
   // switch still navigate by writing state.locale — but once the toggle
@@ -193,6 +206,26 @@ export default function PreviewPage({
   const handleStateChange = (
     changes: Array<{ path: string; value: unknown }>,
   ) => {
+    // Shareable deep links (052, D9 — preview surface, decision 11): mirror
+    // the spec's declared urlSync keys into the browser URL in place
+    // (replaceState — no history spam), whatever else the change batch
+    // carries. Unconditional: replaceState can't double-fire anything.
+    const urlSync = specUrlSync(spec);
+    if (urlSync.length > 0 && typeof window !== "undefined") {
+      const nextSearch = urlSearchAfterStateChange(
+        window.location.search,
+        changes,
+        urlSync,
+      );
+      if (nextSearch !== null && nextSearch !== window.location.search) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${nextSearch}${window.location.hash}`,
+        );
+      }
+    }
+    if (hasSwitchLanguageBinding(spec)) return;
     const change = changes.find(
       (candidate) =>
         candidate.path.replace(/^\//, "") === SPEC_STATE_KEYS.locale,
@@ -222,10 +255,8 @@ export default function PreviewPage({
   return (
     <JSONUIProvider
       registry={registry}
-      initialState={state}
-      onStateChange={
-        hasSwitchLanguageBinding(spec) ? undefined : handleStateChange
-      }
+      initialState={seedState}
+      onStateChange={handleStateChange}
       handlers={handlers}
       validationFunctions={{}}
       // Same computed-function set as the playground and live pages — without
