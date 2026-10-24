@@ -287,9 +287,6 @@ export interface DataSourcesSpec extends Spec {
   queries?: Record<string, QueryDef>;
 }
 
-/** Top-level root members a design's data declarations live in. */
-export const DATA_BLOCK_KEYS = ["dataSources", "resources", "queries"] as const;
-
 /** Narrow a plain `Spec` to the data-blocks view (cast, never a copy). */
 export function withDataBlocks(spec: Spec): DataSourcesSpec {
   return spec as DataSourcesSpec;

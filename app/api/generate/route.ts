@@ -9,6 +9,11 @@ import {
 import { i18nRules } from "@/lib/playground/i18n-rules";
 import { RATE_LIMIT_PATTERN, resolveModel } from "@/lib/playground/models";
 import { validatePatchText } from "@/lib/playground/patch-text";
+import {
+  repairPatchLine,
+  repairPatchText,
+} from "@/lib/playground/repair-patch-line";
+import { DATA_SOURCE_RULES } from "@/lib/playground/data-source-rules";
 import { STYLING_RULES } from "@/lib/playground/styling-rules";
 import { google } from "@ai-sdk/google";
 import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
@@ -121,6 +126,7 @@ export async function POST(req: Request) {
       directives: appDirectives,
     }) +
     STYLING_RULES +
+    DATA_SOURCE_RULES +
     i18nRules(locale) +
     (isEdit ? "" : COMPLETENESS_RULES);
 
@@ -207,7 +213,27 @@ export async function POST(req: Request) {
       return errorResponse(collected.error, model);
     if (collected.kind === "empty") return emptyCompletion();
 
-    let validation = validatePatchText(collected.text);
+    // Line repair before validation (plan 054): the computed-key class
+    // (`[":watch"]:` → `"watch":`) is repaired rather than failing the
+    // whole patch; still-unparseable lines are dropped WITH a log line so
+    // the failure is observable instead of a downstream mystery. The
+    // RESPONSE carries the repaired text — the client parses what we
+    // validated.
+    const repairAndValidate = (text: string) => {
+      const repair = repairPatchText(text);
+      if (repair.repaired > 0) {
+        console.warn(`[edit] repaired ${repair.repaired} line(s)`);
+      }
+      for (const dropped of repair.dropped) {
+        console.warn(
+          `[edit] dropped line ${dropped.line}: not valid JSON — prefix: ${dropped.prefix}`,
+        );
+      }
+      return { text: repair.text, validation: validatePatchText(repair.text) };
+    };
+
+    let patched = repairAndValidate(collected.text);
+    let validation = patched.validation;
     if (!validation.ok) {
       console.warn(
         `[edit] incomplete patch (${validation.reason}) — retrying once`,
@@ -229,7 +255,8 @@ export async function POST(req: Request) {
       if (collected.kind === "error")
         return errorResponse(collected.error, model);
       if (collected.kind === "empty") return emptyCompletion();
-      validation = validatePatchText(collected.text);
+      patched = repairAndValidate(collected.text);
+      validation = patched.validation;
       if (!validation.ok) {
         console.error(
           `[edit] model=${model} failed after retry: ${validation.reason}`,
@@ -245,7 +272,7 @@ export async function POST(req: Request) {
     }
 
     console.log(`[edit] patch ok patches=${validation.patchCount}`);
-    return new Response(collected.text, {
+    return new Response(patched.text, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
@@ -268,10 +295,44 @@ export async function POST(req: Request) {
     return emptyCompletion();
   }
 
+  // The relay frames lines itself (plan 054): each complete line is
+  // validated, repaired (computed-key class), or DROPPED WITH A LOG LINE —
+  // the client's parser silently discards anything malformed, so the
+  // server is the only place where an erased op can be made observable.
+  // Comments/blanks/usage lines pass through untouched.
   const stream = new ReadableStream<string>({
     async start(controller) {
+      let lineNumber = 0;
+      const emitLine = (line: string) => {
+        lineNumber++;
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("//")) {
+          controller.enqueue(line + "\n");
+          return;
+        }
+        const result = repairPatchLine(trimmed);
+        if (result.status === "invalid") {
+          console.warn(
+            `[generate] dropped line ${lineNumber}: ${result.reason} — prefix: ${trimmed.slice(0, 120)}`,
+          );
+          return;
+        }
+        if (result.status === "repaired") {
+          console.warn(
+            `[generate] repaired line ${lineNumber} (computed key → quoted key)`,
+          );
+        }
+        controller.enqueue(result.line + "\n");
+      };
       try {
-        if (!first.done) controller.enqueue(first.value);
+        let buffer = "";
+        const feed = (chunk: string) => {
+          buffer += chunk;
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) emitLine(line);
+        };
+        if (!first.done) feed(first.value);
         for (;;) {
           const next = await withDeadline(
             iterator.next(),
@@ -279,8 +340,10 @@ export async function POST(req: Request) {
             onTimeout,
           );
           if (next.done) break;
-          controller.enqueue(next.value);
+          feed(next.value);
         }
+        // Final chunk may lack a trailing newline — process it too.
+        if (buffer.trim()) emitLine(buffer);
         controller.close();
       } catch (error) {
         controller.error(error);

@@ -111,7 +111,12 @@ import {
   describeDataIssues,
   validateDataSources,
 } from "@/lib/data-sources/validate";
-import { withDataBlocksFromLines } from "@/lib/data-sources/stream-blocks";
+import { withRootBlocksFromLines } from "@/lib/data-sources/stream-blocks";
+import {
+  danglingChildRefs,
+  danglingRefsInstruction,
+  describeDanglingRefs,
+} from "@/lib/playground/dangling-refs";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
 import {
   overlayUrlState,
@@ -143,11 +148,16 @@ const PENDING_OP_KINDS = {
 } as const;
 
 type PendingOp =
-  | { kind: typeof PENDING_OP_KINDS.generate; prompt: string }
+  | {
+      kind: typeof PENDING_OP_KINDS.generate;
+      prompt: string;
+      healAttempted?: boolean;
+    }
   | {
       kind: typeof PENDING_OP_KINDS.edit;
       entryId: string;
       label: string;
+      healAttempted?: boolean;
     };
 
 // Add-language toast id per target tag — loading, success, and failure all
@@ -326,6 +336,20 @@ export function Playground({ initialRef }: PlaygroundProps) {
     },
   });
 
+  // Every request records its payload so the failure dialog's retry can
+  // replay it with the newly selected model (pendingOpRef still holds the
+  // operation). Declared before the completion-commit effect, which sends
+  // the dangling-refs heal steer through it (plan 054).
+  const sendNow = (
+    prompt: string,
+    context: Record<string, unknown> = {},
+  ): void => {
+    lastRequestRef.current = { prompt, context };
+    // The route locale seeds the generation contract: copy is written in
+    // this language, translations ship under state.i18n.<tag>.
+    void send(prompt, { ...context, model: getModel(), locale });
+  };
+
   /* eslint-disable react-hooks/set-state-in-effect -- the completion
      commit is deliberately deferred into an effect (the stream state must
      fully settle first — see the onComplete comment); it runs exactly
@@ -341,7 +365,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
     const { op, completedSpec: streamedSpec } = completion;
     // Re-cover the data blocks the stream applier dropped, then run the
     // original completion pipeline on the recovered spec.
-    const completedSpec = withDataBlocksFromLines(streamedSpec, rawLines);
+    const completedSpec = withRootBlocksFromLines(streamedSpec, rawLines);
 
     // Defense in depth: a completion that never set the root (empty stream
     // the server failed to classify, non-JSONL output) is a failure, not a
@@ -401,6 +425,30 @@ export function Playground({ initialRef }: PlaygroundProps) {
       return;
     }
 
+    // Generation resilience (plan 054): a completion that references
+    // elements it never defined (dropped or omitted JSONL lines) renders
+    // as blank sections — a repeat grid with a missing template shows
+    // zero cards while every fetch succeeds. Heal ONCE with a targeted
+    // steer before committing; the heal re-enters this effect with
+    // `healAttempted` set, so a still-broken result commits what it has
+    // and says so — never a silent loop. The heal stream stays on the
+    // current mount (the generate branch has not navigated yet).
+    const dangling = danglingChildRefs(boundSpec);
+    if (dangling.length > 0) {
+      if (op.healAttempted) {
+        toast.error(t("playground.uiIncomplete"), {
+          description: describeDanglingRefs(dangling),
+        });
+      } else {
+        if (pendingLang) toast.dismiss(langToastId(pendingLang));
+        pendingOpRef.current = { ...op, healAttempted: true };
+        sendNow(danglingRefsInstruction(dangling), {
+          previousSpec: structuredClone(boundSpec),
+        });
+        return;
+      }
+    }
+
     if (op.kind === PENDING_OP_KINDS.generate) {
       const entry = createEntry(op.prompt, boundSpec);
       addEntry(entry);
@@ -454,19 +502,6 @@ export function Playground({ initialRef }: PlaygroundProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming, rawLines]);
   /* eslint-enable react-hooks/set-state-in-effect */
-
-  // Every request records its payload so the failure dialog's retry can
-  // replay it with the newly selected model (pendingOpRef still holds the
-  // operation).
-  const sendNow = (
-    prompt: string,
-    context: Record<string, unknown> = {},
-  ): void => {
-    lastRequestRef.current = { prompt, context };
-    // The route locale seeds the generation contract: copy is written in
-    // this language, translations ship under state.i18n.<tag>.
-    void send(prompt, { ...context, model: getModel(), locale });
-  };
 
   // While a stream runs (generate on the landing, steer on /ui/[id]) the
   // hook's evolving spec wins; otherwise the committed entry's spec is the

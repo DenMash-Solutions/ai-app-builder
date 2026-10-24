@@ -1,6 +1,6 @@
 # Generation Resilience — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-23
 
 ## Goal
@@ -44,6 +44,18 @@ server log (only the last 300 chars are kept).
   what it has and shows a `playground.uiIncomplete` toast (never loops)
 - `lib/i18n/locale/en.json` + `es.json`: `playground.uiIncomplete` toast
   strings
+- **Generic root-member stream recovery** (added 2026-10-24 after live
+  verification): `add /urlSync` — the top-level member plan 052/053 teaches
+  every paged spec to declare — is dropped by `useUIStream`'s applier
+  (renderer-owned paths only: `/root`, `/state`, `/state/*`, `/elements/*`)
+  and recovered by NOBODY: `withDataBlocksFromLines` re-folds only
+  `DATA_BLOCK_KEYS` (`dataSources|resources|queries`), so the committed
+  spec never carries `urlSync` and both URL sync directions no-op. Fix by
+  generalizing the completion-seam recovery: re-fold and merge EVERY root
+  member the renderer applier does not own (`root`/`state`/`elements` stay
+  with the hook) — `urlSync` and any future top-level extension survive by
+  construction. Rename `withDataBlocksFromLines` → `withRootBlocksFromLines`
+  (the old name would mislead: urlSync is covered too)
 
 ### Out of scope
 
@@ -58,6 +70,14 @@ server log (only the last 300 chars are kept).
 - General JSONRepair heuristics (trailing commas, single quotes) — only the
   observed malformation class is repaired; logging reveals the rest
   (descoped 2026-10-23)
+- `urlSync` support on the published live page (`/[slug]` —
+  `preview-client.tsx` has no overlay/write-back) — a committed spec that
+  declares `urlSync` renders inert there (an unknown spec member is
+  ignored); the playground is the editing/sharing surface (descoped
+  2026-10-24)
+- Propagating steer `remove` ops for root members (e.g. `remove /urlSync`)
+  through the line re-fold — pre-existing data-block semantics, no live
+  failure observed (descoped 2026-10-24)
 
 ## Design decisions
 
@@ -83,20 +103,41 @@ server log (only the last 300 chars are kept).
    validator guards data-block references; element-tree completeness is a
    separate class checked at the same seam, so an otherwise-invalid spec
    still fails the existing way (no double handling)
+6. **Recovery is generic over non-renderer root members, not a fourth
+   whitelist entry** — rejected: adding `urlSync` to `DATA_BLOCK_KEYS`,
+   because every future top-level extension (and the data blocks of any
+   later plan) would need the same fix; the renderer applier owns exactly
+   `root`/`state`/`elements`, so "everything else is recovered from lines"
+   is the invariant that cannot drift. Steer semantics stay as today: a
+   member declared by the current stream replaces the base's; absent
+   members keep the base (a steer `remove /urlSync` does not propagate —
+   same pre-existing limitation as the data blocks)
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] `bun run build` (dev stopped, `.next` wiped) && `bun run test:e2e`
-- [ ] Unit: repair turns the real `[":watch"]` line from run `98041ba7` into
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+      (639 unit tests green, incl. 8 repair + 6 dangling + 6 root-recovery)
+- [x] `bun run build` (dev stopped, `.next` wiped) && `bun run test:e2e`
+      (111 e2e green); dev :3000 + wrapper :4100 restarted
+- [x] Unit: repair turns the real `[":watch"]` line from run `98041ba7` into
   parseable JSON; never touches valid lines; escaped-quote strings are not
   corrupted; `repairPatchText` records drops with line numbers; dangling
   detection reports parent → child pairs and ignores inline children
-- [ ] Live MCP retest (3.5 Lite, Pokédex prompt): cards render, **zero**
-  `Missing element` console warnings, Next/Prev refetch at offset 12, deep
-  link `?page=3&limit=6` opens on page 3
-- [ ] If any run dangles during the retest: the auto-heal steer appears in
-  the network log and the healed spec commits
+- [x] Unit: the completion seam recovers `urlSync` (and any non-renderer
+  root member) from raw lines while `root`/`state`/`elements` keep coming
+  from the stream hook; steer-safety preserved
+- [x] Live MCP retest (3.5 Lite, Pokédex prompt — keyless pokeapi.co lane,
+  2026-10-24): cards render (12/12 images loaded), **zero** console
+  errors/warnings, **committed spec carries `urlSync: ["page","limit"]`**,
+  Next/Prev step + refetch (offset=0→12→24 observed) AND the URL writes
+  `?page=2`, deep link `?page=3&limit=6` opens on "Page 3 of 226" with
+  first fetch `offset=12&limit=6`
+- [x] Run dangled during the retest: generate dropped lines 46/48
+  (malformed `data_read` shorthand appended to the button adds) →
+  prev/next became dangling children → **auto-heal fired** (`[edit]
+  patch ok patches=2`, buttons re-added), zero `Missing element`
+  warnings after heal; two steer edits (`patch ok patches=1` ×2) fixed
+  an image `$state`-vs-`item` slip and the missing page watcher
 
 ## Status log
 
@@ -104,3 +145,7 @@ server log (only the last 300 chars are kept).
 | ---- | ----- |
 | 2026-10-23 | plan drafted |
 | 2026-10-23 | approved (user confirmed in session) |
+| 2026-10-24 | scope +: generic root-member stream recovery (`urlSync` drop found in live verification; user directed inclusion in this plan) |
+| 2026-10-24 | implementation complete — repair (8 tests) + dangling-refs (6 tests) + generic `withRootBlocksFromLines` (6 tests) + heal re-entry; 639 unit, build, 111 e2e green |
+| 2026-10-24 | live retest (keyless pokeapi.co): all verification items pass — heal fired on a real dangling pair (`[edit] patch ok patches=2`), committed spec carries `urlSync`, deep link + URL write-back + refetch verified, zero console errors |
+| 2026-10-24 | implemented |
