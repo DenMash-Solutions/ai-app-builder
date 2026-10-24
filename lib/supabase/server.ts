@@ -1,9 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { projectionRestFetch } from "@/lib/supabase/projection-cache";
 
 /**
  * Server-side Supabase client for Server Components and Route Handlers.
  * Next 16: `cookies()` is async.
+ *
+ * The world-readable projection GETs are share-cached through
+ * `projectionRestFetch` (plan 055 C); everything else is passthrough.
  */
 export async function createClient() {
   const cookieStore = await cookies();
@@ -25,6 +29,9 @@ export async function createClient() {
             // Called from a Server Component — middleware refreshes instead.
           }
         },
+      },
+      global: {
+        fetch: projectionRestFetch,
       },
     },
   );

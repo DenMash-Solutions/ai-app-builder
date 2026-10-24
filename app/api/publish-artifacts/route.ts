@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -45,5 +46,8 @@ export async function POST(request: Request): Promise<Response> {
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
+  // Server-side hop — expire the share-cached projection immediately so the
+  // baked markup lands on the next page load (055 C).
+  revalidateTag("published_pages", { expire: 0 });
   return Response.json({ ok: true });
 }

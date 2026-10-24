@@ -1,4 +1,5 @@
 import type { HistoryEntry } from "@/lib/history";
+import { revalidateProjection } from "@/lib/publish/revalidate";
 
 /**
  * Publish flow (plan Q5): publishing snapshots the currently selected
@@ -173,6 +174,9 @@ export async function publishEntry(
     return { ok: false, error: publicError.message };
   }
 
+  // The server projection is share-cached (055 C) — expire it now so the
+  // next /<slug> request already serves this version.
+  revalidateProjection(["published_pages"]);
   return { ok: true, slug, version };
 }
 
@@ -186,5 +190,6 @@ export async function unpublishEntry(
     .delete()
     .eq("ui_id", uiId);
   if (error) return { ok: false, error: error.message };
+  revalidateProjection(["published_pages"]);
   return { ok: true };
 }

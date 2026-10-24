@@ -1,4 +1,5 @@
 import { asPublishClient } from "@/lib/publish/publish";
+import { revalidateProjection } from "@/lib/publish/revalidate";
 import type { AdminPageSummary } from "./admin-spec"; /**
  * Admin overview: every published page (world-readable projection, enriched
  * with the owner email readable by admins via RLS) plus the featured pointer
@@ -80,5 +81,7 @@ export async function setFeatured(
     .from("site_settings")
     .upsert({ id: true, featured_ui_id: uiId }, { onConflict: "id" });
   if (error) return { ok: false, error: error.message };
+  // The featured lookup is share-cached (055 C) — the pointer just moved.
+  revalidateProjection(["site_settings"]);
   return { ok: true };
 }
