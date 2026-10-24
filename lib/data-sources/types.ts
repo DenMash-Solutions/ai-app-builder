@@ -145,7 +145,7 @@ export const dataSourceDefSchema = z
       .record(z.string(), z.unknown())
       .optional()
       .describe(
-        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment). api endpoints are public, unauthenticated HTTPS unless config.auth declares a server-held key ref ({ "type": "bearer", "ref": "weather" } or {"type": "header", "header": "X-API-Key", "ref": "shop"}) — the VALUE lives only in server configuration, never in specs. Optional {"itemDetail": {"path": "/pokemon/{id}"}} fans a list out: after the list loads, the client reads that path once per row (the literal "{id}" is filled from the row id, or the last url path segment) through the same transport and merges each detail over its row — "list first, then each card fetches its own detail"',
+        'Provider options, e.g. {"storageKeyPrefix": "my-app"} for localStorage or {"baseUrl": "https://api.example.com", "itemsPath": "/data"} for api. Never put credentials here — credential-shaped keys are rejected; the supabase provider takes no config at all (project URL and keys come from the app environment). api endpoints are public, unauthenticated HTTPS unless config.auth declares a server-held key ref ({ "type": "bearer", "ref": "weather" } or {"type": "header", "header": "X-API-Key", "ref": "shop"}) — the VALUE lives only in server configuration, never in specs. Optional {"itemDetail": {"path": "/records/{id}"}} fans a list out: after the list loads, the client reads that path once per row (the literal "{id}" is filled from the row id, or the last url path segment) through the same transport and merges each detail over its row — "list first, then each card fetches its own detail"',
       ),
   })
   .strict();
@@ -170,7 +170,7 @@ export const resourceDefSchema = z
       .record(z.string(), recordFieldSchema)
       .optional()
       .describe(
-        'Field map used to validate records before writes, e.g. {"title": "string", "done": "boolean"}',
+        'Field map validated on EVERY read row and on writes — declare only fields guaranteed to exist in the data as plain primitives ("string" | "number" | "boolean"; there is no array type). Omit arrays and fields you are unsure about: one missing or mistyped declared field fails the whole query, and omitting "schema" entirely is always safe, e.g. {"title": "string", "done": "boolean"}',
       ),
     primaryKey: z
       .string()

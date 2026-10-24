@@ -145,6 +145,18 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain('the Grid/Stack container\'s "repeat"');
   });
 
+  test("requires $item to name a field, never the empty string (053 gap 8)", () => {
+    // Live failure (imported spec 14b59e37): the model wrote a Badge's
+    // "text": {"$item": ""} — an empty path resolves to the WHOLE row
+    // object → "Objects are not valid as a React child" ×12 (contained by
+    // ElementErrorBoundary, type chips silently missing).
+    expect(STYLING_RULES).toContain("$item` inside a repeat ALWAYS names a");
+    expect(STYLING_RULES).toContain('{"$item": "label"}');
+    expect(STYLING_RULES).toContain("NEVER the empty string");
+    expect(STYLING_RULES).toContain("resolves to the WHOLE row object");
+    expect(STYLING_RULES).toContain("silently disappears from the card");
+  });
+
   test("documents responsive layout expectations (D3)", () => {
     expect(STYLING_RULES).toContain("~375 px phone");
     expect(STYLING_RULES).toContain("~1440 px desktop");
@@ -221,7 +233,8 @@ describe("STYLING_RULES", () => {
 
   test("documents the api provider line: spec-declared baseUrl, REST mapping, no keys (api-data-source)", () => {
     // M3 (docs/plan/048-api-data-source): the endpoint is the ONE value the
-    // spec declares — validated https, plain public URLs only.
+    // spec declares — validated https; credentials only ever as the
+    // shape-only auth ref (050 Lane 2), never as values (plan 053).
     expect(STYLING_RULES).toContain(
       '"config": {"baseUrl": "https://…"} with an optional "itemsPath": "/data"',
     );
@@ -231,11 +244,19 @@ describe("STYLING_RULES", () => {
     expect(STYLING_RULES).toContain(
       "map create/update/delete onto POST/PATCH/DELETE at that collection",
     );
-    // Security stance (Lane 1): keyless public endpoints, never credentials.
+    // Security stance (050 Lane 2, corrected by plan 053): protected APIs
+    // are supported through a shape-only auth ref — the ref names a
+    // deployment-held key, the VALUE lives in server config, never in a
+    // spec. The stale "authenticated APIs are unsupported" claim must not
+    // come back.
     expect(STYLING_RULES).toContain(
+      '"auth": {"type": "bearer", "ref": "<name>"}',
+    );
+    expect(STYLING_RULES).toContain("server proxy injects");
+    expect(STYLING_RULES).not.toContain("authenticated APIs are unsupported");
+    expect(STYLING_RULES).not.toContain(
       "never put keys, tokens or query strings in the spec",
     );
-    expect(STYLING_RULES).toContain("authenticated APIs are unsupported");
     // Read-first steering for REST collections.
     expect(STYLING_RULES).toContain("prefer list/get reads");
   });

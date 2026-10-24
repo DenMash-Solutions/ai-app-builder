@@ -244,4 +244,27 @@ describe("playgroundCatalog spec-driven theme", () => {
     expect(description).toContain("delete");
     expect(description).toContain("$item");
   });
+
+  test("data_read pins params/pagination to the query and the 0-based page (053)", () => {
+    const data = playgroundCatalog.data as {
+      actions?: Record<string, { description?: string }>;
+    };
+    expect(data.actions).toHaveProperty("data_read");
+
+    const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
+    expect(prompt).toContain("data_read");
+
+    const description = data.actions?.data_read?.description ?? "";
+    // Placement (gap 3): the bindings live on queries.<name>, not as a
+    // bare object the model could park on repeat or on the action.
+    expect(description).toContain("ON THE QUERY DECLARATION");
+    expect(description).toContain('"queries": {"<name>"');
+    expect(description).toContain("never inside an element's repeat");
+    expect(description).toContain("that is the action's entire params");
+    // Pointer syntax (gap 2): totalPath is "/"-prefixed.
+    expect(description).toContain('"/"-prefixed JSON pointer');
+    // Convention (gap 4): state is 0-based; URL/label are 1-based.
+    expect(description).toContain("Seed state /page 0-BASED");
+    expect(description).toContain("1-based URL to the 0-based state");
+  });
 });
