@@ -61,6 +61,7 @@ row in the same turn as any status change** (rule:
 | 051 | [per-card-detail-reads](051-per-card-detail-reads/plan.md) | implemented | 2026-10-20 |
 | 052 | [server-pagination](052-server-pagination/plan.md) | implemented | 2026-10-20 |
 | 053 | [prompt-data-source-blocks](053-prompt-data-source-blocks/plan.md) | approved | 2026-10-22 |
+| 054 | [generation-resilience](054-generation-resilience/plan.md) | approved | 2026-10-23 |
 
-_53 plans: 48 implemented · 2 approved (`033`, `053`) · 2 draft (`015`, `035`)
+_54 plans: 48 implemented · 3 approved (`033`, `053`, `054`) · 2 draft (`015`, `035`)
 · 1 rejected (`026`)._
