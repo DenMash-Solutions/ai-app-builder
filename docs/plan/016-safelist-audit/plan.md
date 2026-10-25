@@ -18,8 +18,8 @@ The `@source inline` safelist in `app/globals.css` (17 sources, ~25–30k expand
 
 ### Out of scope
 
-- Slimming the safelist — declined; it stays as first-paint + failure-resilience layer (descoped 2026-10-08, user decision)
-- Bundle/payload size optimization of the ~3.1 MB raw static CSS (descoped 2026-10-08 — gzip already ~232 KB, immutable-cached)
+- Slimming the safelist — declined; it stays as first-paint + failure-resilience layer (descoped 2026-10-08, user decision) — **REOPENED 2026-10-25**: plan 055 measured the 3.1 MB sheet as the DevTools-open resize-FPS cause (17.2 FPS / 217 ms worst frame vs 64 / 75 ms after the cut), and plan 057 shipped an evidence-backed slimming (17 → 10 sources, ~17.7k → 1,083 candidates, 3.1 MB → 197 KB raw) that keeps the first-paint + endpoint-failure guarantee for observed tokens
+- Bundle/payload size optimization of the ~3.1 MB raw static CSS (descoped 2026-10-08 — gzip already ~232 KB, immutable-cached) — **REOPENED 2026-10-25** by the same stall evidence; delivered as part of plan 057 (197 KB raw / 30.7 KB gzip)
 - Auditing `app/theme-tokens.css` — contains no `@source inline` directives (descoped 2026-10-08)
 - Client-side filtering of endpoint requests against the static stylesheet (already rejected by runtime-class-compile design decision 5)
 
@@ -47,3 +47,4 @@ The `@source inline` safelist in `app/globals.css` (17 sources, ~25–30k expand
 | 2026-10-08 | audit first run found 27 rotten candidates: 18 × `*destructive-foreground` (theme lacked `--destructive-foreground` — every other semantic pair had one, so the token was added to `app/theme-tokens.css` instead of deleting the vocabulary), `translate-y--2/--1` (negative-prefix form is what v4 compiles — pattern rewritten), `auto-cols-{xs…3xl}` (only `min,max,fr` exist — pattern narrowed) |
 | 2026-10-08 | design decision 2 follow-up applied: `hasRule` per-token scans (5.3 s over 4.5 MB) replaced by single-pass selector-Set `findMissingTokens` in `lib/runtime-classes/escape.ts` (hex-escape aware, `)`-terminating); audit now runs in <1 s, endpoint shares the path |
 | 2026-10-08 | implemented — chain green (202 unit / 618 assertions, 35 e2e), break check confirmed the audit catches injected rot |
+| 2026-10-25 | reopened both descoped slimming/size items (stall evidence, plan 055 findings 1–8) → superseded by plan 057, which shipped the curated cut and raised the audit-test floors to ≥10 sources / ≥1,000 candidates |
