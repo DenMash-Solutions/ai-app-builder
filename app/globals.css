@@ -13,41 +13,27 @@
    never scan them as candidates. */
 @source not "../docs";
 
-/* Guarantee runtime-selected classes (AI/pick editing) always compile. */
-@source inline("{bg,text,border}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
-@source inline("{hover:,focus-visible:,active:,dark:,dark:hover:}{bg,text}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
-@source inline("{hover:,focus-visible:,active:,dark:,dark:hover:}border-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
+/* Guarantee runtime-selected classes (AI/pick editing) always compile.
+   CURATED SET — plan 057 (safelist-curation-css-architecture): every kept
+   pattern is evidence-backed (stored specs / picker datalist / generation
+   prompt / e2e probes / server-injected fixup classes). The former palette
+   cross-products (~16k speculative candidates = 96% of the old sheet) are
+   gone: DRAFTS style those via /api/tailwind (async, ~200ms), PUBLISHED apps
+   via the bake. Do NOT re-add hue cross-products here — append observed
+   tokens to the enumerated line instead. */
 @source inline("{bg,text,border}-{background,foreground,card,card-foreground,popover,popover-foreground,primary,primary-foreground,secondary,secondary-foreground,muted,muted-foreground,accent,accent-foreground,destructive,destructive-foreground,border,input,ring}");
 @source inline("{hover:,focus-visible:,active:,dark:,dark:hover:}{bg,text,border}-{background,foreground,card,card-foreground,popover,popover-foreground,primary,primary-foreground,secondary,secondary-foreground,muted,muted-foreground,accent,accent-foreground,destructive,destructive-foreground,border,input,ring}");
 @source inline("w-full h-full min-h-screen max-w-{xs,sm,md,lg,xl,2xl,3xl} mx-auto my-{0,1,2,4,6,8} rounded-{sm,md,lg,xl,2xl,3xl,full} border-{0,1,2,4,8} shadow-{sm,md,lg,xl,2xl,none} text-{xs,sm,base,lg,xl,2xl,3xl} font-{medium,semibold,bold} leading-{tight,normal,relaxed} gap-{1,2,3,4,5,6,8} p{,x,y,t,b,l,r}-{0,1,2,3,4,5,6,8,10,12,16} m{,x,y,t,b,l,r}-{0,1,2,3,4,5,6,8,10,12,16} space-y-{1,2,3,4,5,6,8} space-x-{1,2,3,4,5,6,8} opacity-{0,25,50,75,90,100} transition-{colors,all,none} duration-{150,200,300,500} scale-{90,95,100,105,110} {-translate-y-2,-translate-y-1,translate-y-0,translate-y-1,translate-y-2} cursor-{pointer,default} select-{none,auto} text-{left,center,right} whitespace-{nowrap,normal} overflow-{hidden,auto} truncate flex items-center justify-{between,center,start,end} grid-cols-{1,2,3,4,5,6} col-span-{1,2,3,4} hidden block relative absolute z-{10,20,50}");
 @source inline("h-{40,48,56,64,72,80,96} min-h-{40,64,80} object-{cover,contain,fill,none,scale-down} top-0 bottom-0 left-0 right-0 w-fit");
-@source inline("text-white/{50,60,70,80,90} text-black/{40,50,60,70} bg-white/{10,20,30,40,50,60,70,80,90} bg-black/{30,40,50,60,70,80}");
-@source inline("{hover:,focus-visible:,active:,dark:,dark:hover:}text-{white,black} {hover:,focus-visible:,active:,dark:,dark:hover:}{bg-white,bg-black}/{10,20,30,40,50,60,70,80,90}");
 @source inline("backdrop-blur-{xs,sm,md,lg} bg-gradient-to-{t,b,l,r} from-{black,white}/{50,60,70,80,90} via-transparent to-transparent");
-
-/* Scope extension: classes real model output emitted that produced no CSS.
-   Slash-opacity palette forms — these are the subtle surfaces AND the dark:
-   pairings the prompt rules recommend (bg-stone-100/50, dark:bg-stone-900/90,
-   hover:border-stone-400/80). bg/border only: text+opacity was never observed
-   and the semantic text tokens cover that case. */
-@source inline("{bg,border}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}/{40,50,60,70,80,90}");
-@source inline("{hover:,dark:,dark:hover:}{bg,border}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}/{40,50,60,70,80,90}");
-@source inline("{hover:,dark:,dark:hover:}border-{white,black}/{5,10,15,20,25,30,40,50,60,70,80,90}");
-
-/* Responsive variants — without these a model's grid collapses to one column
-   (lg:grid-cols-4 never compiled) and responsive type/spacing do nothing. */
 @source inline("{sm:,md:,lg:,xl:}grid-cols-{1,2,3,4,5,6} {sm:,md:,lg:}col-span-{1,2,3,4} {sm:,md:,lg:}text-{xs,sm,base,lg,xl,2xl,3xl} {sm:,md:,lg:}px-{0,1,2,3,4,5,6,8,10,12} {sm:,md:,lg:}p{,x,y,t,b,l,r}-{4,5,6,8,10,12} {sm:,md:,lg:}gap-{2,3,4,5,6,8} {sm:,md:,lg:}flex-row {sm:,md:,lg:}grid {sm:,md:,lg:}flex {sm:,md:,lg:}hidden {sm:,md:,lg:}max-w-{sm,md,lg,xl,2xl,3xl}");
-
-/* Typography / misc observed in real output: serif headings, tightened
-   tracking, media aspect ratios, clamp lines, items alignment. */
 @source inline("font-{serif,sans,mono,light,normal} italic not-italic opacity-{5,10,15,20,30,35,40,45,55,60,65,70,80,85,95} leading-{snug,tight,normal,relaxed} items-{start,end,stretch,baseline} inset-x-{0,4} inset-y-0 rounded tracking-{wide,wider,widest} line-clamp-{1,2,3} aspect-{auto,square,video} aspect-[3/4] aspect-[4/3] aspect-[4/5] aspect-[16/9] shadow-xs shadow-2xl text-[9px] text-[10px] text-[11px] text-[13px] tracking-[0.18em] tracking-[0.2em] tracking-[0.25em]");
-@source inline("{group-hover:,dark:group-hover:}scale-{90,95,100,105,110} {group-hover:,dark:group-hover:}text-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,slate,zinc,gray,neutral,stone}-{50,100,200,300,400,500,600,700,800,900,950}");
-
-/* Scrollable single-row carousel — the prompt rule now mandates this pattern
-   (flex/grid-flow-col + overflow-x-auto + snap, fixed-width shrink-0 cards).
-   Named min-w scale for card widths; a few observed arbitrary min-w forms;
-   negative mx for the edge-bleed idiom models pair with scroll rows. */
 @source inline("overflow-x-{auto,scroll} scroll-smooth snap-x snap-start snap-end snap-always snap-mandatory snap-proximity shrink-0 grow-0 flex-nowrap grid-flow-col auto-cols-{min,max,fr} min-w-{0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96} max-w-{48,52,56,60,64,72,80,96} min-w-[240px] min-w-[260px] min-w-[280px] min-w-[300px] min-w-[320px] max-w-[240px] max-w-[260px] max-w-[280px] max-w-[300px] max-w-[320px] -mx-{4,5,6,8,10,12}");
+@source inline("bg-amber-400 bg-blue-400 bg-blue-500 bg-blue-600 bg-emerald-400 bg-gray-900 bg-green-500 bg-red-400 bg-red-500 bg-slate-900 bg-stone-100/50 bg-zinc-900 bg-zinc-950 border-zinc-700 border-zinc-800 dark:bg-blue-500 dark:bg-stone-900/90 dark:bg-zinc-900 dark:text-emerald-400 dark:text-zinc-100 hover:bg-blue-300 text-emerald-600 text-zinc-100 text-zinc-300 text-zinc-400 text-zinc-500 text-zinc-600 text-zinc-900 text-zinc-950 bg-black/50 bg-white/20 text-black/50 text-white/80");
+
+/* Carousel chip hover (plan 013): group-hover scale forms — the hue half of
+   the old pattern #16 was cut by plan 057. */
+@source inline("{group-hover:,dark:group-hover:}scale-{90,95,100,105,110}");
 
 @layer base {
   * {

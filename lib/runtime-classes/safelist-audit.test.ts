@@ -11,9 +11,11 @@ const globalsCss = readFileSync(
 
 describe("app/globals.css @source inline safelist audit", () => {
   test("extraction sanity floors (guards against regex rot)", () => {
-    expect(extractInlineSources(globalsCss).length).toBeGreaterThanOrEqual(17);
+    // Floors lowered deliberately by plan 057 (safelist-curation): the curated
+    // evidence-backed set is 10 sources / ~1,083 candidates (was 17 / ~17,702).
+    expect(extractInlineSources(globalsCss).length).toBeGreaterThanOrEqual(10);
     expect(expandGlobalSafelist(globalsCss).length).toBeGreaterThanOrEqual(
-      2000,
+      1000,
     );
   });
 
