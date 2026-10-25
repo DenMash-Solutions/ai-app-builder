@@ -93,7 +93,15 @@ export default function PreviewPage({
   // Runtime classes: spec classNames exist only at runtime — compile any not
   // yet covered via /api/tailwind (same no-op-on-failure behavior as the
   // playground; the hook is session-cached so revisits cost nothing).
-  useRuntimeClasses(spec);
+  // Bake coverage (plan 057-C): servingArtifact() returns an artifact only
+  // when version-matched, and a local history entry is always a fresh object
+  // — identity with published.spec means "rendering exactly what was baked",
+  // so the round-trip is redundant. Owners with a local entry
+  // (spec !== published.spec) keep requesting: their spec may be newer than
+  // the bake and its new classes still need compiling.
+  useRuntimeClasses(spec, {
+    precovered: Boolean(bakedCss) && spec === published?.spec,
+  });
 
   // The spec-declared switch (decision 13): the toggle's change event hands
   // the pressed tag to this handler, and this route-driven surface

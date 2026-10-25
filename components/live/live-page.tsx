@@ -70,7 +70,12 @@ export function LivePage({
       : merged;
   }, [spec, locale]);
   const localized = useMemo(() => localizeSpec(spec, state), [spec, state]);
-  useRuntimeClasses(spec);
+  useRuntimeClasses(spec, {
+    // The page pairs featured.spec with its version-matched baked artifact —
+    // the bake was compiled from exactly these tokens (plan 057-C), so no
+    // /api/tailwind round-trip.
+    precovered: Boolean(bakedCss),
+  });
 
   // Decision 13: the toggle's change event hands the pressed tag here.
   // The handler stays stable-once (ActionProvider captures its initial

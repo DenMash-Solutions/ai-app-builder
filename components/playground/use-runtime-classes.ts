@@ -60,17 +60,36 @@ async function requestMissingClasses(spec: Spec): Promise<void> {
   }
 }
 
+export interface RuntimeClassesOptions {
+  /**
+   * Static CSS already covers this exact spec — a version-matched `bakedCss`
+   * artifact compiled from the same tokens at publish (plan 057-C). Its
+   * tokens join the session cache instead of round-tripping to
+   * /api/tailwind. Callers must only pass this when the artifact was baked
+   * from THIS spec (see `servingArtifact()`'s version guard).
+   */
+  precovered?: boolean;
+}
+
 /**
  * Keeps the document's compiled CSS in step with the rendered spec: collects
  * every className token and asks /api/tailwind for the ones not requested yet,
  * injecting the returned CSS. Debounced (200ms) per spec identity.
  */
-export function useRuntimeClasses(spec: Spec | null | undefined): void {
+export function useRuntimeClasses(
+  spec: Spec | null | undefined,
+  options?: RuntimeClassesOptions,
+): void {
+  const precovered = options?.precovered ?? false;
   useEffect(() => {
     if (!spec) return;
+    if (precovered) {
+      for (const token of collectSpecClassTokens(spec)) requested.add(token);
+      return;
+    }
     const timer = setTimeout(() => {
       void requestMissingClasses(spec);
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [spec]);
+  }, [spec, precovered]);
 }
