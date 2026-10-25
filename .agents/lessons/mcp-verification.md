@@ -36,6 +36,24 @@ const ACTION_BUTTON_CLASS = "gap-1 px-2 text-xs";
 - `globals.css` defines `.dark` as a **selector-scoped var provider**, so any subtree can opt in with `class="dark"`
 - Alternative: hardcode zinc/amber utility classes (as `PropertyForm`/`ActionTiles` do) — fine, but the `dark` class is smaller when the subtree already uses token utilities
 
+### 3. Long calls fail differently (protocolTimeout, recursion, timers)
+
+- **`evaluate_script` can time out** (`Runtime.callFunctionOn timed out`) when navigation + wait + scan are chained in one call — run **stepwise**: `navigate_page` → one small evaluate (readiness) → one evaluate (the actual check). Each call gets its own timeout budget.
+- **CSS rule scans must recurse grouping rules** — top-level `sheet.cssRules` iteration reports "not found" for everything inside `@layer`/`@media`:
+
+  ```js
+  const scan = (rules) => {
+    for (const rule of rules) {
+      if (rule.selectorText?.includes("bg-card")) hits.semantic = true;
+      if (rule.cssRules) scan(rule.cssRules); // ← grouping rules
+    }
+  };
+  for (const sheet of document.styleSheets) { try { scan(sheet.cssRules); } catch {} }
+  ```
+
+- **No top-level timers in the `execute` sandbox** (`setTimeout`/`setInterval` throw `ReferenceError`) — page-context timers inside `evaluate_script` (`new Promise((r) => setTimeout(r, ms))`) work fine; sequence slow steps across separate tool calls instead.
+- **`initScript` persists until cleared** — a fetch/network block installed via `navigate_page({ initScript })` stays armed for later navigations; re-navigate *without* the script and re-read the flag to confirm it cleared.
+
 ## Verification
 
 - Element screenshot in **both** themes (toggle theme, re-shoot) — a dark island must stay dark
@@ -46,9 +64,14 @@ const ACTION_BUTTON_CLASS = "gap-1 px-2 text-xs";
 - Never debug from a full-page MCP screenshot alone — cross-check with `evaluate_script`
 - Fixed-theme panels/toolbars: add `dark` (or explicit zinc classes) so page theme cannot invert them
 - Window resize via MCP may not apply — read `window.innerWidth` before assuming a breakpoint
+- Scripted check that mixes navigation + waits + DOM scan → split into stepwise calls; recurse grouping rules when scanning stylesheets
 
 ## Memory Triggers
 
 - Screenshot contradicts the state you just changed → stale frame; switch to `evaluate_script`
 - Component invisible in one theme → does it use theme tokens? Add `dark` or explicit colors
 - About to trust any MCP screenshot → did I verify the frame is fresh?
+- `Runtime.callFunctionOn timed out` → chain too long; run stepwise
+- Rule "missing" from stylesheet scan → did I recurse into `@layer` grouping rules?
+- `ReferenceError: Unknown identifier 'setTimeout'` in execute → timers only live inside `evaluate_script`
+- A check behaves as if never installed → is a previous `initScript` still armed?

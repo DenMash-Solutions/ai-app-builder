@@ -66,6 +66,29 @@ A computed "6867s span" inside a 70-second run is not a hang — it's a unit
 error. Playwright trace `_monotonicTime` is in **ms**; sanity-check any
 derived span against the run's wall-clock before theorizing.
 
+## 5. Server-side I/O ground truth = Supabase `query_logs`
+
+Server-side fetches (the Next server client) never appear in the browser's
+network log — to prove a query shape or a cache actually worked, query the
+unified logs (`query_logs` on the project) and count rows after a marker
+timestamp:
+
+- **ClickHouse literals**: `timestamp >= '…T…Z'` fails with `TYPE_MISMATCH`
+  (DateTime64) — use `toDateTime64('YYYY-MM-DD HH:MM:SS', 3)`; the
+  `iso_timestamp_start` parameter scopes the window, the SQL scopes the filter.
+- **Schema**: there is no `message` column; request details live in the
+  `log_attributes` map — `log_attributes['request.path']`,
+  `log_attributes['request.url']`, `log_attributes['response.status_code']`.
+  Useful `source` values: `edge_logs` (PostgREST/Auth HTTP), `postgres_logs`,
+  `pgbouncer_logs`.
+- **Cache proof pattern**: take a wall-clock marker → load the page twice →
+  `count()` rows for the table's path after the marker → **1 row for 2 loads**
+  = the fetch-tag cache held. Re-query after a short delay before believing a
+  count of 0/1 (ingestion lag).
+- This is how "slim select" claims get verified too: read the actual
+  `request.url` (`select=id,owner_id,updated_at` vs `select=*`) instead of
+  trusting the code you wrote.
+
 ## Memory triggers
 
 - e2e failures started right after a build/restart → suspect `.next` cache
@@ -76,3 +99,7 @@ derived span against the run's wall-clock before theorizing.
 - Status-dot assertion flaky or timing out → debounce + data-volume slowness;
   poll the database, budget generously
 - Trace span looks impossible → timestamps are ms
+- Need to prove a server-side query/cache behavior → Supabase `query_logs`
+  (`toDateTime64` literals, `log_attributes['request.path']`), not the
+  browser network panel
+- Log count looks wrong → wait and re-query (ingestion lag) before theorizing

@@ -140,6 +140,18 @@
 **Lesson Reference**: `.agents/lessons/dev-server-e2e-triage.md`
 **Prevention**: Never build while dev serves the same `.next` (stop dev first, or wipe `.next` after); when e2e failures begin right after an environment action, read the dev log FIRST and verify disk bytes (`grep`/`tsc`) before editing anything a parser blames; RLS `42501` with identical old/new-token probe results = race with the parent row → gate async e2e waits on the database (service-role poll), never on status-dot text; sanity-check trace spans (ms) against wall-clock.
 
+### 24. Running a Verification Check Against a Surface That Exercises Nothing (NEW)
+
+**Problem**: the endpoint-blocked first-paint check (plan 057) was run on `/ui` (root) — no spec loads there, so the fetch block recorded **0 attempts** and the rule scan proved nothing; the run had to be discarded and re-done on a route with a spec (`/ui/{ref}`). Same family as the two invalid FPS runs (DevTools closed while the protocol required it open — user caught both).
+**Lesson Reference**: `css-safelist-performance.md` — "Measurement Protocol"; `mcp-verification.md`
+**Prevention**: before trusting any check result, confirm the setup actually exercised the path (attempt count ≥ 1, expected element count > 0, control arm measured first); a "0/0/no-error" result from a probe that may not have run is an invalid run, not a pass.
+
+### 25. Trusting a Bulk-Replace Script's Success Output Instead of Re-Deriving Counts (NEW)
+
+**Problem**: the `app/globals.css` safelist splice replaced only the first contiguous run of `@source inline` lines (10 of 17) because section comments interleave the block — the script printed "replaced … " and exited 0; the leftover 7 lines were caught only because the follow-up count said **16 sources instead of 10**.
+**Lesson Reference**: `css-safelist-performance.md` — "Tooling Gotchas"
+**Prevention**: after any bulk replace/splice, re-derive the invariant the edit was supposed to change (line/source/candidate counts, expected exact set) in a fresh read of the file — never treat a success message or exit code as proof the content is right.
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -277,6 +289,9 @@ When I see these → STOP and check lessons:
 - **NEW**: Concluding "model adherence gap" from one generated spec → check whether the recipe teaches the composition (`template-derived-strings.md`, mistake #22)
 - **NEW**: e2e admin-write failures (`42501`, stuck sync dot) starting right after a build → stale `.next` cache + sync race — log first, disk bytes before edits, gate on the DB (`dev-server-e2e-triage.md`, mistake #23)
 - **NEW**: About to run `bun run build` with `next dev` still up → stop dev first (or expect to wipe `.next`) (`dev-server-e2e-triage.md`, mistake #23)
+- **NEW**: Check result shows 0 attempts / 0 elements / "nothing happened" → did the probe actually exercise the path? Invalid run, not a pass (mistake #24)
+- **NEW**: About to trust a bulk-replace script's "success" output → re-derive the counts from a fresh read of the file (mistake #25)
+- **NEW**: FPS/resize performance complaint → check CSS rule count (`@layer utilities`) before blaming the renderer; measure control-first with DevTools open (`css-safelist-performance.md`)
 
 ## ⚡ Quick Recovery Commands
 

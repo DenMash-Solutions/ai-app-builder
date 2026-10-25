@@ -97,6 +97,14 @@ This file serves as the central entry point for all lessons learned and problem-
 - Never `next build` while `next dev` serves the same `.next` — stale Turbopack cache replays dead parse errors across restarts; disk bytes + `tsc` are ground truth
 - RLS `42501` with healthy-token probes → race with the parent row, not the policy — probe REST A/B first, gate async work on the database (service-role poll), never on status-dot text
 - Trace `_monotonicTime` is milliseconds — sanity-check derived spans against wall-clock before theorizing
+- Server-side query/cache proof → Supabase `query_logs` (`toDateTime64` literals, `log_attributes['request.path']`), not the browser network panel
+
+#### **[css-safelist-performance.md](../lessons/css-safelist-performance.md)** - CSS SAFELIST MASS = RESIZE-FPS KILLER
+
+- Speculative `@source inline` cross-products (3 MB / ~42k rules) = ~1s style-recalc stalls per resize with DevTools open; cut to evidence-backed 10 sources / 1,083 candidates → 197 KB, 17 → 64 FPS
+- FPS protocol: control arm first, DevTools open (the reported condition), real build — DevTools-closed reads ~120 on every variant
+- `@source inline("…")` lines must end exactly `");` (no trailing comments); after a bulk splice re-derive source/candidate counts
+- Revisit "declined/slimming rejected" decisions when new measurement evidence arrives (plan 016 reopened by plan 057)
 
 ## 🚨 Critical Insights (Feature Organization)
 
@@ -155,6 +163,10 @@ Before writing ANY code, follow this exact sequence:
 - A URL/image prop renders with a gap (`…/…png`) → JS inside `$template`; only `${/paths}` interpolate → **[template-derived-strings.md](../lessons/template-derived-strings.md)**
 - e2e failures began right after a build/restart → stale `.next` cache replay; verify disk bytes + wipe cache → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)**
 - `42501`/stuck status dot while probes show healthy tokens → sync race; gate on the DB, not UI status text → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)**
+- FPS/resize degrades only with DevTools open → CSS rule count first (`@layer utilities`), control arm first → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**
+- `evaluate_script` timeout / rule "missing" from stylesheet scan / `setTimeout` ReferenceError in execute → stepwise calls, recurse `@layer`, page-context timers → **[mcp-verification.md](../lessons/mcp-verification.md)**
+- Check reports 0 attempts / 0 elements / "nothing happened" → probe may not have exercised the path; invalid run, not a pass → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**
+- Bulk-replace script exited 0 → re-derive the counts from a fresh read before trusting it → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**
 
 ### **Green Flags** → Continue with confidence
 
