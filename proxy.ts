@@ -62,16 +62,23 @@ export async function proxy(request: NextRequest) {
     !hasLocale(routing.locales, first) &&
     !(APP_SEGMENTS as readonly string[]).includes(first);
   if (isContentPath && second !== undefined) {
-    // Decision 11: content routes serve canonical tags only, and a
-    // non-canonical tag can't render — decide it here (pure CPU, no DB)
-    // so the real 404 status is set before any body streams, exactly like
-    // bareSegmentResponse below (`loading.md` Status Codes: "ensure the
-    // resource exists before the response body is streamed"). Under Cache
-    // Components a `notFound()` inside the page's <Suspense> would commit
-    // 200 first (the soft-404 plan 056 already fixed once). The page keeps
-    // the same check as defense for dot-paths, which this matcher excludes
-    // (`.*\..*`) and therefore never reach this guard.
-    if (canonicalizeTag(first) === null) {
+    // Decision 11/12 status decisions for content paths, all pure CPU here
+    // (no DB): (1) a non-canonical tag can't render — decide it before any
+    // body streams (`loading.md` Status Codes: "ensure the resource exists
+    // before the response body is streamed"), exactly like
+    // bareSegmentResponse below; under Cache Components a `notFound()`
+    // inside a streamed subtree commits 200 first (the soft-404 plan 056
+    // already fixed once). (2) App surfaces (ui/admin/login/signup) serve
+    // the app languages only — this is `(app)/layout`'s locale gate moved
+    // here: the parent's `notFound()` threw during validation's prefetch
+    // render and poisoned every child segment's validation, and the status
+    // belongs upstream anyway. The [locale]/[slug] page keeps its
+    // canonical-tag gate as defense for dot-paths, which this matcher
+    // excludes (`.*\..*`) and therefore never reach this guard.
+    if (
+      canonicalizeTag(first) === null ||
+      (APP_SEGMENTS as readonly string[]).includes(second)
+    ) {
       return NextResponse.rewrite(new URL("/_not-found", request.url));
     }
   }
