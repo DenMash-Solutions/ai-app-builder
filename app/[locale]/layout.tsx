@@ -9,9 +9,16 @@ import { canonicalizeTag } from "@/lib/i18n/spec-languages";
 import { LOCALES, routing } from "@/lib/i18n/routing";
 import "../globals.css";
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+/**
+ * The root layout derives `<html lang>` and the next-intl messages from the
+ * locale param, and a document root can't sit inside `<Suspense>` — the
+ * framework's own guidance for root-element attributes (they "can't be
+ * wrapped in `<Suspense>`", `blocking-prerender-runtime`) is to keep them out
+ * of the boundary. Bare-segment serving is decided per request in
+ * `proxy.ts` (DB-live 200/307/404), so content locales render on request by
+ * design; the app locales from `generateStaticParams` still prerender — this
+ * export disables instant-navigation validation, not prerendering.
+ */
 export const instant = false;
 
 /**
@@ -39,7 +46,12 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
-  const t = await getTranslations({ locale });
+  // Canonicalized because this root layout also renders Next's synthetic
+  // `/_not-found` route, whose `locale` param ("_not-found") is not a
+  // BCP-47 tag and would make next-intl warn on every render.
+  const t = await getTranslations({
+    locale: canonicalizeTag(locale) ?? routing.defaultLocale,
+  });
   return {
     title: t("metadata.title"),
     description: t("metadata.description"),
@@ -56,7 +68,9 @@ export default async function LocaleLayout(props: LayoutProps<"/[locale]">) {
   // (app)/layout.tsx. The html lang stays honest for the canonical form.
   const lang = canonicalizeTag(locale) ?? routing.defaultLocale;
 
-  const messages = await getMessages({ locale });
+  // Messages load for the canonical tag (or the default) — same synthetic
+  // /_not-found guard as generateMetadata above.
+  const messages = await getMessages({ locale: lang });
 
   return (
     <html

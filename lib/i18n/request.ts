@@ -1,6 +1,7 @@
 import * as rootParams from "next/root-params";
 import { hasLocale } from "next-intl";
 import { getRequestConfig } from "next-intl/server";
+import { canonicalizeTag } from "./spec-languages";
 import { routing } from "./routing";
 
 export default getRequestConfig(async ({ locale }) => {
@@ -11,6 +12,11 @@ export default getRequestConfig(async ({ locale }) => {
         ? paramValue
         : routing.defaultLocale;
   }
+
+  // The root layout also renders Next's synthetic `/_not-found` route, whose
+  // root param ("_not-found") is not a BCP-47 tag — clamp it here (the one
+  // place a raw param enters next-intl) so `validateLocale` stays quiet.
+  locale = canonicalizeTag(locale) ?? routing.defaultLocale;
 
   // App locales carry the full UI catalog; content-only locales (live-page
   // tags beyond the app languages, decision 11) reuse the default catalog —

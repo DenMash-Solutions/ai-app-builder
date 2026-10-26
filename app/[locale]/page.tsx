@@ -13,11 +13,6 @@ import { resolveRootServing } from "@/lib/publish/root-serving";
 import { availableLanguages } from "@/lib/i18n/spec-languages";
 import { routing } from "@/lib/i18n/routing";
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 /**
  * Root page (plan Q1): renders the admin-featured live page chrome-less.
  * Nothing featured → the playground landing (the app from minute one; all
@@ -41,6 +36,21 @@ export async function generateMetadata(): Promise<Metadata> {
   const featured = await getFeaturedPage();
   return featured ? { title: featured.name } : {};
 }
+
+/**
+ * Blocking by decision (plan 056 F1): beyond rendering, this page owns the
+ * decision-12 status gates for bare segments (serve / 307 redirect / 404),
+ * and an HTTP status can only be set before the response body streams —
+ * `loading.md` Status Codes: "ensure the resource exists before the
+ * response body is streamed, so that the server can set the HTTP status
+ * code." Wrapping the gates in `<Suspense>` (the generic recipe) makes the
+ * shell flush at 200 first and reintroduces the soft-404 this plan already
+ * fixed in `proxy.ts`. `proxy.ts` re-checks the same decision upstream;
+ * these gates are the defense in depth (and the dev `/_not-found` render's
+ * real 404). This export disables validation, not prerendering — locales
+ * from `generateStaticParams` still prerender.
+ */
+export const instant = false;
 
 export default async function Home({
   params,

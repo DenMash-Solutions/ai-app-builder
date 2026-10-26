@@ -1,5 +1,5 @@
 import type { Spec } from "@json-render/core";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createPublicReadClient } from "@/lib/supabase/server";
 import { availableLanguagesOfState } from "@/lib/i18n/spec-languages";
 import { parseArtifacts } from "@/lib/publish/artifacts";
 import type { BakedArtifact } from "@/lib/publish/artifacts";
@@ -112,12 +112,13 @@ export async function getPublishedPageBySlugFrom(
 
 /** Featured root page — null when nothing is featured (root falls back). */
 export async function getFeaturedPage(): Promise<LivePageData | null> {
-  return getFeaturedPageFrom(await createClient());
+  // Cookie-free public read (see createPublicReadClient): prerenderable.
+  return getFeaturedPageFrom(createPublicReadClient());
 }
 
 /** Published page at /{locale}/{slug} — the world-visible live URL. */
 export async function getPublishedPageBySlug(
   slug: string,
 ): Promise<LivePageData | null> {
-  return getPublishedPageBySlugFrom(await createClient(), slug);
+  return getPublishedPageBySlugFrom(createPublicReadClient(), slug);
 }
