@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import landingFixture from "./fixtures/landing-fixture.json";
 import themeFixture from "./fixtures/theme-fixture.json";
-import { E2E_STATE_DIR, canSeed, e2eEnv, statePath } from "./env";
+import { BASE_URL, E2E_STATE_DIR, canSeed, e2eEnv, statePath } from "./env";
 
 /**
  * Server-side e2e infrastructure (Node only — global setup/teardown and test
@@ -106,6 +106,34 @@ async function writeFeatured(
   );
   if (error) {
     throw new Error(`[e2e] cannot set featured_ui_id: ${error.message}`);
+  }
+  // The app share-caches this GET under the `site_settings` tag (plan 055 C)
+  // and only self-heals a missed invalidation after 60s — a harness write
+  // straight to REST would leave the previous run's pointer (e.g. the
+  // unfeature test's null) serving stale `/en` content into the NEXT run.
+  // Poke the same invalidation hop every app mutation uses.
+  await invalidateProjectionTag("site_settings");
+}
+
+/** Best-effort `POST /api/revalidate` — the documented external-writer hop. */
+async function invalidateProjectionTag(tag: string): Promise<void> {
+  try {
+    const res = await fetch(`${BASE_URL}/api/revalidate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: [tag] }),
+    });
+    if (!res.ok) {
+      console.warn(
+        `[e2e] projection revalidate poke for "${tag}" returned ${res.status}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[e2e] projection revalidate poke for "${tag}" failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
   }
 }
 

@@ -44,11 +44,17 @@ function toLivePage(row: Record<string, unknown> | null): LivePageData | null {
 export async function getFeaturedLanguagesFrom(
   supabase: ProjectionClient,
 ): Promise<string[]> {
-  const { data: settings } = await supabase
+  const { data: settings, error } = await supabase
     .from("site_settings")
     .select("featured_ui_id")
     .eq("id", true)
     .maybeSingle();
+  if (error) {
+    console.error(
+      `[featured] proxy site_settings read failed: ${error.message}`,
+    );
+    return [];
+  }
   if (!settings?.featured_ui_id) return [];
   const { data: page } = await supabase
     .from("published_pages")
@@ -66,11 +72,19 @@ export async function publishedSlugExistsFrom(
   supabase: ProjectionClient,
   slug: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("published_pages")
     .select("slug")
     .eq("slug", slug)
     .maybeSingle();
+  if (error) {
+    // Keep the boolean contract (a check that throws breaks callers), but
+    // never let a failed read pass as silent "does not exist".
+    console.error(
+      `[featured] published_pages slug check failed for "${slug}": ${error.message}`,
+    );
+    return false;
+  }
   return data !== null;
 }
 
@@ -83,18 +97,41 @@ export async function publishedSlugExistsFrom(
 export async function getFeaturedPageFrom(
   supabase: ProjectionClient,
 ): Promise<LivePageData | null> {
-  const { data: settings } = await supabase
+  const { data: settings, error: settingsError } = await supabase
     .from("site_settings")
     .select("featured_ui_id")
     .eq("id", true)
     .maybeSingle();
-  if (!settings?.featured_ui_id) return null;
 
-  const { data: page } = await supabase
+  if (settingsError) {
+    // A failed read must be VISIBLE — never masquerade as "not featured"
+    // (that silently swaps the root for the Playground). Loud, then null.
+    console.error(
+      `[featured] site_settings read failed — root falls back to Playground: ${settingsError.message}`,
+    );
+    return null;
+  }
+  if (!settings?.featured_ui_id) return null; // genuine "nothing featured".
+
+  const { data: page, error: pageError } = await supabase
     .from("published_pages")
     .select("slug, name, version, spec, artifacts")
     .eq("ui_id", settings.featured_ui_id)
     .maybeSingle();
+
+  if (pageError) {
+    console.error(
+      `[featured] published_pages read failed for ${settings.featured_ui_id} — root falls back to Playground: ${pageError.message}`,
+    );
+    return null;
+  }
+  if (page === null) {
+    // Dangling pointer: FK-unreachable featured id (abnormal — the seed
+    // matrix only ever warns about this state, nothing repairs it).
+    console.warn(
+      `[featured] featured_ui_id=${settings.featured_ui_id} has no published page — root falls back to Playground`,
+    );
+  }
   return toLivePage(page);
 }
 
@@ -102,11 +139,17 @@ export async function getPublishedPageBySlugFrom(
   supabase: ProjectionClient,
   slug: string,
 ): Promise<LivePageData | null> {
-  const { data: page } = await supabase
+  const { data: page, error } = await supabase
     .from("published_pages")
     .select("slug, name, version, spec, artifacts")
     .eq("slug", slug)
     .maybeSingle();
+  if (error) {
+    console.error(
+      `[featured] published_pages read failed for slug "${slug}": ${error.message}`,
+    );
+    return null;
+  }
   return toLivePage(page);
 }
 

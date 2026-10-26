@@ -139,8 +139,13 @@ test.describe("authenticated — admin identity", () => {
 
       // Push: the status dot settles on "Saved to account". Admin-sized
       // pulls (every uis row, full revisions) push the cycle past 5s as the
-      // table grows — budget accordingly (sync-trip timeout).
-      await expect(page.locator(`[aria-label="${SYNC.saved}"]`)).toBeVisible({
+      // table grows — budget accordingly (sync-trip timeout). Filter to the
+      // active page: Cache Components preserves the previous route's DOM
+      // hidden (Activity, display:none) and its dot mirrors the same sync
+      // store — a CSS locator would match both (strict-mode violation).
+      await expect(
+        page.locator(`[aria-label="${SYNC.saved}"]`).filter({ visible: true }),
+      ).toBeVisible({
         timeout: 20_000,
       });
 
@@ -469,8 +474,13 @@ test.describe("authenticated — admin identity", () => {
       await page.getByPlaceholder(UI.promptPlaceholder).fill(prompt);
       await page.getByRole(ROLE.button, { name: ACTIONS.generate }).click();
       await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+      // Activity preservation (Cache Components) keeps the previous route's
+      // DOM hidden in the document — scope to the visible page or a hidden
+      // copy of the heading turns this into a strict-mode violation.
       await expect(
-        page.getByText(I18N.seedTitle, { exact: true }),
+        page
+          .getByText(I18N.seedTitle, { exact: true })
+          .filter({ visible: true }),
       ).toBeVisible();
       await dismissUploadNudge(page);
       const stored = (await readHistoryStorage(page)).find(
