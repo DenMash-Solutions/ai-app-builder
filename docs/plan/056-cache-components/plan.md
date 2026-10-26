@@ -136,7 +136,20 @@ Partial Prefetching) and gives published pages an instant shell.
     (`await params` + `getTranslations`/`getMessages`)
   - **F2 published surface**: `app/[locale]/[slug]/page.tsx` (two `await
     params` sites) — the money route: static shell with baked CSS, spec data
-    streamed
+    streamed. **Settled 2026-10-26 after measurement** (scope refined
+    same-turn): (a) the decision-11 canonical-tag 404 gate moves upstream to
+    `proxy.ts` for multi-segment content paths (pure-CPU check → rewrite
+    `/_not-found` → real 404 status before the body streams); (b) the page
+    was restructured to suspend `SlugPage` behind a deterministic fallback
+    and that **measured incompatibly with the zero-JS baked-serve contract**
+    — the `javaScriptEnabled: false` assertion in `e2e/authed.spec.ts`
+    "publishes an entry and serves its live URL" failed 3/3 runs, because
+    post-flush Suspense content is delivered behind React swap scripts that
+    never execute without JS. The page therefore keeps a **reason-commented
+    `instant = false`** (same pattern as F1): complete blocking HTML for the
+    no-JS contract, with the page's canonical-tag gate retained as defense
+    for dot-paths the proxy matcher excludes (`.*\..*`) — it sets a real 404
+    again now that the render blocks
   - **F3 playground/app group**: `(app)/layout.tsx`, `ui`, `ui/[ref]`
   - **F4 auth/admin**: `login`, `signup`, `admin`
 - Verification per feature via `next-dev-loop` (installed) + build gates;
@@ -227,3 +240,4 @@ Partial Prefetching) and gives published pages an instant shell.
 | 2026-10-26 | scope added (same-turn): proxy-side bare-segment status decisions — Test 6 in prod exposed soft-404 (bare unknown 200 vs control 404) and lost 307s for published slugs; `notFound()`/`redirect()` fire after the streamed shell fixes the status at 200; docs-prescribed fix = decision in `proxy` + rewrite to prerendered `/_not-found` |
 | 2026-10-26 | **Phase 1 verified** — gate chain: format ✓ lint ✓ tsc ✓ 647 unit ✓ build (PPR ◐) ✓ full e2e **112/112** (dev, StrictMode) ✓ prod status matrix exact pre-056 parity (404+UI / 307 / untouched 200s) ✓ Test 6 prod **21/21** ✓ dev-log scan: only plan-known `blocking-prerender-current-time` diagnostics on authed `Home`/`SlugPage` (Phase-2 F4) + 1 self-recovering theme hydration mismatch in untouched theme code (no test impact). Phase 2 (full adoption) pending — plan stays `approved` until the adoption-marker grep hits 0 |
 | 2026-10-26 | **F1 locale shell adopted** — both F1 files now carry **reason-commented** `instant = false` (allowed by plan): root layout because `<html lang>` + next-intl messages derive from the locale param and a document root can't sit in `<Suspense>`; root page because decision-12 status gates must run **before** the response streams (`loading.md` Status Codes) — a `<Suspense>` wrap was implemented and measured: the shell flushed at 200 and dev `/xx` soft-404ed (200 + 404 UI) until reverted, validating both reasons empirically. Real adoption wins: cookie-free public projection reads (`createPublicReadClient` — `cookies()` was the page's runtime-data blocker; `/en`,`/es` went ◐ PPR → **○ fully static**), next-intl request-config clamp on the synthetic `/_not-found` param + layout metadata/messages clamped to canonical tags (zero `invalid locale` warnings). Gates: format ✓ lint ✓ tsc ✓ 647 unit ✓ build ✓ 112/112 e2e (dev) ✓ prod matrix + prod log clean ✓. Work queue 7 → **5** |
+| 2026-10-26 | **F2 published surface adopted** — `proxy.ts` gains the decision-11 canonical-tag guard for multi-segment content paths (pure-CPU → rewrite `/_not-found`, real 404 before the body streams; verified `/en_US/foo` 404 in `proxy.ts: 1.2ms`); `[slug]/page.tsx` codemod marker → **reason-commented `instant = false`**: the streaming (`<Suspense>`) restructure was implemented and **measured incompatible with the zero-JS baked-serve contract** — the `javaScriptEnabled: false` assertion in `e2e/authed.spec.ts` "publishes an entry and serves its live URL" failed 3/3 runs (post-flush content ships behind React swap scripts that never execute without JS), so the route serves complete blocking HTML by decision. Page gate retained as dot-path defense (matcher excludes `.*\..*` — real 404 again under blocking). Gates: format ✓ lint ✓ tsc ✓ 647 unit ✓ build (29/29, `/en`,`/es` ○ static) ✓ 112/112 e2e (dev) ✓ prod matrix (404+UI incl. dot-path, 307s, published 200s, correct `lang`) ✓ prod log clean ✓. Work queue 5 → **4** |

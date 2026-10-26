@@ -2,6 +2,7 @@ import createMiddleware from "next-intl/middleware";
 import { hasLocale } from "next-intl";
 import { NextResponse, type NextRequest } from "next/server";
 import { APP_SEGMENTS, routing } from "@/lib/i18n/routing";
+import { canonicalizeTag } from "@/lib/i18n/spec-languages";
 import {
   getFeaturedLanguagesFrom,
   publishedSlugExistsFrom,
@@ -60,6 +61,20 @@ export async function proxy(request: NextRequest) {
     first !== undefined &&
     !hasLocale(routing.locales, first) &&
     !(APP_SEGMENTS as readonly string[]).includes(first);
+  if (isContentPath && second !== undefined) {
+    // Decision 11: content routes serve canonical tags only, and a
+    // non-canonical tag can't render — decide it here (pure CPU, no DB)
+    // so the real 404 status is set before any body streams, exactly like
+    // bareSegmentResponse below (`loading.md` Status Codes: "ensure the
+    // resource exists before the response body is streamed"). Under Cache
+    // Components a `notFound()` inside the page's <Suspense> would commit
+    // 200 first (the soft-404 plan 056 already fixed once). The page keeps
+    // the same check as defense for dot-paths, which this matcher excludes
+    // (`.*\..*`) and therefore never reach this guard.
+    if (canonicalizeTag(first) === null) {
+      return NextResponse.rewrite(new URL("/_not-found", request.url));
+    }
+  }
   const response = isContentPath
     ? ((await bareSegmentResponse(request, first, second)) ??
       NextResponse.next())
