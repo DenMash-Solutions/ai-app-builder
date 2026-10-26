@@ -152,6 +152,18 @@
 **Lesson Reference**: `css-safelist-performance.md` — "Tooling Gotchas"
 **Prevention**: after any bulk replace/splice, re-derive the invariant the edit was supposed to change (line/source/candidate counts, expected exact set) in a fresh read of the file — never treat a success message or exit code as proof the content is right.
 
+### 26. External Writer Bypassing the Tag-Invalidation Contract (NEW)
+
+**Problem**: plan 056's e2e flake campaign (~40% of runs showed playground content at `/en`) — the test harness restored the featured pointer with a direct REST write and no `site_settings` tag invalidation, while every app writer pokes `/api/revalidate`; the stale `{"featured_ui_id":null}` served for up to the 60s TTL, and swallowed read errors made it indistinguishable from a legit "not featured"
+**Lesson Reference**: `.agents/lessons/cache-invalidation-writers.md`
+**Prevention**: any writer to a share-cached table (app, harness, script) must invalidate its tags in the same helper; cached reads must log errors (genuine null stays silent); symptom appearing in the *next* run at a valid URL → suspect the share-cache before the renderer
+
+### 27. Debugging Data-Source "Unavailable" Failures Before Checking Quota (NEW)
+
+**Problem**: runs 12–18 red with "Todos are unavailable" during a marathon e2e loop — root cause was Supabase anon-signup rate limiting: every fresh context calls `signInAnonymously()`, the marathon burned the budget, `/signup` returned **429 × 35** (proven via `auth_logs` window alignment), → `DataError(unavailable)` → looks like an app/RLS bug; the failure self-recovers and passes in isolation
+**Lesson Reference**: `.agents/lessons/e2e-auth-quota.md`
+**Prevention**: data-source tests failing with "unavailable" → query `auth_logs` for 429 first, before touching the adapter/RLS/schema; failures that start mid-marathon (not after a code change) = suspect external quota; red-in-batch/green-in-isolation = state/quota/race, not logic
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -292,6 +304,8 @@ When I see these → STOP and check lessons:
 - **NEW**: Check result shows 0 attempts / 0 elements / "nothing happened" → did the probe actually exercise the path? Invalid run, not a pass (mistake #24)
 - **NEW**: About to trust a bulk-replace script's "success" output → re-derive the counts from a fresh read of the file (mistake #25)
 - **NEW**: FPS/resize performance complaint → check CSS rule count (`@layer utilities`) before blaming the renderer; measure control-first with DevTools open (`css-safelist-performance.md`)
+- **NEW**: e2e flake at a valid URL, intermittent, no code change → did a *harness* write bypass tag invalidation? (`cache-invalidation-writers.md`, mistake #26)
+- **NEW**: Data-source tests fail "…are unavailable" → `auth_logs` 429 probe before any adapter/RLS debugging; mid-marathon failures = quota burn (`e2e-auth-quota.md`, mistake #27)
 
 ## ⚡ Quick Recovery Commands
 
