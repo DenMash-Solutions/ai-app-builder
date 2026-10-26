@@ -26,27 +26,46 @@ import { canSeed, e2eEnv } from "./env";
  * test (components/data-sources/query-bindings.test.tsx) instead.
  */
 
-/** Row container for one todo (fixture marks items with this class). */
+/** Row container for one todo (fixture marks items with this class).
+ *  `visible: true` scopes past Activity-parked copies of the previous route
+ *  (Cache Components keeps navigated-away pages mounted hidden). */
 const row = (page: Page, title: string) =>
-  page.locator(".todo-item").filter({ hasText: title });
+  page
+    .locator(".todo-item")
+    .filter({ visible: true })
+    .filter({ hasText: title, visible: true });
 
-const count = (page: Page) => page.locator(`.${TODO.countClass}`);
+const count = (page: Page) =>
+  page.locator(`.${TODO.countClass}`).filter({ visible: true });
 
 async function generateTodos(page: Page): Promise<void> {
   await mockGenerate(page, { lines: TODO_UI_LINES });
   await page.goto(PATHS.ui);
   await waitForMsw(page);
-  await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+  await page
+    .getByRole(ROLE.button, { name: PROMPTS.signIn })
+    .filter({ visible: true })
+    .click();
   await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
   await expect(
-    page.getByRole(ROLE.heading, { name: TODO.heading }),
+    page
+      .getByRole(ROLE.heading, { name: TODO.heading })
+      .filter({ visible: true }),
   ).toBeVisible();
 }
 
 async function addTodo(page: Page, title: string): Promise<void> {
-  await page.getByPlaceholder(TODO.addPlaceholder).fill(title);
-  await page.getByRole(ROLE.button, { name: TODO.addLabel }).click();
-  await expect(page.getByText(title)).toBeVisible();
+  await page
+    .getByPlaceholder(TODO.addPlaceholder)
+    .filter({ visible: true })
+    .filter({ visible: true })
+    .fill(title);
+  await page
+    .getByRole(ROLE.button, { name: TODO.addLabel })
+    .filter({ visible: true })
+    .filter({ visible: true })
+    .click();
+  await expect(page.getByText(title).filter({ visible: true })).toBeVisible();
 }
 
 test.describe("data sources — persistent todo (localStorage)", () => {
@@ -55,12 +74,16 @@ test.describe("data sources — persistent todo (localStorage)", () => {
   }) => {
     await generateTodos(page);
     // Fresh visitor: the store is empty — the empty branch, not an error.
-    await expect(page.getByText(TODO.empty)).toBeVisible();
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("0");
 
     // Create through data_mutate (input state → record → silent clear).
     await addTodo(page, TODO.first);
-    await expect(page.getByText(TODO.empty)).toHaveCount(0);
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toHaveCount(0);
     await expect(count(page)).toHaveText("1");
 
     // A second record — the repeat renders both, count follows (T12: two
@@ -71,38 +94,57 @@ test.describe("data sources — persistent todo (localStorage)", () => {
     // Persistence: the design's own URL reloaded keeps both records.
     await page.reload();
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText(TODO.first)).toBeVisible();
-    await expect(page.getByText(TODO.second)).toBeVisible();
+    await expect(
+      page.getByText(TODO.first).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(TODO.second).filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("2");
 
     // Complete: the update refreshes the row — mark shown, button gone.
     await row(page, TODO.first)
       .getByRole(ROLE.button, { name: TODO.doneLabel })
+      .filter({ visible: true })
       .click();
-    await expect(row(page, TODO.first).getByText(TODO.doneMark)).toBeVisible();
     await expect(
-      row(page, TODO.first).getByRole(ROLE.button, { name: TODO.doneLabel }),
+      row(page, TODO.first).getByText(TODO.doneMark).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      row(page, TODO.first)
+        .getByRole(ROLE.button, { name: TODO.doneLabel })
+        .filter({ visible: true }),
     ).toHaveCount(0);
-    await expect(row(page, TODO.second).getByText(TODO.doneMark)).toHaveCount(
-      0,
-    );
+    await expect(
+      row(page, TODO.second).getByText(TODO.doneMark).filter({ visible: true }),
+    ).toHaveCount(0);
 
     // Delete both — back to the empty branch, and it sticks.
     await row(page, TODO.first)
       .getByRole(ROLE.button, { name: TODO.deleteLabel })
+      .filter({ visible: true })
       .click();
-    await expect(page.getByText(TODO.first)).toHaveCount(0);
+    await expect(
+      page.getByText(TODO.first).filter({ visible: true }),
+    ).toHaveCount(0);
     await expect(count(page)).toHaveText("1");
     await row(page, TODO.second)
       .getByRole(ROLE.button, { name: TODO.deleteLabel })
+      .filter({ visible: true })
       .click();
-    await expect(page.getByText(TODO.empty)).toBeVisible();
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("0");
 
     await page.reload();
-    await expect(page.getByText(TODO.empty)).toBeVisible();
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("0");
   });
 
@@ -110,29 +152,50 @@ test.describe("data sources — persistent todo (localStorage)", () => {
     page,
   }) => {
     await generateTodos(page);
-    const add = page.getByRole(ROLE.button, { name: TODO.addLabel });
+    const add = page
+      .getByRole(ROLE.button, { name: TODO.addLabel })
+      .filter({ visible: true })
+      .filter({ visible: true });
 
     // Fresh form: /formValidation doesn't exist yet — the $cond binding
     // renders disabled, so a press can never reach data_mutate.
     await expect(add).toBeDisabled();
 
     // A real value validates on change and enables the button…
-    await page.getByPlaceholder(TODO.addPlaceholder).fill(TODO.first);
+    await page
+      .getByPlaceholder(TODO.addPlaceholder)
+      .filter({ visible: true })
+      .filter({ visible: true })
+      .fill(TODO.first);
     await expect(add).toBeEnabled();
 
     // …clearing it fires the watcher again — message shown, re-locked.
-    await page.getByPlaceholder(TODO.addPlaceholder).fill("");
-    await expect(page.getByText(TODO.required)).toBeVisible();
+    await page
+      .getByPlaceholder(TODO.addPlaceholder)
+      .filter({ visible: true })
+      .filter({ visible: true })
+      .fill("");
+    await expect(
+      page.getByText(TODO.required).filter({ visible: true }),
+    ).toBeVisible();
     await expect(add).toBeDisabled();
 
     // Back to a valid value, then submit: the record appears, the press's
     // setState clears the field, and the SAME watcher re-runs — the
     // button re-locks itself with no extra wiring.
-    await page.getByPlaceholder(TODO.addPlaceholder).fill(TODO.first);
-    await expect(page.getByText(TODO.required)).toHaveCount(0);
+    await page
+      .getByPlaceholder(TODO.addPlaceholder)
+      .filter({ visible: true })
+      .filter({ visible: true })
+      .fill(TODO.first);
+    await expect(
+      page.getByText(TODO.required).filter({ visible: true }),
+    ).toHaveCount(0);
     await expect(add).toBeEnabled();
     await add.click();
-    await expect(page.getByText(TODO.first)).toBeVisible();
+    await expect(
+      page.getByText(TODO.first).filter({ visible: true }),
+    ).toBeVisible();
     await expect(add).toBeDisabled();
     // Exactly one row for one press — the invalid states never fired
     // data_mutate (the empty-submission bug this gating eliminates).
@@ -158,10 +221,16 @@ test.describe("data sources — persistent todo (localStorage)", () => {
 
     await page.reload();
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText(TODO.error)).toBeVisible();
-    await expect(page.getByText(TODO.empty)).toHaveCount(0);
+    await expect(
+      page.getByText(TODO.error).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toHaveCount(0);
   });
 
   test("another tab's write refreshes the mirror without touching the UI", async ({
@@ -189,7 +258,9 @@ test.describe("data sources — persistent todo (localStorage)", () => {
     });
 
     // Silent refresh: the new record appears with no interaction.
-    await expect(page.getByText("Other tab todo")).toBeVisible();
+    await expect(
+      page.getByText("Other tab todo").filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("2");
   });
 });
@@ -258,7 +329,10 @@ async function generateTodosSupabase(
     await page.goto(PATHS.ui);
     await waitForMsw(page);
   }
-  await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+  await page
+    .getByRole(ROLE.button, { name: PROMPTS.signIn })
+    .filter({ visible: true })
+    .click();
   await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
   const entry = (await readHistoryStorage(page)).find(
     (stored) => stored.prompt === PROMPTS.signIn,
@@ -284,7 +358,9 @@ test.describe("data sources — database provider (supabase)", () => {
   }) => {
     const entryId = await generateTodosSupabase(page);
     try {
-      await expect(page.getByText(TODO.empty)).toBeVisible();
+      await expect(
+        page.getByText(TODO.empty).filter({ visible: true }),
+      ).toBeVisible();
       await expect(count(page)).toHaveText("0");
       await addTodo(page, TODO.first);
       await expect(count(page)).toHaveText("1");
@@ -293,9 +369,13 @@ test.describe("data sources — database provider (supabase)", () => {
       // record is still there because it is a row, not a browser byte.
       await page.reload();
       await expect(
-        page.getByRole(ROLE.heading, { name: TODO.heading }),
+        page
+          .getByRole(ROLE.heading, { name: TODO.heading })
+          .filter({ visible: true }),
       ).toBeVisible();
-      await expect(page.getByText(TODO.first)).toBeVisible();
+      await expect(
+        page.getByText(TODO.first).filter({ visible: true }),
+      ).toBeVisible();
       await expect(count(page)).toHaveText("1");
     } finally {
       await deleteGenuiRecords([entryId]);
@@ -308,10 +388,16 @@ test.describe("data sources — database provider (supabase)", () => {
     const entryId = await generateTodosSupabase(page, "delay", 1000);
     try {
       // The async read makes the loading mirror observable…
-      await expect(page.getByText(TODO.loading)).toBeVisible();
+      await expect(
+        page.getByText(TODO.loading).filter({ visible: true }),
+      ).toBeVisible();
       // …then the empty branch replaces it once the round-trip lands.
-      await expect(page.getByText(TODO.empty)).toBeVisible();
-      await expect(page.getByText(TODO.loading)).toHaveCount(0);
+      await expect(
+        page.getByText(TODO.empty).filter({ visible: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(TODO.loading).filter({ visible: true }),
+      ).toHaveCount(0);
     } finally {
       await deleteGenuiRecords([entryId]);
     }
@@ -323,9 +409,18 @@ test.describe("data sources — database provider (supabase)", () => {
     const entryId = await generateTodosSupabase(page, "delay", 1000);
     try {
       // The initial (delayed) read settles into the empty branch.
-      await expect(page.getByText(TODO.empty)).toBeVisible();
-      const add = page.getByRole(ROLE.button, { name: TODO.addLabel });
-      await page.getByPlaceholder(TODO.addPlaceholder).fill(TODO.first);
+      await expect(
+        page.getByText(TODO.empty).filter({ visible: true }),
+      ).toBeVisible();
+      const add = page
+        .getByRole(ROLE.button, { name: TODO.addLabel })
+        .filter({ visible: true })
+        .filter({ visible: true });
+      await page
+        .getByPlaceholder(TODO.addPlaceholder)
+        .filter({ visible: true })
+        .filter({ visible: true })
+        .fill(TODO.first);
       await expect(add).toBeEnabled();
 
       // Click: the POST + its refresh are both delayed — the button is
@@ -334,8 +429,12 @@ test.describe("data sources — database provider (supabase)", () => {
       await add.click();
       await expect(add).toBeDisabled();
       await expect(add).toHaveAttribute("aria-busy", "true");
-      await expect(add.locator(".animate-spin")).toHaveCount(1);
-      await expect(page.getByText(TODO.saving)).toBeVisible();
+      await expect(
+        add.locator(".animate-spin").filter({ visible: true }),
+      ).toHaveCount(1);
+      await expect(
+        page.getByText(TODO.saving).filter({ visible: true }),
+      ).toBeVisible();
 
       // Settled: the busy state is over — aria-busy and the "Saving…"
       // indicator are gone, and the record rendered. The button STAYS
@@ -344,12 +443,20 @@ test.describe("data sources — database provider (supabase)", () => {
       await expect(add).not.toHaveAttribute("aria-busy", "true", {
         timeout: 15_000,
       });
-      await expect(page.getByText(TODO.saving)).toHaveCount(0);
-      await expect(page.getByText(TODO.first)).toBeVisible();
+      await expect(
+        page.getByText(TODO.saving).filter({ visible: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText(TODO.first).filter({ visible: true }),
+      ).toBeVisible();
       await expect(count(page)).toHaveText("1");
 
       // Recovery: a fresh value re-enables the button — busy never latches.
-      await page.getByPlaceholder(TODO.addPlaceholder).fill(TODO.second);
+      await page
+        .getByPlaceholder(TODO.addPlaceholder)
+        .filter({ visible: true })
+        .filter({ visible: true })
+        .fill(TODO.second);
       await expect(add).toBeEnabled();
     } finally {
       await deleteGenuiRecords([entryId]);
@@ -360,11 +467,17 @@ test.describe("data sources — database provider (supabase)", () => {
     page,
   }) => {
     await generateTodosSupabase(page, "fail");
-    await expect(page.getByText(TODO.error)).toBeVisible();
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page.getByText(TODO.error).filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText(TODO.empty)).toHaveCount(0);
+    await expect(
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toHaveCount(0);
   });
 
   test("a corrupt stored record surfaces the error branch, not a broken page", async ({
@@ -388,10 +501,16 @@ test.describe("data sources — database provider (supabase)", () => {
 
       await page.reload();
       await expect(
-        page.getByRole(ROLE.heading, { name: TODO.heading }),
+        page
+          .getByRole(ROLE.heading, { name: TODO.heading })
+          .filter({ visible: true }),
       ).toBeVisible();
-      await expect(page.getByText(TODO.error)).toBeVisible();
-      await expect(page.getByText(TODO.first)).toHaveCount(0);
+      await expect(
+        page.getByText(TODO.error).filter({ visible: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(TODO.first).filter({ visible: true }),
+      ).toHaveCount(0);
     } finally {
       await deleteGenuiRecords([entryId]);
     }
@@ -445,10 +564,15 @@ test.describe("data sources — API provider (api, browser-direct)", () => {
     await mockGenerate(page, { lines: TODO_UI_LINES_API });
     await page.goto(PATHS.ui);
     await waitForMsw(page);
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
     ).toBeVisible();
   }
 
@@ -459,7 +583,9 @@ test.describe("data sources — API provider (api, browser-direct)", () => {
 
     // The seeded row comes from the MSW-answered API — no storage involved
     // (the adapter fetched http://localhost:3000/api-public/todos itself).
-    await expect(page.getByText("Ship M3")).toBeVisible();
+    await expect(
+      page.getByText("Ship M3").filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("1");
 
     // Create: POST to the collection, then the manager's refresh re-reads.
@@ -469,17 +595,25 @@ test.describe("data sources — API provider (api, browser-direct)", () => {
     // Complete: PATCH the record — mark shown, button gone.
     await row(page, TODO.first)
       .getByRole(ROLE.button, { name: TODO.doneLabel })
+      .filter({ visible: true })
       .click();
-    await expect(row(page, TODO.first).getByText(TODO.doneMark)).toBeVisible();
     await expect(
-      row(page, TODO.first).getByRole(ROLE.button, { name: TODO.doneLabel }),
+      row(page, TODO.first).getByText(TODO.doneMark).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      row(page, TODO.first)
+        .getByRole(ROLE.button, { name: TODO.doneLabel })
+        .filter({ visible: true }),
     ).toHaveCount(0);
 
     // Delete: back to the seed — every verb of the REST mapping exercised.
     await row(page, TODO.first)
       .getByRole(ROLE.button, { name: TODO.deleteLabel })
+      .filter({ visible: true })
       .click();
-    await expect(page.getByText(TODO.first)).toHaveCount(0);
+    await expect(
+      page.getByText(TODO.first).filter({ visible: true }),
+    ).toHaveCount(0);
     await expect(count(page)).toHaveText("1");
 
     // Reload re-reads the API from scratch — the design re-attaches and
@@ -487,9 +621,13 @@ test.describe("data sources — API provider (api, browser-direct)", () => {
     // row stays deleted, nothing was stored locally).
     await page.reload();
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText("Ship M3")).toBeVisible();
+    await expect(
+      page.getByText("Ship M3").filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("1");
   });
 
@@ -499,14 +637,23 @@ test.describe("data sources — API provider (api, browser-direct)", () => {
     await mockGenerate(page, { lines: API_ERROR_UI_LINES });
     await page.goto(PATHS.ui);
     await waitForMsw(page);
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 
     // The collection always answers 500 → normalized `unavailable` →
     // the mirror's error branch, with the page otherwise intact.
-    await expect(page.getByText(TODO.error)).toBeVisible();
-    await expect(page.locator(".api-error")).toBeVisible();
-    await expect(page.getByText(TODO.empty)).toHaveCount(0);
+    await expect(
+      page.getByText(TODO.error).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".api-error").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(TODO.empty).filter({ visible: true }),
+    ).toHaveCount(0);
   });
 });
 
@@ -557,14 +704,21 @@ test.describe("data sources — keyed API (Lane 2 proxy)", () => {
     await mockGenerate(page, { lines: TODO_UI_LINES_API_KEYED });
     await page.goto(PATHS.ui);
     await waitForMsw(page);
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
     ).toBeVisible();
 
     // List read through the proxy (GET /todos), then a round-trip write.
-    await expect(page.getByText("Keyed seed")).toBeVisible();
+    await expect(
+      page.getByText("Keyed seed").filter({ visible: true }),
+    ).toBeVisible();
     await expect(count(page)).toHaveText("1");
     await addTodo(page, TODO.first);
     await expect(count(page)).toHaveText("2");
@@ -589,10 +743,16 @@ test.describe("data sources — keyed API (Lane 2 proxy)", () => {
     // keyed origin serves afresh (its own seed again).
     await page.reload();
     await expect(
-      page.getByRole(ROLE.heading, { name: TODO.heading }),
+      page
+        .getByRole(ROLE.heading, { name: TODO.heading })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText("Keyed seed")).toBeVisible();
-    await expect(page.getByText(TODO.first)).toHaveCount(0);
+    await expect(
+      page.getByText("Keyed seed").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(TODO.first).filter({ visible: true }),
+    ).toHaveCount(0);
     await expect(count(page)).toHaveText("1");
     expect(await lastProxyCall(page)).toMatchObject({
       ref: "weather",
@@ -608,13 +768,20 @@ test.describe("data sources — keyed API (Lane 2 proxy)", () => {
     await mockGenerate(page, { lines: API_UNSET_REF_UI_LINES });
     await page.goto(PATHS.ui);
     await waitForMsw(page);
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 
     // unknown_ref → the adapter's DataError → the mirror's error branch,
     // with the page otherwise intact.
-    await expect(page.getByText(TODO.error)).toBeVisible();
-    await expect(page.locator(".api-unset-ref")).toBeVisible();
+    await expect(
+      page.getByText(TODO.error).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".api-unset-ref").filter({ visible: true }),
+    ).toBeVisible();
     expect(await lastProxyCall(page)).toMatchObject({ ref: "unset" });
   });
 });

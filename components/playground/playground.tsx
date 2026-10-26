@@ -15,6 +15,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -253,6 +254,12 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // "Add language…" collects the target tag in a dialog (any BCP-47 tag —
   // the ask feeds the model steer, never a hardcoded demo pool).
   const [addLangOpen, setAddLangOpen] = useState(false);
+  // Cache Components handoff (plan 056): a completed landing generation's
+  // local spec is only displayable until its /ui/[id] navigation takes over.
+  // Set in the generate-completion branch, cleared by the Activity lifecycle
+  // reset — without it the flag (and the spec) would survive parking and
+  // repaint over the landing's empty state on restore.
+  const [handoffPending, setHandoffPending] = useState(false);
   // Add-language feedback: the model steer takes seconds while the canvas
   // still shows the seed (the layer doesn't exist yet) — track the in-flight
   // tag so the switcher pill can spin and the toasts can announce progress,
@@ -335,6 +342,36 @@ export function Playground({ initialRef }: PlaygroundProps) {
       completionRef.current = { op: pendingOpRef.current, completedSpec };
     },
   });
+
+  // --- Cache Components / Activity lifecycle reset (plan 056) ------------
+  // Parking preserves this instance's useState (incl. useUIStream's spec),
+  // so a completed generation's spec would outlive its navigation and
+  // repaint over the landing's empty state when the route is restored.
+  // Documented reset pattern (preserving-ui-state.md): the cleanup runs
+  // when Activity hides this route (synchronously, before paint — no stale
+  // flash), the body re-runs when the route becomes visible again.
+  const streamRef = useRef({ streaming: isStreaming, spec, clear });
+  // Sync first — declared before the reset so it reads the freshest values
+  // in the same flush (park: last visible commit; restore: this run first).
+  useLayoutEffect(() => {
+    streamRef.current = { streaming: isStreaming, spec, clear };
+  });
+  useLayoutEffect(() => {
+    const reset = () => {
+      const current = streamRef.current;
+      // Never touch an in-flight generation, an empty instance (mount /
+      // StrictMode replay), or a completion waiting to be committed — the
+      // completion effect (declared after this one) consumes it and
+      // navigates to the entry; clearing here would blank that handoff.
+      if (current.streaming || !current.spec || completionRef.current) {
+        return;
+      }
+      setHandoffPending(false);
+      current.clear();
+    };
+    reset(); // mount (no-op — nothing streamed yet) and every Activity restore
+    return reset; // Activity park — reset while still visible, before hide
+  }, []);
 
   // Every request records its payload so the failure dialog's retry can
   // replay it with the newly selected model (pendingOpRef still holds the
@@ -454,7 +491,10 @@ export function Playground({ initialRef }: PlaygroundProps) {
       addEntry(entry);
       // The URL owns the active UI: the landing streams the generation,
       // then the committed entry takes over at /ui/[id] (the destination
-      // remount restores the identical spec from the entry).
+      // remount restores the identical spec from the entry). The handoff
+      // flag keeps the landing's local spec painted for the frame between
+      // this push and the destination taking over (plan 056).
+      setHandoffPending(true);
       router.push(`/ui/${entry.id}`);
       return;
     }
@@ -505,9 +545,13 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   // While a stream runs (generate on the landing, steer on /ui/[id]) the
   // hook's evolving spec wins; otherwise the committed entry's spec is the
-  // source of truth. Falling back to `spec` covers the frame between a
-  // landing generation's completion and the /ui/[id] navigation.
-  const displayedSpec = isStreaming ? spec : (routeEntry?.spec ?? spec);
+  // source of truth. A completed landing generation renders only inside its
+  // explicit handoff frame (`handoffPending`, set just before the push to
+  // /ui/[id]) — a retained local spec from a parked visit must never paint
+  // over the landing's empty state (plan 056).
+  const displayedSpec = isStreaming
+    ? spec
+    : (routeEntry?.spec ?? (handoffPending ? spec : null));
   // Runtime classes: spec classNames exist only at runtime — compile any not
   // yet covered via /api/tailwind and inject the CSS (no-op on failure).
   useRuntimeClasses(displayedSpec);

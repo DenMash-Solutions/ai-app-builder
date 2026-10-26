@@ -4,6 +4,11 @@ import { SyncEngine } from "@/components/sync/sync-engine";
 import { UploadNudge } from "@/components/sync/upload-nudge";
 import { LOCALES } from "@/lib/i18n/routing";
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 /**
  * App surfaces (playground, admin, auth) speak the app's languages only —
  * the UI has no catalogs beyond them. Content-only locales may pass the

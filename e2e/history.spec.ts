@@ -24,11 +24,18 @@ test.describe("history", () => {
     await waitForMsw(page);
 
     // Generate → auto-saved (then redirected to /ui/[id])
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
-      page.getByRole(ROLE.button, { name: historyButtonName(1) }),
+      page
+        .getByRole(ROLE.button, { name: historyButtonName(1) })
+        .filter({ visible: true }),
     ).toBeVisible();
 
     const stored = await readHistoryStorage(page);
@@ -40,34 +47,67 @@ test.describe("history", () => {
     await page.reload();
     await waitForMsw(page);
     await expect(
-      page.getByRole(ROLE.button, { name: historyButtonName(1) }),
+      page
+        .getByRole(ROLE.button, { name: historyButtonName(1) })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
 
     // Restore from the drawer without calling the API
-    await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
-    const entry = page.getByRole(ROLE.button, {
-      name: entryRowName(PROMPTS.signIn),
-    });
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName(1) })
+      .filter({ visible: true })
+      .click();
+    const entry = page
+      .getByRole(ROLE.button, {
+        name: entryRowName(PROMPTS.signIn),
+      })
+      .filter({ visible: true });
     await expect(entry).toBeVisible();
-    await expect(page.getByText(UI.justNow)).toBeVisible();
+    await expect(
+      page.getByText(UI.justNow).filter({ visible: true }),
+    ).toBeVisible();
     await entry.click();
 
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
-    await expect(page.getByText(UI.mockBody)).toBeVisible();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(UI.mockBody).filter({ visible: true }),
+    ).toBeVisible();
     expect(await generateCalls(page)).toBe(0);
 
     // Delete the active entry → back to the landing (the drawer unmounts
     // with the route, so reopen it to confirm the empty state)
-    await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
-    await page.getByRole(ROLE.button, { name: ACTIONS.deleteEntry }).click();
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName(1) })
+      .filter({ visible: true })
+      .click();
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.deleteEntry })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(UI.emptyState)).toBeVisible();
-    await page.getByRole(ROLE.button, { name: historyButtonName() }).click();
-    await expect(page.getByText(UI.historyEmpty)).toBeVisible();
-    await page.getByRole(ROLE.button, { name: ACTIONS.close }).click();
     await expect(
-      page.getByRole(ROLE.button, { name: ACTIONS.history }),
+      page.getByText(UI.emptyState).filter({ visible: true }),
+    ).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName() })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(UI.historyEmpty).filter({ visible: true }),
+    ).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.close })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page
+        .getByRole(ROLE.button, { name: ACTIONS.history })
+        .filter({ visible: true }),
     ).toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(0);
   });
@@ -77,44 +117,77 @@ test.describe("history", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
-    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
-    await expect(
-      page.getByRole(ROLE.button, { name: historyButtonName(1) }),
-    ).toBeVisible();
-
-    // Example chips only show in the empty state — clear the canvas first.
-    await page.getByRole(ROLE.button, { name: ACTIONS.clear }).click();
     await page
-      .getByRole(ROLE.button, { name: PROMPTS.revenueDashboard })
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
       .click();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
-      page.getByRole(ROLE.button, { name: historyButtonName(2) }),
+      page
+        .getByRole(ROLE.button, { name: historyButtonName(1) })
+        .filter({ visible: true }),
+    ).toBeVisible();
+
+    // Example chips only show in the empty state — clear the canvas first.
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.clear })
+      .filter({ visible: true })
+      .click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.revenueDashboard })
+      .filter({ visible: true })
+      .click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+    await expect(
+      page
+        .getByRole(ROLE.button, { name: historyButtonName(2) })
+        .filter({ visible: true }),
     ).toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(2);
 
-    await page.getByRole(ROLE.button, { name: historyButtonName(2) }).click();
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName(2) })
+      .filter({ visible: true })
+      .click();
     await expect(
-      page.getByRole(ROLE.button, {
-        name: entryRowName(PROMPTS.signIn),
-      }),
+      page
+        .getByRole(ROLE.button, {
+          name: entryRowName(PROMPTS.signIn),
+        })
+        .filter({ visible: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole(ROLE.button, {
-        name: entryRowName(PROMPTS.revenueDashboard),
-      }),
+      page
+        .getByRole(ROLE.button, {
+          name: entryRowName(PROMPTS.revenueDashboard),
+        })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await page.getByRole(ROLE.button, { name: ACTIONS.clearAll }).click();
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.clearAll })
+      .filter({ visible: true })
+      .click();
 
     // Clearing from /ui/[id] navigates back to the landing and unmounts the
     // drawer — reopen it to confirm it is empty
-    await expect(page.getByText(UI.emptyState)).toBeVisible();
-    await page.getByRole(ROLE.button, { name: historyButtonName() }).click();
-    await expect(page.getByText(UI.historyEmpty)).toBeVisible();
-    await page.getByRole(ROLE.button, { name: ACTIONS.close }).click();
     await expect(
-      page.getByRole(ROLE.button, { name: ACTIONS.history }),
+      page.getByText(UI.emptyState).filter({ visible: true }),
+    ).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName() })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(UI.historyEmpty).filter({ visible: true }),
+    ).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.close })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page
+        .getByRole(ROLE.button, { name: ACTIONS.history })
+        .filter({ visible: true }),
     ).toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(0);
   });

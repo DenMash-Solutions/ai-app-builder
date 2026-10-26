@@ -63,6 +63,7 @@ row in the same turn as any status change** (rule:
 | 053 | [prompt-data-source-blocks](053-prompt-data-source-blocks/plan.md) | implemented | 2026-10-22 |
 | 054 | [generation-resilience](054-generation-resilience/plan.md) | implemented | 2026-10-23 |
 | 055 | [performance](055-performance/plan.md) | implemented | 2026-10-24 |
+| 056 | [cache-components](056-cache-components/plan.md) | approved | 2026-10-25 |
 | 057 | [safelist-curation-css-architecture](057-safelist-curation-css-architecture/plan.md) | implemented | 2026-10-25 |
 
-_56 plans: 52 implemented · 1 approved (`033`) · 2 draft (`015`, `035`) · 1 rejected (`026`). `056` reserved for Cache Components._
+_57 plans: 52 implemented · 2 approved (`033`, `056`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._

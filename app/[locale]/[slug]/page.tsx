@@ -5,6 +5,11 @@ import { getPublishedPageBySlug } from "@/lib/publish/featured";
 import { servingArtifact } from "@/lib/publish/artifacts";
 import { canonicalizeTag } from "@/lib/i18n/spec-languages";
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 /**
  * /{locale}/{slug}: local entries resolve client-side (owner preview); the
  * server resolves the published projection so anonymous visitors get the

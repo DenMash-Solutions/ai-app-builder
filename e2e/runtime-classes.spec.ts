@@ -570,8 +570,13 @@ test.describe("runtime class coverage", () => {
     await mockGenerate(page, { lines: layerLines });
     await page.goto(PATHS.ui);
     await waitForMsw(page);
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
     // Generation redirects to /ui/[id] (remount) — sync before tool clicks
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 
@@ -584,9 +589,14 @@ test.describe("runtime class coverage", () => {
           ?.textContent?.includes("@layer components") === true,
     );
 
-    await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
-    await page.getByText(UI.mockHeading).click();
-    await expect(page.locator("[data-editor-panel]")).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: EDITOR.pick })
+      .filter({ visible: true })
+      .click();
+    await page.getByText(UI.mockHeading).filter({ visible: true }).click();
+    await expect(
+      page.locator("[data-editor-panel]").filter({ visible: true }),
+    ).toBeVisible();
 
     const layout = await page.evaluate(() => {
       // Scoped to the canvas: the app shell puts its own `<main>` (the

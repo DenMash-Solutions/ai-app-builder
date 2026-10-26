@@ -36,27 +36,44 @@ test.describe("error handling", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
 
     // Quota dialog replaces the old inline error alert.
-    await expect(page.getByText(QUOTA.title)).toBeVisible();
-    await expect(page.getByText(QUOTA.description)).toBeVisible();
     await expect(
-      page.getByRole(ROLE.button, { name: QUOTA.switchAndRetry }),
+      page.getByText(QUOTA.title).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(QUOTA.description).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole(ROLE.button, { name: QUOTA.switchAndRetry })
+        .filter({ visible: true }),
     ).toBeDisabled();
 
     // Switch to a higher-limit model, let the mock recover, then retry.
     await page
       .getByRole("menuitemradio", { name: new RegExp(MODELS.lite) })
+      .filter({ visible: true })
       .click();
     await page.evaluate(() => {
       (window as unknown as { __GENERATE_MOCK__?: object }).__GENERATE_MOCK__ =
         {};
     });
-    await page.getByRole(ROLE.button, { name: QUOTA.switchAndRetry }).click();
+    await page
+      .getByRole(ROLE.button, { name: QUOTA.switchAndRetry })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
-    await expect(page.getByText(QUOTA.title)).not.toBeVisible();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(QUOTA.title).filter({ visible: true }),
+    ).not.toBeVisible();
     expect(await generateCalls(page)).toBeGreaterThanOrEqual(2);
 
     const history = await readHistoryStorage(page);
@@ -65,7 +82,9 @@ test.describe("error handling", () => {
 
     // The header pill reflects the switched model.
     await expect(
-      page.getByRole(ROLE.button, { name: MODELS.liteShortLabel }),
+      page
+        .getByRole(ROLE.button, { name: MODELS.liteShortLabel })
+        .filter({ visible: true }),
     ).toBeVisible();
   });
 
@@ -76,14 +95,28 @@ test.describe("error handling", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
-    await expect(page.getByText(QUOTA.title)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(QUOTA.title).filter({ visible: true }),
+    ).toBeVisible();
 
-    await page.getByRole(ROLE.button, { name: QUOTA.dismiss }).click();
+    await page
+      .getByRole(ROLE.button, { name: QUOTA.dismiss })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(UI.generationFailed)).toBeVisible();
-    await expect(page.getByText(RATE_LIMIT_BODY.error)).toBeVisible();
-    await expect(page.getByText(QUOTA.title)).not.toBeVisible();
+    await expect(
+      page.getByText(UI.generationFailed).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(RATE_LIMIT_BODY.error).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(QUOTA.title).filter({ visible: true }),
+    ).not.toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(0);
   });
 
@@ -94,16 +127,20 @@ test.describe("error handling", () => {
 
     await page
       .getByRole(ROLE.button, { name: MODELS.defaultShortLabel })
+      .filter({ visible: true })
       .click();
     await page
       .getByRole("menuitemradio", { name: new RegExp(MODELS.lite) })
+      .filter({ visible: true })
       .click();
 
     await page.reload();
     await waitForMsw(page);
 
     await expect(
-      page.getByRole(ROLE.button, { name: MODELS.liteShortLabel }),
+      page
+        .getByRole(ROLE.button, { name: MODELS.liteShortLabel })
+        .filter({ visible: true }),
     ).toBeVisible();
   });
 
@@ -114,25 +151,42 @@ test.describe("error handling", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(SERVICE.title)).toBeVisible();
-    await expect(page.getByText(SERVICE.description)).toBeVisible();
     await expect(
-      page.getByRole(ROLE.button, { name: SERVICE.switchAndRetry }),
+      page.getByText(SERVICE.title).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(SERVICE.description).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole(ROLE.button, { name: SERVICE.switchAndRetry })
+        .filter({ visible: true }),
     ).toBeDisabled();
 
     await page
       .getByRole("menuitemradio", { name: new RegExp(MODELS.lite) })
+      .filter({ visible: true })
       .click();
     await page.evaluate(() => {
       (window as unknown as { __GENERATE_MOCK__?: object }).__GENERATE_MOCK__ =
         {};
     });
-    await page.getByRole(ROLE.button, { name: SERVICE.switchAndRetry }).click();
+    await page
+      .getByRole(ROLE.button, { name: SERVICE.switchAndRetry })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
-    await expect(page.getByText(SERVICE.title)).not.toBeVisible();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(SERVICE.title).filter({ visible: true }),
+    ).not.toBeVisible();
     expect(await generateCalls(page)).toBeGreaterThanOrEqual(2);
 
     const history = await readHistoryStorage(page);
@@ -147,14 +201,28 @@ test.describe("error handling", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
-    await expect(page.getByText(SERVICE.title)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(SERVICE.title).filter({ visible: true }),
+    ).toBeVisible();
 
-    await page.getByRole(ROLE.button, { name: SERVICE.dismiss }).click();
+    await page
+      .getByRole(ROLE.button, { name: SERVICE.dismiss })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(UI.generationFailed)).toBeVisible();
-    await expect(page.getByText(SERVICE_BODY.error)).toBeVisible();
-    await expect(page.getByText(SERVICE.title)).not.toBeVisible();
+    await expect(
+      page.getByText(UI.generationFailed).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(SERVICE_BODY.error).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(SERVICE.title).filter({ visible: true }),
+    ).not.toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(0);
   });
 
@@ -165,9 +233,14 @@ test.describe("error handling", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(SERVICE.title)).toBeVisible();
+    await expect(
+      page.getByText(SERVICE.title).filter({ visible: true }),
+    ).toBeVisible();
     expect(await readHistoryStorage(page)).toHaveLength(0);
   });
 
@@ -178,8 +251,13 @@ test.describe("error handling", () => {
     await page.goto(PATHS.ui);
     await waitForMsw(page);
 
-    await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
-    await expect(page.getByText(UI.mockHeading)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(UI.mockHeading).filter({ visible: true }),
+    ).toBeVisible();
     // Steer only exists on /ui/[id] — wait for the post-generate redirect,
     // or the prompt bar on the landing would start a fresh generation
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
@@ -194,19 +272,32 @@ test.describe("error handling", () => {
 
     await page
       .getByPlaceholder(UI.promptPlaceholder)
+      .filter({ visible: true })
       .fill(PROMPTS.customBilling);
-    await page.getByRole(ROLE.button, { name: ACTIONS.steer }).click();
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.steer })
+      .filter({ visible: true })
+      .click();
 
-    await expect(page.getByText(SERVICE.title)).toBeVisible();
+    await expect(
+      page.getByText(SERVICE.title).filter({ visible: true }),
+    ).toBeVisible();
 
     const history = await readHistoryStorage(page);
     expect(history).toHaveLength(1);
     expect(history[0].head).toBe(0);
     expect(history[0].revisions).toHaveLength(1);
 
-    await page.getByRole(ROLE.button, { name: SERVICE.dismiss }).click();
-    await expect(page.getByText(UI.generationFailed)).toBeVisible();
-    await expect(page.getByText(SERVICE.noChanges)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: SERVICE.dismiss })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(UI.generationFailed).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(SERVICE.noChanges).filter({ visible: true }),
+    ).toBeVisible();
     expect((await readHistoryStorage(page))[0].revisions).toHaveLength(1);
   });
 });

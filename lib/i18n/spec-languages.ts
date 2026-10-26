@@ -116,9 +116,15 @@ export function mergeI18n(
  * `state.i18n` keys (invalid tags dropped, duplicates collapsed).
  */
 export function availableLanguages(spec: Spec): string[] {
-  const seed = seedLocale(spec.state);
+  return availableLanguagesOfState(spec.state);
+}
+
+/** State-level form for slim readers (the proxy's decision-12 check) that
+ *  select `spec->state` only and never fetch elements/artifacts. */
+export function availableLanguagesOfState(state: Spec["state"]): string[] {
+  const seed = seedLocale(state);
   const tags: string[] = [seed];
-  const i18n = getI18n(spec.state);
+  const i18n = getI18n(state);
   for (const key of Object.keys(i18n)) {
     const canonical = canonicalizeTag(key);
     if (canonical && !tags.includes(canonical)) tags.push(canonical);

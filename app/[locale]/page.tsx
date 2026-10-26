@@ -13,6 +13,11 @@ import { resolveRootServing } from "@/lib/publish/root-serving";
 import { availableLanguages } from "@/lib/i18n/spec-languages";
 import { routing } from "@/lib/i18n/routing";
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 /**
  * Root page (plan Q1): renders the admin-featured live page chrome-less.
  * Nothing featured → the playground landing (the app from minute one; all

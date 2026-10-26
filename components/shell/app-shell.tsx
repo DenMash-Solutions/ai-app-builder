@@ -11,6 +11,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { Suspense } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Link, usePathname, useRouter } from "@/lib/i18n/navigation";
 import { LOCALES } from "@/lib/i18n/routing";
@@ -63,10 +65,14 @@ export function AppShell({ children }: AppShellProps) {
           </SidebarHeader>
 
           <SidebarContent>
-            {/* SidebarGroup carries the p-2 that aligns nav icons with the
-                brand and the account block. */}
             <SidebarGroup>
-              <NavItems />
+              {/* SidebarGroup's p-2 aligns nav icons with the brand and the
+                  account block. `usePathname` suspends while unknown-param
+                  routes (`/ui/[ref]`) prerender, so the nav leaf sits
+                  behind a boundary and the rest of the chrome ships. */}
+              <Suspense fallback={<NavItemsFallback />}>
+                <NavItems />
+              </Suspense>
             </SidebarGroup>
           </SidebarContent>
 
@@ -195,6 +201,26 @@ function normalizePathname(pathname: string): string {
   const localePattern = new RegExp(`^/(${LOCALES.join("|")})(?=/|$)`);
   const stripped = pathname.replace(localePattern, "");
   return stripped === "" ? "/" : stripped;
+}
+
+/**
+ * Fixed-width placeholders for the nav leaf while `usePathname` suspends
+ * during prerendering — deterministic on purpose (fallbacks are part of
+ * the shell, so no `Math.random()` sizing like `SidebarMenuSkeleton`).
+ */
+function NavItemsFallback() {
+  return (
+    <SidebarMenu aria-hidden="true">
+      {[56, 72].map((width) => (
+        <SidebarMenuItem key={width}>
+          <div className="flex h-8 items-center gap-2 rounded-md px-2">
+            <Skeleton className="size-4 rounded-md" />
+            <Skeleton className="h-4" style={{ width }} />
+          </div>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
 }
 
 function NavItems() {

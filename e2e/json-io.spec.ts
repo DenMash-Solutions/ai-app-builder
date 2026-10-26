@@ -53,40 +53,56 @@ test.describe("json import/export", () => {
     await page.goto(PATHS.ui);
     await page.waitForLoadState("networkidle");
 
-    const drawer = page.locator(SLOTS.drawer);
-    const dialog = page.locator(SLOTS.dialog);
+    const drawer = page.locator(SLOTS.drawer).filter({ visible: true });
+    const dialog = page.locator(SLOTS.dialog).filter({ visible: true });
 
     // Canvas is empty — no rail, no pick; the drawer is the json-io surface.
-    await expect(page.getByText(UI.emptyState)).toBeVisible();
     await expect(
-      page.getByRole(ROLE.button, { name: JSON_IO.pick }),
+      page.getByText(UI.emptyState).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole(ROLE.button, { name: JSON_IO.pick })
+        .filter({ visible: true }),
     ).toHaveCount(0);
 
     // History is reachable on an empty canvas (only the badge is conditional).
-    await page.getByRole(ROLE.button, { name: historyButtonName() }).click();
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName() })
+      .filter({ visible: true })
+      .click();
     await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(UI.historyEmpty)).toBeVisible();
+    await expect(
+      drawer.getByText(UI.historyEmpty).filter({ visible: true }),
+    ).toBeVisible();
 
-    const importButton = drawer.getByRole(ROLE.button, {
-      name: JSON_IO.import,
-    });
+    const importButton = drawer
+      .getByRole(ROLE.button, {
+        name: JSON_IO.import,
+      })
+      .filter({ visible: true });
     await expect(importButton).toBeEnabled();
 
     // Invalid JSON → inline error, dialog stays open, text preserved.
     await importButton.click();
     await expect(dialog).toBeVisible();
-    const textarea = page.getByRole(ROLE.textbox, {
-      name: JSON_IO.dialogTitle,
-    });
+    const textarea = page
+      .getByRole(ROLE.textbox, {
+        name: JSON_IO.dialogTitle,
+      })
+      .filter({ visible: true });
     // Catches ICU parse failures: next-intl would log INVALID_MESSAGE and
     // render the key path as fallback instead of the real-brace placeholder.
     await expect(textarea).toHaveAttribute("placeholder", JSON_IO.placeholder);
     await textarea.fill("{oops");
     await dialog
       .getByRole(ROLE.button, { name: JSON_IO.importConfirm, exact: true })
+      .filter({ visible: true })
       .click();
     await expect(
-      dialog.getByText(JSON_IO.invalidJson, { exact: true }),
+      dialog
+        .getByText(JSON_IO.invalidJson, { exact: true })
+        .filter({ visible: true }),
     ).toBeVisible();
     await expect(textarea).toHaveValue("{oops");
     // The nested dialog must not dismiss the drawer behind it.
@@ -108,15 +124,20 @@ test.describe("json import/export", () => {
     // Valid spec → dialog and drawer close, renders on /ui/[id], lands in history.
     await dialog
       .getByRole(ROLE.button, { name: JSON_IO.importConfirm, exact: true })
+      .filter({ visible: true })
       .click();
     await expect(dialog).toBeHidden();
     await expect(drawer).toBeHidden();
     await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
     await expect(
-      page.getByRole(ROLE.heading, { name: "Imported works" }),
+      page
+        .getByRole(ROLE.heading, { name: "Imported works" })
+        .filter({ visible: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole(ROLE.button, { name: historyButtonName(1) }),
+      page
+        .getByRole(ROLE.button, { name: historyButtonName(1) })
+        .filter({ visible: true }),
     ).toBeVisible();
 
     const stored = await readHistoryStorage(page);
@@ -125,15 +146,21 @@ test.describe("json import/export", () => {
     expect(stored[0].spec.root).toBe("page");
 
     // Row export: copies that entry's pretty-printed spec incl. state.
-    await page.getByRole(ROLE.button, { name: historyButtonName(1) }).click();
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName(1) })
+      .filter({ visible: true })
+      .click();
     await expect(drawer).toBeVisible();
     await drawer
       .getByRole(ROLE.button, {
         name: JSON_IO.entryExport(JSON_IO.importedEntry),
         exact: true,
       })
+      .filter({ visible: true })
       .click();
-    await expect(page.getByText(JSON_IO.copied, { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(JSON_IO.copied, { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     const parsed = JSON.parse(copied) as { root: string };
     expect(parsed.root).toBe("page");

@@ -8,15 +8,21 @@ async function generateStateful(page: Page): Promise<void> {
   await mockGenerate(page, { lines: STATEFUL_UI_LINES });
   await page.goto(PATHS.ui);
   await waitForMsw(page);
-  await page.getByRole(ROLE.button, { name: PROMPTS.signIn }).click();
+  await page
+    .getByRole(ROLE.button, { name: PROMPTS.signIn })
+    .filter({ visible: true })
+    .click();
   // Wait for the post-generation /ui/[id] remount before enabling pick
   await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 }
 
 async function pickElement(page: Page, text: string) {
-  await page.getByRole(ROLE.button, { name: EDITOR.pick }).click();
-  await page.getByText(text, { exact: true }).click();
-  const panel = page.locator("[data-editor-panel]");
+  await page
+    .getByRole(ROLE.button, { name: EDITOR.pick })
+    .filter({ visible: true })
+    .click();
+  await page.getByText(text, { exact: true }).filter({ visible: true }).click();
+  const panel = page.locator("[data-editor-panel]").filter({ visible: true });
   await expect(panel).toBeVisible();
   return panel;
 }
@@ -28,15 +34,22 @@ test.describe("spec state seeding", () => {
     await generateStateful(page);
 
     // repeat over the seeded /items array renders one element per item
-    const items = page.getByText(/^Item [A-F]$/);
+    const items = page.getByText(/^Item [A-F]$/).filter({ visible: true });
     await expect(items).toHaveCount(STATE_MOCK.itemLabels.length);
 
     // seeded revealed:false keeps the $state-gated greeting hidden
-    await expect(page.getByText(STATE_MOCK.title)).toHaveCount(0);
+    await expect(
+      page.getByText(STATE_MOCK.title).filter({ visible: true }),
+    ).toHaveCount(0);
 
     // setState action flips the gate; $state resolves the seeded value
-    await page.getByRole(ROLE.button, { name: STATE_MOCK.reveal }).click();
-    await expect(page.getByText(STATE_MOCK.title)).toBeVisible();
+    await page
+      .getByRole(ROLE.button, { name: STATE_MOCK.reveal })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText(STATE_MOCK.title).filter({ visible: true }),
+    ).toBeVisible();
   });
 });
 
@@ -47,23 +60,34 @@ test.describe("instance-scoped editing", () => {
 
     // scope chip: third of six visible items → state path /items/2
     const count = STATE_MOCK.itemLabels.length;
-    await expect(panel.getByTestId("instance-scope")).toHaveText(
-      EDITOR.instanceScope(3, count, "/items/2"),
-    );
+    await expect(
+      panel.getByTestId("instance-scope").filter({ visible: true }),
+    ).toHaveText(EDITOR.instanceScope(3, count, "/items/2"));
 
     // the ring marks the clicked instance, not the first rendered one
-    const selected = page.locator("[data-jr-selected]");
+    const selected = page
+      .locator("[data-jr-selected]")
+      .filter({ visible: true });
     await expect(selected).toHaveCount(1);
     await expect(selected.first()).toContainText("Item C");
 
     // binding prop writes only items[2].label — template prop untouched
-    await panel.getByLabel("text").fill("Item C edited");
-    await panel.getByLabel("text").press("Enter");
+    await panel
+      .getByLabel("text")
+      .filter({ visible: true })
+      .fill("Item C edited");
+    await panel.getByLabel("text").filter({ visible: true }).press("Enter");
     await expect(
-      page.getByText("Item C edited", { exact: true }),
+      page
+        .getByText("Item C edited", { exact: true })
+        .filter({ visible: true }),
     ).toBeVisible();
-    await expect(page.getByText("Item A", { exact: true })).toBeVisible();
-    await expect(page.getByText("Item B", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Item A", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Item B", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
 
     const entries = await readHistoryStorage(page);
     expect(entries[0].revisions).toHaveLength(2);
@@ -85,18 +109,28 @@ test.describe("instance-scoped editing", () => {
     ]);
 
     // undo round-trips through the revision pipeline
-    await panel.getByRole(ROLE.button, { name: EDITOR.undo }).click();
-    await expect(page.getByText("Item C", { exact: true })).toBeVisible();
-    await expect(page.getByText("Item C edited", { exact: true })).toHaveCount(
-      0,
-    );
+    await panel
+      .getByRole(ROLE.button, { name: EDITOR.undo })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByText("Item C", { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByText("Item C edited", { exact: true })
+        .filter({ visible: true }),
+    ).toHaveCount(0);
 
     // structure tab keeps working and warns that edits hit every instance
-    await panel.getByRole(ROLE.tab, { name: EDITOR.structure }).click();
+    await panel
+      .getByRole(ROLE.tab, { name: EDITOR.structure })
+      .filter({ visible: true })
+      .click();
     await expect(
-      panel.getByText(
-        /Structure edits apply to all 6 items \(shared template\)/,
-      ),
+      panel
+        .getByText(/Structure edits apply to all 6 items \(shared template\)/)
+        .filter({ visible: true }),
     ).toBeVisible();
   });
 
@@ -107,20 +141,31 @@ test.describe("instance-scoped editing", () => {
     const panel = await pickElement(page, "Item B");
 
     const count = STATE_MOCK.itemLabels.length;
-    await expect(panel.getByTestId("instance-scope")).toHaveText(
-      EDITOR.instanceScope(2, count, "/items/1"),
-    );
+    await expect(
+      panel.getByTestId("instance-scope").filter({ visible: true }),
+    ).toHaveText(EDITOR.instanceScope(2, count, "/items/1"));
 
     // className lives in a Collapsible, collapsed by default
     await panel
       .getByRole(ROLE.button, { name: EDITOR.classNameTrigger })
+      .filter({ visible: true })
       .click();
-    await panel.getByLabel("className").fill("font-bold");
-    await panel.getByLabel("className").press("Enter");
+    await panel
+      .getByLabel("className")
+      .filter({ visible: true })
+      .fill("font-bold");
+    await panel
+      .getByLabel("className")
+      .filter({ visible: true })
+      .press("Enter");
 
     // template-level change reaches every rendered instance
-    await expect(page.locator(".font-bold")).toHaveCount(count);
-    await expect(page.locator(".tracking-wide")).toHaveCount(0);
+    await expect(
+      page.locator(".font-bold").filter({ visible: true }),
+    ).toHaveCount(count);
+    await expect(
+      page.locator(".tracking-wide").filter({ visible: true }),
+    ).toHaveCount(0);
 
     const entries = await readHistoryStorage(page);
     expect(entries[0].spec.elements["state-item"]?.props).toEqual({

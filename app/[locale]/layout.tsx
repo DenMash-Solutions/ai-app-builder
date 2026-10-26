@@ -6,8 +6,22 @@ import { ThemeInit } from "@/components/theme-init";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { canonicalizeTag } from "@/lib/i18n/spec-languages";
-import { routing } from "@/lib/i18n/routing";
+import { LOCALES, routing } from "@/lib/i18n/routing";
 import "../globals.css";
+
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
+/**
+ * This layout IS the root layout (no `app/layout.tsx`), so `locale` is a root
+ * param: Cache Components' build validation (E622) requires at least one value
+ * per root param. Unlisted locales still render on request.
+ */
+export function generateStaticParams() {
+  return LOCALES.map((locale) => ({ locale }));
+}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
