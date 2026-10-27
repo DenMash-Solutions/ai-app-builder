@@ -65,5 +65,6 @@ row in the same turn as any status change** (rule:
 | 055 | [performance](055-performance/plan.md) | implemented | 2026-10-24 |
 | 056 | [cache-components](056-cache-components/plan.md) | implemented | 2026-10-25 |
 | 057 | [safelist-curation-css-architecture](057-safelist-curation-css-architecture/plan.md) | implemented | 2026-10-25 |
+| 058 | [component-states-editor](058-component-states-editor/plan.md) | approved | 2026-10-26 |
 
-_57 plans: 53 implemented · 1 approved (`033`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._
+_58 plans: 53 implemented · 2 approved (`033`, `058`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._
