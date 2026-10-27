@@ -37,7 +37,9 @@ components by overriding state, and edit the `visible` conditions themselves.
    carrying `visible` / `watch` / `repeat` so state-driven components are findable
 2. **State inspector** (States tab) — live list of state paths + current runtime values
    (`/queries/pokedexList/status = "success"`, `/page = 0`), read from the provider's
-   runtime state
+   runtime state. Rows are split into **two independent accordions** — "Used by this
+   element" (open by default) and "Other state" (collapsed) — so relevance is
+   structural, not color-only (refinement 2026-10-27, user suggestion)
 3. **State override / force-preview** — edit a state value in the inspector → the real
    `VisibilityProvider` re-evaluates → hidden conditional elements render authentically
    and become pickable/editable. Overrides are **session-only** (runtime state, never

@@ -24,11 +24,13 @@ import {
 import type { InstanceChain, MoveDirection } from "@/lib/editor";
 import { ActionTiles } from "./action-tiles";
 import { PropertyForm } from "./property-form";
+import { StatesTab } from "./states-tab";
 import { StructureTab } from "./structure-tab";
 
 export const PANEL_TABS = {
   properties: "properties",
   structure: "structure",
+  states: "states",
   actions: "actions",
 } as const;
 
@@ -37,12 +39,14 @@ export type PanelTab = (typeof PANEL_TABS)[keyof typeof PANEL_TABS];
 const PANEL_TAB_ORDER: readonly PanelTab[] = [
   PANEL_TABS.properties,
   PANEL_TABS.structure,
+  PANEL_TABS.states,
   PANEL_TABS.actions,
 ];
 
 const TAB_LABEL_KEYS: Record<PanelTab, string> = {
   properties: "editor.tabs.properties",
   structure: "editor.tabs.structure",
+  states: "editor.tabs.states",
   actions: "editor.tabs.actions",
 };
 
@@ -542,6 +546,7 @@ export function EditPanel({
             />
           </>
         )}
+        {tab === PANEL_TABS.states && <StatesTab element={element} />}
         {tab === PANEL_TABS.actions && (
           <ActionTiles key={elementKey} onAction={onAction} />
         )}

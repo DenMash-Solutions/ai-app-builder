@@ -221,6 +221,7 @@
     "tabs": {
       "properties": "Properties",
       "structure": "Structure",
+      "states": "States",
       "actions": "Actions"
     },
     "markers": {
@@ -231,6 +232,19 @@
       "tipVisible": "Conditional: shown only while its state condition matches",
       "tipWatch": "Watches a state path and runs actions when it changes",
       "tipRepeat": "Repeats for every item of a state list"
+    },
+    "states": {
+      "visibility": "Visibility",
+      "shownNow": "Shown now",
+      "hiddenNow": "Hidden now",
+      "alwaysShown": "Always shown — this element has no condition",
+      "watch": "Watch",
+      "stateTitle": "State",
+      "stateCount": "{count, plural, one {# path} other {# paths}}",
+      "noState": "No state yet",
+      "usedGroup": "Used by this element",
+      "otherGroup": "Other state",
+      "usedTip": "Referenced by this element's condition or watch"
     },
     "structure": {
       "breadcrumb": "Element path",

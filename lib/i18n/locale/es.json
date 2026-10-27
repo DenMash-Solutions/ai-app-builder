@@ -221,6 +221,7 @@
     "tabs": {
       "properties": "Propiedades",
       "structure": "Estructura",
+      "states": "Estados",
       "actions": "Acciones"
     },
     "markers": {
@@ -231,6 +232,19 @@
       "tipVisible": "Condicional: se muestra solo mientras su condición de estado coincida",
       "tipWatch": "Observa una ruta de estado y ejecuta acciones cuando cambia",
       "tipRepeat": "Se repite por cada elemento de una lista de estado"
+    },
+    "states": {
+      "visibility": "Visibilidad",
+      "shownNow": "Visible ahora",
+      "hiddenNow": "Oculto ahora",
+      "alwaysShown": "Siempre visible — este elemento no tiene condición",
+      "watch": "Observa",
+      "stateTitle": "Estado",
+      "stateCount": "{count, plural, one {# ruta} other {# rutas}}",
+      "noState": "Sin estado aún",
+      "usedGroup": "Usado por este elemento",
+      "otherGroup": "Otros estados",
+      "usedTip": "Referenciado por la condición u observación de este elemento"
     },
     "structure": {
       "breadcrumb": "Ruta del elemento",
