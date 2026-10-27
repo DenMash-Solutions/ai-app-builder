@@ -223,6 +223,15 @@
       "structure": "Structure",
       "actions": "Actions"
     },
+    "markers": {
+      "visible": "if",
+      "watch": "watch",
+      "repeat": "repeat",
+      "section": "Markers",
+      "tipVisible": "Conditional: shown only while its state condition matches",
+      "tipWatch": "Watches a state path and runs actions when it changes",
+      "tipRepeat": "Repeats for every item of a state list"
+    },
     "structure": {
       "breadcrumb": "Element path",
       "insert": "Insert",

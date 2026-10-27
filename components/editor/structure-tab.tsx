@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import type { MoveDirection } from "@/lib/editor";
-import { MOVE_DIRECTIONS, findParentKey } from "@/lib/editor";
+import { MOVE_DIRECTIONS, elementMarkers, findParentKey } from "@/lib/editor";
 import { isContainerType, pickerItems } from "@/lib/playground/catalog";
 import type { Spec, UIElement } from "@json-render/core";
 import {
@@ -18,6 +18,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { PickerMode } from "./component-picker";
 import { ComponentPicker, PICKER_MODES } from "./component-picker";
+import { SpecMarkers } from "./spec-markers";
 
 const ACTION_BUTTON_CLASS = "dark gap-1 px-2 text-xs";
 
@@ -55,6 +56,7 @@ export function StructureTab({
   const [picker, setPicker] = useState<PickerMode | null>(null);
 
   const children = element.children ?? [];
+  const ownMarkers = elementMarkers(element);
   const parentKey = findParentKey(spec, elementKey);
   const isRoot = elementKey === spec.root;
   const insertTarget = isContainerType(element.type) ? elementKey : parentKey;
@@ -141,6 +143,15 @@ export function StructureTab({
         </Button>
       </div>
 
+      {ownMarkers.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            {t("editor.markers.section")}
+          </span>
+          <SpecMarkers markers={ownMarkers} />
+        </div>
+      )}
+
       <div className="flex flex-col gap-1">
         <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
           {t("editor.structure.children")}
@@ -153,6 +164,7 @@ export function StructureTab({
         {children.map((childKey, index) => {
           const child = spec.elements[childKey];
           if (!child) return null;
+          const childMarkers = elementMarkers(child);
           return (
             <div
               key={childKey}
@@ -169,6 +181,7 @@ export function StructureTab({
                 <span className="truncate font-mono text-[11px] text-zinc-300">
                   {childKey}
                 </span>
+                <SpecMarkers markers={childMarkers} />
               </button>
               <button
                 type="button"

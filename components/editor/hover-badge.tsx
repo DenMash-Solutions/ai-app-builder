@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import type { RefObject } from "react";
 import type { Spec } from "@json-render/core";
+import { useTranslations } from "next-intl";
+import { elementMarkers } from "@/lib/editor";
+import type { ElementMarker } from "@/lib/editor";
 
 interface BadgeState {
   key: string;
   type: string;
   childCount: number;
+  markers: ElementMarker[];
   top: number;
   left: number;
   width: number;
@@ -28,6 +32,7 @@ interface HoverBadgeProps {
  */
 export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
   const [badge, setBadge] = useState<BadgeState | null>(null);
+  const t = useTranslations();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -57,6 +62,7 @@ export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
         key,
         type: element.type,
         childCount: (element.children ?? []).length,
+        markers: elementMarkers(element),
         top: rect.top,
         left: rect.left,
         width: rect.width,
@@ -93,6 +99,9 @@ export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
   if (badge.childCount > 0) {
     parts.push(`${badge.childCount}`);
   }
+  // State markers (058): surface visible/watch/repeat so conditional
+  // components are discoverable while hovered in pick mode.
+  parts.push(...badge.markers.map((marker) => t(`editor.markers.${marker}`)));
 
   return (
     <div

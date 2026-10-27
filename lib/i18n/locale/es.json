@@ -223,6 +223,15 @@
       "structure": "Estructura",
       "actions": "Acciones"
     },
+    "markers": {
+      "visible": "si",
+      "watch": "obs",
+      "repeat": "rep",
+      "section": "Marcadores",
+      "tipVisible": "Condicional: se muestra solo mientras su condición de estado coincida",
+      "tipWatch": "Observa una ruta de estado y ejecuta acciones cuando cambia",
+      "tipRepeat": "Se repite por cada elemento de una lista de estado"
+    },
     "structure": {
       "breadcrumb": "Ruta del elemento",
       "insert": "Insertar",
