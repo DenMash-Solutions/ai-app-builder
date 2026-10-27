@@ -43,7 +43,9 @@ components by overriding state, and edit the `visible` conditions themselves.
 3. **State override / force-preview** — edit a state value in the inspector → the real
    `VisibilityProvider` re-evaluates → hidden conditional elements render authentically
    and become pickable/editable. Overrides are **session-only** (runtime state, never
-   written into `spec.state`)
+   written into `spec.state`). **UX refinement 2026-10-27**: `…/status` paths edit
+   through a select of `QUERY_STATUSES` (idle/loading/success/error — object constants
+   from `lib/data-sources/types.ts`); all other paths keep the free-text input
 4. **Condition editing** — structured form for the selected element's `visible`:
    state-path field (with suggestions from known paths) + operator dropdown
    (`eq, neq, gt, gte, lt, lte, not`) + value; supports the single-condition form and

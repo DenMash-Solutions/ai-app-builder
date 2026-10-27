@@ -100,6 +100,31 @@ export function flattenStateRows(state: Record<string, unknown>): StateRow[] {
   return rows.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+import { QUERY_STATUSES } from "@/lib/data-sources/types";
+
+/**
+ * Query lifecycle paths (`/queries/<name>/status`) edit through a select of
+ * `QUERY_STATUSES` in the States tab — the value domain is known, so free
+ * text would only invite typos.
+ */
+const QUERY_STATUS_PATH = /^\/queries\/[^/]+\/status$/;
+
+export function isQueryStatusPath(path: string): boolean {
+  return QUERY_STATUS_PATH.test(path);
+}
+
+/**
+ * Options for the status select: the four lifecycle values, plus the current
+ * value when it sits outside the domain (never silently drop what the store
+ * actually holds).
+ */
+export function statusSelectOptions(currentValue: string): string[] {
+  const base = Object.values(QUERY_STATUSES) as string[];
+  return currentValue === "" || base.includes(currentValue)
+    ? base
+    : [...base, currentValue];
+}
+
 export interface SplitStateRows {
   /** Rows referenced by the element (condition / watch / repeat) — first group. */
   used: StateRow[];

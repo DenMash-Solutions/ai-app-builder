@@ -244,7 +244,10 @@
       "noState": "No state yet",
       "usedGroup": "Used by this element",
       "otherGroup": "Other state",
-      "usedTip": "Referenced by this element's condition or watch"
+      "usedTip": "Referenced by this element's condition or watch",
+      "editValue": "Edit value",
+      "overriddenTip": "Overridden in this session — reset restores the original value",
+      "resetOverrides": "{count, plural, one {Reset # override} other {Reset # overrides}}"
     },
     "structure": {
       "breadcrumb": "Element path",

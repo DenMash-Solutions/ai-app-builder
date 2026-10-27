@@ -3,7 +3,8 @@
 import { useIsVisible, useStateStore } from "@json-render/react";
 import { useTranslations } from "next-intl";
 import type { UIElement } from "@json-render/core";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Pencil, RotateCcw } from "lucide-react";
+import { useSyncExternalStore, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -11,11 +12,20 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import {
   elementStatePaths,
   flattenStateRows,
+  isQueryStatusPath,
   splitStateRows,
+  statusSelectOptions,
   type StateRow,
 } from "@/lib/editor/state-inspect";
+import { parseStateInput, stateOverrides } from "@/lib/editor/state-overrides";
 
 interface StatesTabProps {
   element: UIElement;
@@ -27,36 +37,173 @@ const SECTION_LABEL_CLASS =
 const GROUP_TRIGGER_CLASS =
   "group h-7 w-full justify-between gap-1.5 px-1 font-mono text-[11px] font-medium uppercase tracking-wide text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200";
 
+/** Initial text of the inline editor: raw for strings, JSON for the rest. */
+function toEditText(value: unknown): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value) ?? "";
+}
+
+function StateRowItem({
+  row,
+  used,
+  usedTip,
+  overridden,
+}: {
+  row: StateRow;
+  used: boolean;
+  usedTip?: string;
+  overridden: boolean;
+}) {
+  const t = useTranslations();
+  const { get, set } = useStateStore();
+  const [draft, setDraft] = useState<string | null>(null);
+  const cancelRef = useRef(false);
+  const isStatus = isQueryStatusPath(row.path);
+
+  const applyValue = (next: unknown) => {
+    const current = get(row.path);
+    if (JSON.stringify(next) === JSON.stringify(current)) return;
+    // capture the ORIGINAL before the first write, then apply
+    stateOverrides.record(row.path, current);
+    set(row.path, next);
+  };
+
+  const commit = () => {
+    if (draft === null) return;
+    const raw = draft;
+    setDraft(null);
+    applyValue(parseStateInput(raw));
+  };
+
+  const cancel = () => {
+    cancelRef.current = true;
+    setDraft(null);
+  };
+
+  // Query lifecycle: known value domain → select instead of free text.
+  const currentRaw = get(row.path);
+  const currentValue =
+    typeof currentRaw === "string"
+      ? currentRaw
+      : currentRaw === undefined
+        ? ""
+        : String(currentRaw);
+  const options = statusSelectOptions(currentValue);
+
+  return (
+    <li
+      data-state-path={row.path}
+      data-state-used={used ? "true" : "false"}
+      data-state-overridden={overridden ? "true" : "false"}
+      title={
+        overridden
+          ? t("editor.states.overriddenTip")
+          : used
+            ? usedTip
+            : undefined
+      }
+      className={`group flex items-center justify-between gap-2 rounded border px-1.5 py-0.5 ${
+        overridden ? "border-violet-800/70 bg-violet-950/30" : "border-zinc-800"
+      }`}
+    >
+      <span
+        className={`truncate font-mono text-[11px] ${
+          used ? "text-amber-300" : "text-zinc-400"
+        }`}
+      >
+        {row.path}
+      </span>
+      {isStatus ? (
+        <Select
+          value={currentValue || undefined}
+          onValueChange={(next) => applyValue(next)}
+        >
+          <SelectTrigger
+            data-state-status-select={row.path}
+            aria-label={t("editor.states.editValue")}
+            size="sm"
+            className="h-6 max-w-[9.5rem] gap-1 rounded border-zinc-700 bg-zinc-900 px-1.5 font-mono text-[11px] text-zinc-300 hover:bg-zinc-800 [&_svg]:size-3"
+          >
+            <span className="truncate">{currentValue || "—"}</span>
+          </SelectTrigger>
+          <SelectContent className="dark">
+            {options.map((option) => (
+              <SelectItem
+                key={option}
+                value={option}
+                className="font-mono text-[11px]"
+              >
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : draft !== null ? (
+        <input
+          data-state-edit-input={row.path}
+          value={draft}
+          autoFocus
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            if (cancelRef.current) {
+              cancelRef.current = false;
+              return;
+            }
+            commit();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              cancel();
+            }
+          }}
+          className="h-6 w-full min-w-0 rounded border border-zinc-700 bg-zinc-900 px-1 font-mono text-[11px] text-zinc-100 focus:border-zinc-500 focus:outline-none"
+        />
+      ) : (
+        <>
+          <span className="shrink-0 truncate font-mono text-[11px] text-zinc-300">
+            {row.display}
+          </span>
+          <button
+            type="button"
+            data-state-edit={row.path}
+            aria-label={t("editor.states.editValue")}
+            onClick={() => setDraft(toEditText(get(row.path)))}
+            className="shrink-0 rounded p-0.5 text-zinc-500 opacity-0 transition hover:text-zinc-200 focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <Pencil className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </>
+      )}
+    </li>
+  );
+}
+
 function StateRowList({
   rows,
   used,
   usedTip,
+  overriddenPaths,
 }: {
   rows: StateRow[];
   used: boolean;
   usedTip?: string;
+  overriddenPaths: Readonly<Record<string, unknown>>;
 }) {
   return (
     <ul className="flex flex-col gap-1">
       {rows.map((row) => (
-        <li
+        <StateRowItem
           key={row.path}
-          data-state-path={row.path}
-          data-state-used={used ? "true" : "false"}
-          title={used ? usedTip : undefined}
-          className="flex items-baseline justify-between gap-2 rounded border border-zinc-800 px-1.5 py-0.5"
-        >
-          <span
-            className={`truncate font-mono text-[11px] ${
-              used ? "text-amber-300" : "text-zinc-400"
-            }`}
-          >
-            {row.path}
-          </span>
-          <span className="shrink-0 truncate font-mono text-[11px] text-zinc-300">
-            {row.display}
-          </span>
-        </li>
+          row={row}
+          used={used}
+          usedTip={usedTip}
+          overridden={row.path in overriddenPaths}
+        />
       ))}
     </ul>
   );
@@ -70,6 +217,7 @@ function StateGroup({
   used,
   defaultOpen,
   usedTip,
+  overriddenPaths,
 }: {
   group: "used" | "other";
   label: string;
@@ -78,6 +226,7 @@ function StateGroup({
   used: boolean;
   defaultOpen?: boolean;
   usedTip?: string;
+  overriddenPaths: Readonly<Record<string, unknown>>;
 }) {
   const t = useTranslations();
   return (
@@ -106,22 +255,34 @@ function StateGroup({
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-4">
-        <StateRowList rows={rows} used={used} usedTip={usedTip} />
+        <StateRowList
+          rows={rows}
+          used={used}
+          usedTip={usedTip}
+          overriddenPaths={overriddenPaths}
+        />
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
 /**
- * States tab (plan 058 step 2): the selected element's state surface —
- * live visibility verdict + its condition, watched paths, and the full
- * runtime-state inspector split into two independent collapsibles (paths
- * used by this element vs. everything else). Override editing lands in
- * step 3; the condition form in step 4.
+ * States tab (plan 058 steps 2–3): the selected element's state surface —
+ * live visibility verdict + its condition, watched paths, and the
+ * runtime-state inspector split into two collapsibles (used vs. other).
+ * State values are editable inline; edits are session-only overrides
+ * (tracked by `stateOverrides`, restorable via "Reset overrides"), never
+ * written to `spec.state`. The condition form lands in step 4.
  */
 export function StatesTab({ element }: StatesTabProps) {
   const t = useTranslations();
-  const { state } = useStateStore();
+  const { state, set } = useStateStore();
+  const overrideSnapshot = useSyncExternalStore(
+    stateOverrides.subscribe,
+    stateOverrides.getSnapshot,
+    stateOverrides.getSnapshot,
+  );
+  const overrideCount = Object.keys(overrideSnapshot).length;
 
   const hasCondition =
     element.visible !== undefined && element.visible !== true;
@@ -131,6 +292,12 @@ export function StatesTab({ element }: StatesTabProps) {
   const watchPaths = Object.keys(element.watch ?? {});
   const rows = flattenStateRows(state);
   const { used, other } = splitStateRows(rows, elementStatePaths(element));
+
+  const resetOverrides = () => {
+    for (const [path, original] of stateOverrides.clear()) {
+      set(path, original);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 px-3 py-3">
@@ -182,14 +349,29 @@ export function StatesTab({ element }: StatesTabProps) {
       )}
 
       <section className="flex flex-col gap-1.5">
-        <span className={SECTION_LABEL_CLASS}>
-          {t("editor.states.stateTitle")}
-          {rows.length > 0 && (
-            <span className="ml-1.5 font-normal normal-case text-zinc-600">
-              {t("editor.states.stateCount", { count: rows.length })}
-            </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className={SECTION_LABEL_CLASS}>
+            {t("editor.states.stateTitle")}
+            {rows.length > 0 && (
+              <span className="ml-1.5 font-normal normal-case text-zinc-600">
+                {t("editor.states.stateCount", { count: rows.length })}
+              </span>
+            )}
+          </span>
+          {overrideCount > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              data-state-reset-overrides
+              onClick={resetOverrides}
+              className="h-6 gap-1 px-1.5 text-[11px] font-normal normal-case text-violet-300 hover:bg-violet-950/40 hover:text-violet-200"
+            >
+              <RotateCcw className="h-3 w-3" aria-hidden="true" />
+              {t("editor.states.resetOverrides", { count: overrideCount })}
+            </Button>
           )}
-        </span>
+        </div>
         {rows.length === 0 && used.length === 0 ? (
           <p className="text-xs text-zinc-500">{t("editor.states.noState")}</p>
         ) : (
@@ -203,6 +385,7 @@ export function StatesTab({ element }: StatesTabProps) {
                 used
                 defaultOpen
                 usedTip={t("editor.states.usedTip")}
+                overriddenPaths={overrideSnapshot}
               />
             )}
             {other.length > 0 && (
@@ -212,6 +395,7 @@ export function StatesTab({ element }: StatesTabProps) {
                 count={other.length}
                 rows={other}
                 used={false}
+                overriddenPaths={overrideSnapshot}
               />
             )}
           </>

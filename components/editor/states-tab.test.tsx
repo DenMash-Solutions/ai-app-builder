@@ -1,11 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, afterEach } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
 import { JSONUIProvider } from "@json-render/react";
 import type { UIElement } from "@json-render/core";
 import en from "@/lib/i18n/locale/en.json";
 import { registry } from "@/lib/playground/registry";
+import { stateOverrides } from "@/lib/editor/state-overrides";
 import { StatesTab } from "@/components/editor/states-tab";
+
+afterEach(() => {
+  // overrides are module-scoped — never leak between render tests
+  stateOverrides.clear();
+});
 
 const STATE = {
   page: 0,
@@ -109,5 +115,35 @@ describe("StatesTab", () => {
     );
     expect(usedSection).toContain('data-state-path="/never/set"');
     expect(usedSection).toContain("—");
+  });
+
+  test("rows offer an edit control — pencil for plain paths, select for status", () => {
+    const html = renderTab(loadingElement);
+    // non-status rows get the pencil
+    expect(html).toContain('data-state-edit="/page"');
+    // the status row gets the lifecycle select instead
+    expect(html).toContain(
+      'data-state-status-select="/queries/pokedexList/status"',
+    );
+    expect(html).not.toContain('data-state-edit="/queries/pokedexList/status"');
+    expect(html).not.toContain("data-state-reset-overrides");
+    expect(html).not.toContain('data-state-overridden="true"');
+  });
+
+  test("status select trigger shows the current value", () => {
+    // options render in the Radix portal (closed in SSR) — they are covered
+    // by statusSelectOptions unit tests; here the trigger value must show.
+    const html = renderTab(loadingElement);
+    expect(html).toContain(">success<");
+  });
+
+  test("a recorded override marks its row and reveals the reset button", () => {
+    stateOverrides.record("/page", 0);
+    const html = renderTab(loadingElement);
+    expect(html).toContain('data-state-path="/page"');
+    expect(html).toMatch(
+      /data-state-path="\/page"[^>]*data-state-overridden="true"/,
+    );
+    expect(html).toContain("data-state-reset-overrides");
   });
 });

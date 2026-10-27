@@ -3,6 +3,7 @@ export * from "./editor";
 export * from "./instance-path";
 export * from "./markers";
 export * from "./state-inspect";
+export * from "./state-overrides";
 export * from "./style-text";
 export * from "./structure";
 export * from "./suggestions";

@@ -244,7 +244,10 @@
       "noState": "Sin estado aún",
       "usedGroup": "Usado por este elemento",
       "otherGroup": "Otros estados",
-      "usedTip": "Referenciado por la condición u observación de este elemento"
+      "usedTip": "Referenciado por la condición u observación de este elemento",
+      "editValue": "Editar valor",
+      "overriddenTip": "Anulado en esta sesión — restablecer restaura el valor original",
+      "resetOverrides": "{count, plural, one {Restablecer # anulación} other {Restablecer # anulaciones}}"
     },
     "structure": {
       "breadcrumb": "Ruta del elemento",

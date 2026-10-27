@@ -4,7 +4,9 @@ import {
   collectStatePointers,
   elementStatePaths,
   flattenStateRows,
+  isQueryStatusPath,
   splitStateRows,
+  statusSelectOptions,
 } from "@/lib/editor/state-inspect";
 
 function element(fields: Partial<UIElement>): UIElement {
@@ -96,6 +98,41 @@ describe("flattenStateRows", () => {
     // quoted + ellipsis inside the quotes: "xxxx…"
     expect(rows[0].display.startsWith('"')).toBe(true);
     expect(rows[0].display.endsWith('…"')).toBe(true);
+  });
+});
+
+describe("isQueryStatusPath", () => {
+  test("matches query lifecycle status pointers", () => {
+    expect(isQueryStatusPath("/queries/pokedexList/status")).toBe(true);
+    expect(isQueryStatusPath("/queries/a-b/status")).toBe(true);
+  });
+
+  test("rejects other paths", () => {
+    expect(isQueryStatusPath("/queries/pokedexList/count")).toBe(false);
+    expect(isQueryStatusPath("/status")).toBe(false);
+    expect(isQueryStatusPath("/queries/status")).toBe(false);
+    expect(isQueryStatusPath("/queries/list/status/extra")).toBe(false);
+    expect(isQueryStatusPath("/page")).toBe(false);
+  });
+});
+
+describe("statusSelectOptions", () => {
+  test("returns the four lifecycle values for in-domain input", () => {
+    expect(statusSelectOptions("success")).toEqual([
+      "idle",
+      "loading",
+      "success",
+      "error",
+    ]);
+  });
+
+  test("keeps an out-of-domain current value as an extra option", () => {
+    const options = statusSelectOptions("weird");
+    expect(options).toEqual(["idle", "loading", "success", "error", "weird"]);
+  });
+
+  test("empty current value does not add an option", () => {
+    expect(statusSelectOptions("")).toHaveLength(4);
   });
 });
 
