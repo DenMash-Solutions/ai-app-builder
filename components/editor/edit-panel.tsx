@@ -1,6 +1,6 @@
 "use client";
 
-import type { Spec, UIElement } from "@json-render/core";
+import type { Spec, UIElement, VisibilityCondition } from "@json-render/core";
 import { cn } from "cn";
 import {
   Check,
@@ -88,6 +88,8 @@ interface EditPanelProps {
   onClose: () => void;
   onSelectKey: (key: string) => void;
   onPropChange: (prop: string, value: unknown, dataPath: string | null) => void;
+  /** Writes an edited `visible` condition back into the spec. */
+  onConditionChange: (next: VisibilityCondition) => void;
   onAction: (instruction: string, label: string) => void;
   onInsert: (parentKey: string, type: string) => void;
   onRemove: (key: string) => void;
@@ -122,6 +124,7 @@ export function EditPanel({
   onClose,
   onSelectKey,
   onPropChange,
+  onConditionChange,
   onAction,
   onInsert,
   onRemove,
@@ -546,7 +549,13 @@ export function EditPanel({
             />
           </>
         )}
-        {tab === PANEL_TABS.states && <StatesTab element={element} />}
+        {tab === PANEL_TABS.states && (
+          <StatesTab
+            element={element}
+            spec={spec}
+            onConditionChange={onConditionChange}
+          />
+        )}
         {tab === PANEL_TABS.actions && (
           <ActionTiles key={elementKey} onAction={onAction} />
         )}

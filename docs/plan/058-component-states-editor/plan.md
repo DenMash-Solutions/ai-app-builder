@@ -1,6 +1,6 @@
 # Component States — See & Edit Conditional Components — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-26
 
 ## Goal
@@ -48,8 +48,11 @@ components by overriding state, and edit the `visible` conditions themselves.
    from `lib/data-sources/types.ts`); all other paths keep the free-text input
 4. **Condition editing** — structured form for the selected element's `visible`:
    state-path field (with suggestions from known paths) + operator dropdown
-   (`eq, neq, gt, gte, lt, lte, not`) + value; supports the single-condition form and
-   the array/AND form (Pokedex `dex-empty` = 2 conditions)
+   (`eq, neq, gt, gte, lt, lte, truthy, not`) + value; supports the single-condition
+   form, the array/AND form (Pokedex `dex-empty` = 2 conditions), and — **scope
+   addition 2026-10-27**, discovered on the user's real spec — the explicit
+   `{ $and: [...] }` wrapper, which round-trips back to the same wrapper so an
+   unchanged condition is never rewritten
 5. **`watch` read-only display** — the States tab lists an element's `watch` keys
    (editing watch action lists stays out of scope)
 
@@ -91,6 +94,21 @@ components by overriding state, and edit the `visible` conditions themselves.
 6. **Kebab-case, feature-colocated files** — new editor components live under
    `components/editor/` beside their siblings; object constants for operators/badge
    kinds; i18n keys under `editor.states.*` (en/es)
+7. **The container is data, not decoration (added 2026-10-27)** — parse returns
+   `container: "single" | "array" | "and"` and serialization reproduces it, so the
+   real spec's `$and` wrapper survives an edit byte-identical (rejected: always
+   emitting the plain array — would silently rewrite the user's spec on the first
+   unrelated edit; rejected: keeping `$and` read-only — it is the shape their
+   `empty-state` actually uses). Rejected alternatives for out-of-scope shapes
+   (`$or`, `$item`/`$index`, negated comparisons, multiple operators,
+   non-primitive operands) remain a read-only `<pre data-condition-raw>` block.
+8. **Operand type hints, with one escape hatch** — a parsed operand pins its kind
+   (`string`/`number`/`boolean`) so unchanged text round-trips byte-exact
+   (`"123"` never becomes `123`), **except** an empty string (`eq: ""`), which is
+   the placeholder an operator switch commits: it parses as `auto` (still
+   round-tripping to `""`) so a subsequent `true`/`123` the user types coerces
+   instead of committing as text. Rejected: pinning `eq: ""` to `string` — it made
+   `truthy → eq → "true"` write a string that can never match a boolean state.
 
 ## Implementation steps (each keeps lint/tsc/tests green)
 
@@ -108,17 +126,27 @@ components by overriding state, and edit the `visible` conditions themselves.
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit: condition form ↔ `visible` serialization round-trip (single + array),
-      badge-kind derivation, override seeding (session-only — `spec.state` unchanged),
-      operator constants coverage
-- [ ] e2e (Pokedex): open a Pokedex design → Structure shows `dex-loading` with a
-      conditional badge → States tab → set `/queries/pokedexList/status = "loading"` →
-      `dex-loading` appears on canvas → pick it → edit a prop → reset override →
-      spinner hides again; `spec.state` byte-identical before/after
-- [ ] e2e: existing 112 stay green (tab addition must not disturb panel layout tests)
-- [ ] MCP spot-check: visual confirmation of badge + forced state in the browser
-- [ ] i18n: en/es strings present for every new key
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+      — all green; unit **728 pass / 0 fail** (+27 over step 3)
+- [x] Unit: condition form ↔ `visible` serialization round-trip (single + array +
+      `$and` wrapper), badge-kind derivation, override seeding (session-only —
+      `spec.state` unchanged), operator constants coverage, `replaceVisible`
+      immutability
+- [x] e2e (stateful fixture, `e2e/states-tab.spec.ts`): Structure shows
+      `state-greeting` with the `visible` badge → States tab → override
+      `/revealed = true` → greeting renders → pick it → edit `variant` → reset
+      override → greeting hides again; `spec.state` byte-identical before/after
+      (head 0 → 1 from the prop edit only). Second test: `truthy → eq` → type
+      `true` → spec reads `{ $state: "/revealed", eq: true }` → undo ×2 restores
+      the original condition (head back to 0)
+- [x] e2e: existing 112 stay green — full suite **114/114 passed (50.7s)**
+- [x] MCP spot-check (real spec, live browser): `loading-state` Structure row
+      carries `data-marker="visible"`; status override
+      `/queries/pokemonList/status = loading` rendered "Loading Pokémon…" on the
+      canvas (verdict hidden → shown, row marked overridden, "Reset 1 override");
+      reset closed the gate again (grid back, verdict hidden) with `spec.state`,
+      condition, head (0) and revision count (3) untouched. Screenshot captured.
+- [x] i18n: en/es strings present for every new key (`editor.states.*`)
 
 ## Status log
 
@@ -127,3 +155,7 @@ components by overriding state, and edit the `visible` conditions themselves.
 | 2026-10-26 | plan drafted (draft) — research done (editor grep, Pokedex spec analysis, json-render skill loaded) |
 | 2026-10-26 | 4 clarifying questions answered: all 4 layers, structured form, States tab, state override; scope/out-of-scope/design decisions finalized |
 | 2026-10-26 | plan **approved** — commit plan, then implement step by step |
+| 2026-10-27 | step 1 (discovery badges) `6afec70`, step 2 (States tab shell) `cd5216e`, step 3 (override + status select) `7c3f843` |
+| 2026-10-27 | **scope addition** — the real spec's `empty-state` uses the `{ $and: [...] }` wrapper: parse/serialize carry `container` so it round-trips (decision 7); `eq: ""` parses untyped so `truthy → eq` commits are coercible (decision 8) |
+| 2026-10-27 | plan **implemented** — verification: format/lint/tsc ✓, unit 728/0, e2e 114/114 (50.7s), MCP spot-check on the real spec ✓ |
+| 2026-10-27 | bugfix: status + operator `<Select>` triggers rendered a plain span instead of `<SelectValue>`, so Radix's item-aligned positioning never ran (popup at viewport 0,0) — both now render `SelectValue`; re-verified in browser + gates (unit 728/0, e2e 114/114) |

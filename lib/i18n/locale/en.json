@@ -247,7 +247,13 @@
       "usedTip": "Referenced by this element's condition or watch",
       "editValue": "Edit value",
       "overriddenTip": "Overridden in this session — reset restores the original value",
-      "resetOverrides": "{count, plural, one {Reset # override} other {Reset # overrides}}"
+      "resetOverrides": "{count, plural, one {Reset # override} other {Reset # overrides}}",
+      "conditionPath": "State path",
+      "conditionOperator": "Operator",
+      "conditionValue": "Value",
+      "addConditionRow": "Add condition",
+      "removeConditionRow": "Remove condition row",
+      "rawConditionTip": "This condition shape isn't editable yet — showing the raw spec JSON"
     },
     "structure": {
       "breadcrumb": "Element path",

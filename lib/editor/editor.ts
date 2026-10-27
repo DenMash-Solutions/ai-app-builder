@@ -1,4 +1,4 @@
-import type { Spec } from "@json-render/core";
+import type { Spec, UIElement, VisibilityCondition } from "@json-render/core";
 import { REVISION_LABELS } from "@/lib/history";
 import type { InstanceChain, InstanceScope } from "./instance-path";
 import { countKeyInstances, resolveInstanceScope } from "./instance-path";
@@ -134,6 +134,26 @@ export function replaceProp(
         props: { ...(element.props ?? {}), [prop]: value },
       },
     },
+  };
+}
+
+/**
+ * Immutable local patch for an element's `visible` condition — no LLM round
+ * trip. `undefined` removes the condition (element always shown).
+ */
+export function replaceVisible(
+  spec: Spec,
+  key: string,
+  condition: VisibilityCondition | undefined,
+): Spec {
+  const element = spec.elements[key];
+  if (!element) return spec;
+  const next: UIElement = { ...element };
+  if (condition === undefined) delete next.visible;
+  else next.visible = condition;
+  return {
+    ...spec,
+    elements: { ...spec.elements, [key]: next },
   };
 }
 

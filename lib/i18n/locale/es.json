@@ -247,7 +247,13 @@
       "usedTip": "Referenciado por la condición u observación de este elemento",
       "editValue": "Editar valor",
       "overriddenTip": "Anulado en esta sesión — restablecer restaura el valor original",
-      "resetOverrides": "{count, plural, one {Restablecer # anulación} other {Restablecer # anulaciones}}"
+      "resetOverrides": "{count, plural, one {Restablecer # anulación} other {Restablecer # anulaciones}}",
+      "conditionPath": "Ruta de estado",
+      "conditionOperator": "Operador",
+      "conditionValue": "Valor",
+      "addConditionRow": "Añadir condición",
+      "removeConditionRow": "Eliminar fila de condición",
+      "rawConditionTip": "Esta forma de condición aún no es editable — se muestra el JSON crudo del spec"
     },
     "structure": {
       "breadcrumb": "Ruta del elemento",

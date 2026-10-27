@@ -11,6 +11,7 @@ import {
   promptRevisionLabel,
   propertyRevisionLabel,
   replaceProp,
+  replaceVisible,
   scopeInstruction,
   scopeTargetsInstruction,
 } from "./editor";
@@ -59,6 +60,43 @@ describe("replaceProp", () => {
     const spec = makeSpec();
 
     expect(replaceProp(spec, "missing", "text", "Nope")).toBe(spec);
+  });
+});
+
+describe("replaceVisible", () => {
+  test("sets a condition immutably, leaving other elements untouched", () => {
+    const spec = makeSpec();
+    const next = replaceVisible(spec, "heading", {
+      $state: "/page",
+      gt: 0,
+    });
+
+    expect(next).not.toBe(spec);
+    expect(next.elements.heading.visible).toEqual({ $state: "/page", gt: 0 });
+    expect(next.elements.heading.props.text).toBe("Hello");
+    expect(next.elements.root).toBe(spec.elements.root);
+    expect(spec.elements.heading.visible).toBeUndefined();
+  });
+
+  test("undefined removes the condition (element always shown)", () => {
+    const spec = makeSpec();
+    const conditioned = replaceVisible(spec, "heading", {
+      $state: "/page",
+      eq: 1,
+    });
+
+    const next = replaceVisible(conditioned, "heading", undefined);
+
+    expect("visible" in next.elements.heading).toBe(false);
+    expect(next.elements.heading.props.text).toBe("Hello");
+  });
+
+  test("returns the spec unchanged for an unknown key", () => {
+    const spec = makeSpec();
+
+    expect(replaceVisible(spec, "missing", { $state: "/page", eq: 1 })).toBe(
+      spec,
+    );
   });
 });
 

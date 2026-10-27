@@ -57,6 +57,8 @@ export function lastGeneratePrompt(page: Page): Promise<string> {
 export interface StoredElement {
   children?: string[];
   props?: Record<string, unknown>;
+  /** Visibility condition — plan 058's condition-editor assertions. */
+  visible?: unknown;
 }
 
 export interface StoredSpec {

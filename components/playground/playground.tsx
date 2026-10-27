@@ -1,6 +1,6 @@
 "use client";
 
-import type { Spec } from "@json-render/core";
+import type { Spec, VisibilityCondition } from "@json-render/core";
 import {
   isNonEmptySpec,
   markDevtoolsActive,
@@ -44,6 +44,7 @@ import { FailureDialog } from "@/components/failure-dialog";
 import {
   MOVE_DIRECTIONS,
   STRUCTURE_OPS,
+  VISIBLE_FIELD,
   chainForKey,
   countKeyInstances,
   describeInstanceText,
@@ -58,6 +59,7 @@ import {
   propertyRevisionLabel,
   removeElement,
   replaceProp,
+  replaceVisible,
   resolveInstanceScope,
   scopeInstruction,
   scopeTargetId,
@@ -1131,6 +1133,18 @@ export function Playground({ initialRef }: PlaygroundProps) {
     updateEntry(updated);
   };
 
+  // Condition edits are local deterministic ops through the same commit path
+  // as prop edits — undoable revision labelled `property:visible`.
+  const handleConditionChange = (condition: VisibilityCondition) => {
+    if (!displayedSpec || !selectedKey || !routeEntry || isStreaming) return;
+    const updated = commitRevision(
+      routeEntry,
+      replaceVisible(displayedSpec, selectedKey, condition),
+      propertyRevisionLabel(VISIBLE_FIELD),
+    );
+    updateEntry(updated);
+  };
+
   // Structural edits are local deterministic ops — same commit path as prop
   // edits (undoable revisions), with an explicit selection target so focus
   // follows the operation (insert→new, remove→parent, move→stay).
@@ -1714,6 +1728,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
             onSelectKey={handleSelectKey}
             instanceChain={selectedChain}
             onPropChange={handlePropChange}
+            onConditionChange={handleConditionChange}
             onAction={handleAction}
             onInsert={handleInsert}
             onRemove={handleRemove}

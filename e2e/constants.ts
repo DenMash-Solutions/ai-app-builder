@@ -278,6 +278,7 @@ export const PATCH_PATH = {
 
 export const EDITOR = {
   pick: en.editor.pick,
+  states: en.editor.tabs.states,
   dragdrop: en.editor.dragdrop,
   xray: en.editor.xray,
   xrayScopeInstance: en.editor.xrayScope.instance,

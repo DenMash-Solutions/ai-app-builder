@@ -2,9 +2,9 @@
 
 import { useIsVisible, useStateStore } from "@json-render/react";
 import { useTranslations } from "next-intl";
-import type { UIElement } from "@json-render/core";
+import type { UIElement, VisibilityCondition } from "@json-render/core";
 import { ChevronRight, Pencil, RotateCcw } from "lucide-react";
-import { useSyncExternalStore, useRef, useState } from "react";
+import { useSyncExternalStore, useRef, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -16,6 +16,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
   elementStatePaths,
@@ -25,10 +26,19 @@ import {
   statusSelectOptions,
   type StateRow,
 } from "@/lib/editor/state-inspect";
+import {
+  parseCondition,
+  suggestedStatePaths,
+} from "@/lib/editor/condition-form";
+import { ConditionForm } from "./condition-form";
 import { parseStateInput, stateOverrides } from "@/lib/editor/state-overrides";
 
 interface StatesTabProps {
   element: UIElement;
+  /** Spec the element belongs to — feeds the condition path suggestions. */
+  spec: unknown;
+  /** Writes an edited `visible` back into the spec (undoable revision). */
+  onConditionChange: (next: VisibilityCondition) => void;
 }
 
 const SECTION_LABEL_CLASS =
@@ -124,7 +134,12 @@ function StateRowItem({
             size="sm"
             className="h-6 max-w-[9.5rem] gap-1 rounded border-zinc-700 bg-zinc-900 px-1.5 font-mono text-[11px] text-zinc-300 hover:bg-zinc-800 [&_svg]:size-3"
           >
-            <span className="truncate">{currentValue || "—"}</span>
+            {/* SelectValue is required: it registers the value node Radix's
+                item-aligned positioning reads — without it the popup is laid
+                out at (0,0) instead of next to the trigger. */}
+            <span className="truncate">
+              <SelectValue placeholder="—">{currentValue}</SelectValue>
+            </span>
           </SelectTrigger>
           <SelectContent className="dark">
             {options.map((option) => (
@@ -274,7 +289,11 @@ function StateGroup({
  * (tracked by `stateOverrides`, restorable via "Reset overrides"), never
  * written to `spec.state`. The condition form lands in step 4.
  */
-export function StatesTab({ element }: StatesTabProps) {
+export function StatesTab({
+  element,
+  spec,
+  onConditionChange,
+}: StatesTabProps) {
   const t = useTranslations();
   const { state, set } = useStateStore();
   const overrideSnapshot = useSyncExternalStore(
@@ -286,9 +305,11 @@ export function StatesTab({ element }: StatesTabProps) {
 
   const hasCondition =
     element.visible !== undefined && element.visible !== true;
+  const condition = parseCondition(element.visible);
   const conditionVisible = useIsVisible(
     hasCondition ? element.visible : undefined,
   );
+  const suggestions = useMemo(() => suggestedStatePaths(spec), [spec]);
   const watchPaths = Object.keys(element.watch ?? {});
   const rows = flattenStateRows(state);
   const { used, other } = splitStateRows(rows, elementStatePaths(element));
@@ -319,9 +340,23 @@ export function StatesTab({ element }: StatesTabProps) {
                 ? t("editor.states.shownNow")
                 : t("editor.states.hiddenNow")}
             </span>
-            <pre className="overflow-x-auto rounded border border-zinc-800 bg-zinc-900/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-zinc-300">
-              {JSON.stringify(element.visible, null, 2)}
-            </pre>
+            {condition.supported ? (
+              <ConditionForm
+                rows={condition.rows}
+                container={condition.container}
+                visible={element.visible}
+                suggestions={suggestions}
+                onChange={onConditionChange}
+              />
+            ) : (
+              <pre
+                data-condition-raw
+                title={t("editor.states.rawConditionTip")}
+                className="overflow-x-auto rounded border border-zinc-800 bg-zinc-900/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-zinc-300"
+              >
+                {JSON.stringify(element.visible, null, 2)}
+              </pre>
+            )}
           </>
         ) : (
           <p className="text-xs text-zinc-500">
