@@ -39,6 +39,7 @@ import {
 import { HistoryDrawer } from "@/components/history-drawer";
 import { PromptBar, ToolRail, TopBar } from "@/components/playground";
 import { SignupBanner } from "@/components/playground/signup-banner";
+import { DeviceFrameHost } from "@/components/playground/device-frame";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { FailureDialog } from "@/components/failure-dialog";
 import {
@@ -77,6 +78,12 @@ import { examplePropsFor } from "@/lib/playground/catalog";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
+import {
+  deviceFrameSize,
+  getDevicePreview,
+  getServerDevicePreview,
+  subscribeDevicePreview,
+} from "@/lib/playground/device-preview";
 import {
   RATE_LIMIT_PATTERN,
   SERVICE_UNAVAILABLE_PATTERN,
@@ -289,6 +296,10 @@ export function Playground({ initialRef }: PlaygroundProps) {
     completedSpec: Spec;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  /** Frame window (ready ↔ null): keydown must be bridged into it (R3). */
+  const [frameWindow, setFrameWindow] = useState<Window | null>(null);
+  /** The main keydown handler below, exposed for the frame bridge. */
+  const keydownHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
 
   // Element keys ([data-jr-key]) only render while devtools are marked
   // active — pick mode needs them for hit-testing and outlines.
@@ -561,6 +572,15 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // width-definite ancestors (see scroll-layout-fixup) without mutating what
   // the model produced or what editing/history operate on.
   const renderSpec = displayedSpec ? fixupScrollLayout(displayedSpec) : null;
+  // Device preview (plan 059): a preset mounts the device frame — but only
+  // while a spec renders. The landing empty state has nothing to preview and
+  // its picker is hidden, so the frame must not swallow it.
+  const devicePreview = useSyncExternalStore(
+    subscribeDevicePreview,
+    getDevicePreview,
+    getServerDevicePreview,
+  );
+  const frameSize = displayedSpec ? deviceFrameSize(devicePreview) : null;
 
   // Content language (playground editor): the active tag drives the canvas
   // merge, the EditPanel's resolved values, and where copy edits are written.
@@ -1397,7 +1417,16 @@ export function Playground({ initialRef }: PlaygroundProps) {
         // after this one, registered later); while a panel is open or
         // exiting, Escape belongs to it — this branch only turns Pick off
         // once nothing panel-related is in flight.
-        if (event.defaultPrevented || panelTarget || panelClosing) return;
+        if (event.defaultPrevented || panelClosing) return;
+        if (panelTarget) {
+          // That EditPanel listener lives on the parent window, but with
+          // focus inside the device frame the key fires in the frame's
+          // realm (mirrored into this handler by the bridge below) and
+          // would never reach it — close the panel here instead of
+          // dead-ending the Escape cascade (plan 059, R3).
+          if (event.currentTarget !== window) beginPanelClose();
+          return;
+        }
         if (pickMode) {
           beginPanelClose();
           setPickMode(false);
@@ -1427,8 +1456,19 @@ export function Playground({ initialRef }: PlaygroundProps) {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
+    keydownHandlerRef.current = handleKeyDown;
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Frame keyboard bridge (R3): events typed with focus inside the device
+  // frame fire on the frame's window — feed them to the same handler. The
+  // parent-window listener above still covers chrome (panel, prompt bar).
+  useEffect(() => {
+    if (!frameWindow) return;
+    const forward = (event: KeyboardEvent) => keydownHandlerRef.current(event);
+    frameWindow.addEventListener("keydown", forward);
+    return () => frameWindow.removeEventListener("keydown", forward);
+  }, [frameWindow]);
   // Route gates: resolution runs client-side, so a deep link first paints
   // the neutral loading state (never the empty state or the error panel);
   // an unknown/deleted/foreign id explains itself instead of silently
@@ -1525,6 +1565,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
             entrySlug={activeEntry?.slug ?? null}
             takenSlugs={takenSlugs}
             onRename={handleRename}
+            showDevicePreview={displayedSpec !== null && !isStreaming}
           />
           {/* Landing only: while editing an entry the CTA would just
                     overlay the canvas the user is working on. */}
@@ -1543,63 +1584,66 @@ export function Playground({ initialRef }: PlaygroundProps) {
             />
           )}
 
-          <div
-            ref={containerRef}
-            className={`absolute inset-0 overflow-y-auto ${
-              pickMode ? "jr-pick-enabled" : ""
-            } ${xrayMode ? "jr-xray" : ""} ${
-              dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
-            }`}
-          >
-            <CanvasContent className="flex min-h-full flex-col px-6 pb-28 pt-20">
-              {!displayedSpec && !isStreaming && (
-                <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
-                  <div className="w-full max-w-xl space-y-3">
-                    <p className="text-balance text-muted-foreground">
-                      {t("playground.subtitle")}
-                    </p>
-                    <p className="text-sm text-muted-foreground/80">
-                      {t("playground.emptyState")}
-                    </p>
+          <DeviceFrameHost frameSize={frameSize} onFrameWindow={setFrameWindow}>
+            <div
+              ref={containerRef}
+              className={`absolute inset-0 overflow-y-auto ${
+                pickMode ? "jr-pick-enabled" : ""
+              } ${xrayMode ? "jr-xray" : ""} ${
+                dndMode && displayedSpec && !isStreaming ? "jr-dnd" : ""
+              }`}
+            >
+              <CanvasContent
+                className={`flex min-h-full flex-col${frameSize ? "" : " px-6 pb-28 pt-20"}`}
+              >
+                {!displayedSpec && !isStreaming && (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-8 text-center">
+                    <div className="w-full max-w-xl space-y-3">
+                      <p className="text-balance text-muted-foreground">
+                        {t("playground.subtitle")}
+                      </p>
+                      <p className="text-sm text-muted-foreground/80">
+                        {t("playground.emptyState")}
+                      </p>
+                    </div>
+                    <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
+                      {EXAMPLE_PROMPT_LIST.map((example) => (
+                        <Button
+                          key={example}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="max-w-full h-auto whitespace-normal break-words py-1.5"
+                          onClick={() => handleGenerate(example)}
+                        >
+                          {example}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2">
-                    {EXAMPLE_PROMPT_LIST.map((example) => (
-                      <Button
-                        key={example}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="max-w-full h-auto whitespace-normal break-words py-1.5"
-                        onClick={() => handleGenerate(example)}
-                      >
-                        {example}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <Renderer
-                spec={renderSpec}
-                registry={registry}
-                loading={isStreaming}
-              />
-              {/* Before PickOverlay: both attach capture listeners on the
+                )}
+                <Renderer
+                  spec={renderSpec}
+                  registry={registry}
+                  loading={isStreaming}
+                />
+                {/* Before PickOverlay: both attach capture listeners on the
               container, and listener order follows render order. */}
-              <CanvasDnd
-                enabled={dndMode && displayedSpec !== null && !isStreaming}
-                containerRef={containerRef}
-                spec={displayedSpec}
-                onMoveTo={handleMoveTo}
-              />
-              <HoverBadge
-                enabled={pickMode && !isStreaming && displayedSpec !== null}
-                containerRef={containerRef}
-                spec={displayedSpec}
-              />
-            </CanvasContent>
-          </div>
+                <CanvasDnd
+                  enabled={dndMode && displayedSpec !== null && !isStreaming}
+                  containerRef={containerRef}
+                  spec={displayedSpec}
+                  onMoveTo={handleMoveTo}
+                />
+                <HoverBadge
+                  enabled={pickMode && !isStreaming && displayedSpec !== null}
+                  containerRef={containerRef}
+                  spec={displayedSpec}
+                />
+              </CanvasContent>
+            </div>
 
-          {/* Both overlays mount after the scroll container, not inside
+            {/* Both overlays mount after the scroll container, not inside
               it: absolutely-positioned decorations must not join the
               scroller's scrollable overflow (the selection ring used to
               inflate scrollWidth — a phantom horizontal scrollbar). Each is
@@ -1607,35 +1651,36 @@ export function Playground({ initialRef }: PlaygroundProps) {
               to the canvas box; trackers follow viewport rects, so scroll
               tracking is unchanged. XrayLabels renders under PickOverlay so
               the selection ring wins when both modes are on. */}
-          <XrayLabels
-            enabled={xrayMode && !isStreaming && displayedSpec !== null}
-            containerRef={containerRef}
-            spec={displayedSpec}
-            pickArmed={pickMode && !isStreaming && displayedSpec !== null}
-            scopeIds={scopeIds}
-            onSelect={handlePick}
-            onToggleScope={handleToggleScope}
-            onRemoveScope={removeScope}
-          />
-          <PickOverlay
-            enabled={pickMode && !isStreaming && displayedSpec !== null}
-            containerRef={containerRef}
-            spec={displayedSpec}
-            selectedKey={effectiveKey}
-            selectedChain={selectedChain}
-            onSelect={handlePick}
-            onActivate={isStreaming ? undefined : handleActivate}
-            onToggleScope={handleToggleScope}
-            scopeTargets={scopedTargets.map((target) => ({
-              ...target,
-              id: scopeTargetId(target),
-              count:
-                (target.chain?.length ?? 0) === 0 && displayedSpec
-                  ? countKeyInstances(displayedSpec, target.key)
-                  : undefined,
-            }))}
-            scopeLoading={isStreaming}
-          />
+            <XrayLabels
+              enabled={xrayMode && !isStreaming && displayedSpec !== null}
+              containerRef={containerRef}
+              spec={displayedSpec}
+              pickArmed={pickMode && !isStreaming && displayedSpec !== null}
+              scopeIds={scopeIds}
+              onSelect={handlePick}
+              onToggleScope={handleToggleScope}
+              onRemoveScope={removeScope}
+            />
+            <PickOverlay
+              enabled={pickMode && !isStreaming && displayedSpec !== null}
+              containerRef={containerRef}
+              spec={displayedSpec}
+              selectedKey={effectiveKey}
+              selectedChain={selectedChain}
+              onSelect={handlePick}
+              onActivate={isStreaming ? undefined : handleActivate}
+              onToggleScope={handleToggleScope}
+              scopeTargets={scopedTargets.map((target) => ({
+                ...target,
+                id: scopeTargetId(target),
+                count:
+                  (target.chain?.length ?? 0) === 0 && displayedSpec
+                    ? countKeyInstances(displayedSpec, target.key)
+                    : undefined,
+              }))}
+              scopeLoading={isStreaming}
+            />
+          </DeviceFrameHost>
 
           {failure && (
             <FailureDialog

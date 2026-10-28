@@ -1,6 +1,6 @@
 # Device Preview (viewport emulation + zoom) — Implementation Plan
 
-**Status:** draft
+**Status:** approved
 **Date:** 2026-10-27
 
 ## Goal
@@ -23,9 +23,10 @@ browser window, not a wrapper. True fidelity needs a real viewport → an iframe
    React tree is **ported into it** (`createPortal` into `iframe.contentDocument`), so
    providers, state overrides, actions, streaming and pick/x-ray/drag overlays keep
    working unchanged
-2. **Presets** — Mobile 390×844, Tablet 768×1024, Desktop (fill, = current inline
-   behavior), Custom (W×H input); picker lives in the TopBar as an icon + Popover
-   (same pattern as the existing TopBar menus)
+2. **Presets** — **Responsive (fill, default = current inline behavior)**,
+   **Desktop 1440×900 (fixed artboard)**, Mobile 390×844, Tablet 768×1024,
+   Custom (W×H input); picker lives in the TopBar as an icon + Popover (same
+   pattern as the existing TopBar menus)
 3. **Zoom** — default Fit-to-screen (recomputed on stage resize via ResizeObserver),
    manual steps 50 / 75 / 100 / 125 / 150 %; scaling wraps the frame so the iframe's
    CSS viewport (and therefore breakpoints) never change
@@ -34,9 +35,17 @@ browser window, not a wrapper. True fidelity needs a real viewport → an iframe
 5. **Accessibility** — iframe `title` (WCAG frame requirement), picker with radio
    semantics + keyboard operation, sane focus flow into/out of the frame
 6. **Picker availability** — shown only while a spec renders (nothing to preview on
-   the landing empty state)
-7. **Verification** — full gate chain, e2e proving a preset actually flips media
-   queries inside the frame, MCP spot-check
+   the landing empty state)7. **Verification** — full gate chain, e2e proving a preset actually flips
+   media queries inside the frame, MCP spot-check
+8. **Scope change 2026-10-27 (user review of step 1)** — two follow-on asks:
+   (a) **Desktop fixed by default *option***: the picker gains a **Responsive**
+   entry (the old inline fill behavior) and **Desktop becomes a fixed 1440×900
+   artboard** rendered in the frame, so resizing the browser never reflows it.
+   Responsive stays the *default* preset (user decision — keeps the existing
+   114 e2e tests on the inline path untouched); (b) **oversized frames scroll**:
+   the stage scrolls to reach a frame larger than it instead of clipping (see
+   R5 revision below). Fit-to-screen zoom (step 2) remains the planned
+   first-line defense, scroll the fallback.
 
 ### Out of scope
 
@@ -60,9 +69,12 @@ browser window, not a wrapper. True fidelity needs a real viewport → an iframe
    `lg:grid-cols-4`, i.e. the desktop grid squeezed); rejected: rewriting the
    stylesheet's `@media` blocks to container queries (fragile, breaks under Turbopack
    HMR and arbitrary variants)
-2. **Desktop preset stays inline (no iframe)** — the iframe mounts only for
-   Mobile/Tablet/Custom. Rejected: always-iframe, which would force `frameLocator`
-   into all 114 existing e2e tests and change the default canvas
+2. **Responsive stays inline (no iframe); Desktop is a fixed artboard** — the
+   iframe mounts for Desktop/Mobile/Tablet/Custom; only **Responsive** (the
+   pre-059 default, inline fill) renders without one. Rejected: fixed Desktop as
+   the *default*, which would move the canvas into an iframe on first load and
+   force `frameLocator` into all 114 existing e2e tests (user chose the
+   opt-in-fixed / default-responsive split 2026-10-27). Rejected: always-iframe.
 3. **Portal the same React tree, don't mount a second root** — `createPortal` into the
    iframe document keeps `JSONUIProvider`/visibility/query/state context identical
    (no state duplication, no extra bundle). Rejected: a separate React root inside the
@@ -161,12 +173,14 @@ An iframe element existing ≠ ready to receive the portal. Define:
 - The wrapper's **layout box = unscaled device size**; the transform is visual only,
   so the parent layout must reserve the **scaled** dimensions (margins/negative-margin
   compensation or equivalent) to avoid wrong whitespace, overlap, or clipping
-- **Policy (explicit decision):** Fit and fixed percentages are **mutually
-  exclusive modes**. Fit: `fitScale = min(stageW / deviceW, stageH / deviceH)`
-  computed from the **unscaled** stage; fixed % applies directly
-- Frame larger than the stage at fixed % → **clipped** (stage keeps
-  `overflow-hidden`; chrome is never pushed — Fit is the way to see everything, and
-  the size label flags `150% · clipped`); frame smaller → centered
+- **Policy (explicit decision, revised 2026-10-27):** Fit and fixed percentages
+  are **mutually exclusive modes**. Fit: `fitScale = min(stageW / deviceW,
+  stageH / deviceH)` computed from the **unscaled** stage; fixed % applies directly
+- Frame larger than the stage at fixed % (or at 1:1 before zoom lands) → the
+  stage **scrolls** (user request 2026-10-27; supersedes the original "clipped"
+  rule): flexbox + `m-auto` centering so both edges stay reachable —
+  `place-items-center` clips the start edge on overflow. Fit-to-screen (step 2)
+  scales oversized frames down; scroll is the fallback at 100%+
 - No-op guard + transform-only output (safeguard 5) — ResizeObserver watches the
   unscaled stage, and transforms can't re-trigger it
 
@@ -309,3 +323,4 @@ preview on the curated 057 baseline (~64 FPS, DevTools open).
 | 2026-10-27 | performance discussion — **Performance safeguards** section added (8 binding constraints) + frame-open timing, protocol-correct FPS spot-check and Strict-Mode lifecycle verification items; roadmap decisions (composition = copy-expand + provenance, projects = A1+A2+A3) recorded in `docs/follow-ups.md` F14/F15 |
 | 2026-10-27 | external review (ChatGPT) folded in as **Architecture refinements R1–R5** — subtree remount/state preservation, iframe readiness state machine, coordinate/global-API audit (**2 real hazards verified in code**: `document.elementFromPoint` + global `window` keydown), stylesheet parity (in-place mutation catch), scaled-frame layout + explicit Fit/percent policy; verification extended accordingly, timing tripwire precisely defined |
 | 2026-10-27 | gap sweep — **R6 portal leakage** found in code (`@json-render/shadcn` uses `Portal(…)` 10×, Radix targets `globalThis.document.body` → spec overlays would escape the frame): v1 known limitation + follow-up F16; R3 audit extended (`matchMedia`, observer realm, `getComputedStyle`); added a11y scope, input-modality out-of-scope (viewport ≠ touch fidelity), picker availability, and a **Steps** section (3-step commit breakdown) |
+| 2026-10-27 | step 1 live feedback (user) — **scope change recorded above**: Responsive preset added (inline fill, stays default so the 114 e2e tests are untouched), Desktop = fixed 1440×900 artboard in the frame, stage **scrolls** for oversized frames (R5 revised, clip rule dropped); T1 e2e fixed (assert main-document membership with `document.querySelectorAll` scoped to **visible** canvases — Next 16 Cache Components keeps the previous route mounted via React's `<Activity>` (`display:none`, `preserving-ui-state.md`), so a raw count always includes hidden routes; verified pre-existing on clean HEAD, not caused by this feature), T2 root-caused + fixed (EditPanel's Escape listener is parent-window only, so a key typed with focus in the frame dead-ended the cascade — the playground handler now closes the panel when the event arrives from the frame realm; cascade semantics per `shortcuts.spec.ts` = first Escape closes the panel, second disarms pick) |

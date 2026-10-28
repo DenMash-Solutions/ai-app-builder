@@ -54,7 +54,20 @@
     "scopeChipInstance": "{key} · {type} {index}/{count}",
     "scopeChipAll": "{key} · {type} ×{count}",
     "scopeRemove": "Quitar {label} del ámbito del prompt",
-    "mentionList": "Elementos del ámbito"
+    "mentionList": "Elementos del ámbito",
+    "devicePreview": {
+      "label": "Vista previa de dispositivo",
+      "open": "Abrir vista previa de dispositivo",
+      "responsive": "Responsivo",
+      "desktop": "Escritorio",
+      "mobile": "Móvil",
+      "tablet": "Tableta",
+      "custom": "Personalizado",
+      "customWidth": "Ancho",
+      "customHeight": "Alto",
+      "sizeLabel": "{width} × {height}",
+      "failed": "El marco de vista previa no se pudo inicializar. Vuelve a Responsivo para seguir trabajando."
+    }
   },
   "uiRoute": {
     "loading": "Cargando interfaz…",

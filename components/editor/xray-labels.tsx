@@ -304,7 +304,13 @@ export function XrayLabels({
     };
 
     const content = container.firstElementChild;
-    const observer = new ResizeObserver(schedule);
+    // Construct the observer from the container's realm — inside the device
+    // frame the container belongs to the iframe document (R3).
+    const frameWindow = container.ownerDocument.defaultView;
+    const ResizeObserverCtor = frameWindow
+      ? (frameWindow as Window & typeof globalThis).ResizeObserver
+      : ResizeObserver;
+    const observer = new ResizeObserverCtor(schedule);
     observer.observe(container);
     if (content) observer.observe(content);
     container.addEventListener("scroll", schedule, { passive: true });
@@ -420,9 +426,12 @@ export function XrayLabels({
       event.preventDefault();
       beginRemoveAll();
     };
-    window.addEventListener("keydown", handleEscape, true);
-    return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [enabled, pinned, removing, scopeMenu, beginRemoveAll]);
+    // Realm-correct target: with focus inside the device frame this listener
+    // must live on the frame's window, where the Escape key event fires (R3).
+    const keyTarget = containerRef.current?.ownerDocument.defaultView ?? window;
+    keyTarget.addEventListener("keydown", handleEscape, true);
+    return () => keyTarget.removeEventListener("keydown", handleEscape, true);
+  }, [enabled, pinned, removing, scopeMenu, beginRemoveAll, containerRef]);
 
   const handleDotClick = (dot: DotBox) => {
     setPinned((prev) => {

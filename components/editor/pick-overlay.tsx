@@ -11,6 +11,12 @@ import {
   findWrappersForKey,
 } from "./instance-dom";
 
+/** Computed style via the element's own realm — inside the device frame the
+ * tracked elements live in the iframe document, and the global
+ * `getComputedStyle` resolves against the parent window (R3). */
+const elementStyle = (element: Element): CSSStyleDeclaration =>
+  (element.ownerDocument.defaultView ?? window).getComputedStyle(element);
+
 /** A prompt-scope highlight target: stable id + element key + instance chain. */
 export interface ScopeHighlightTarget {
   id: string;
@@ -209,7 +215,7 @@ export function PickOverlay({
         ring.style.top = `${rect.top - overlayRect.top}px`;
         ring.style.width = `${rect.width}px`;
         ring.style.height = `${rect.height}px`;
-        ring.style.borderRadius = getComputedStyle(target).borderRadius;
+        ring.style.borderRadius = elementStyle(target).borderRadius;
       }
       raf = requestAnimationFrame(update);
     };
@@ -263,7 +269,7 @@ export function PickOverlay({
           box.style.top = `${rect.top - overlayRect.top}px`;
           box.style.width = `${rect.width}px`;
           box.style.height = `${rect.height}px`;
-          box.style.borderRadius = getComputedStyle(element).borderRadius;
+          box.style.borderRadius = elementStyle(element).borderRadius;
         }
       });
       raf = requestAnimationFrame(update);

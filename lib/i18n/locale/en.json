@@ -54,7 +54,20 @@
     "scopeChipInstance": "{key} · {type} {index}/{count}",
     "scopeChipAll": "{key} · {type} ×{count}",
     "scopeRemove": "Remove {label} from prompt scope",
-    "mentionList": "Scoped elements"
+    "mentionList": "Scoped elements",
+    "devicePreview": {
+      "label": "Device preview",
+      "open": "Open device preview",
+      "responsive": "Responsive",
+      "desktop": "Desktop",
+      "mobile": "Mobile",
+      "tablet": "Tablet",
+      "custom": "Custom",
+      "customWidth": "Width",
+      "customHeight": "Height",
+      "sizeLabel": "{width} × {height}",
+      "failed": "The preview frame failed to initialize. Switch back to Responsive to keep working."
+    }
   },
   "uiRoute": {
     "loading": "Loading UI…",

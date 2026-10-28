@@ -15,6 +15,7 @@ import { ModelSwitcher } from "@/components/model-switcher";
 import { SyncStatusDot } from "@/components/sync/sync-status-dot";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "@/lib/i18n/navigation";
+import { DevicePreviewPicker } from "./device-preview-picker";
 import { RenamePopover } from "./rename-popover";
 
 interface TopBarProps {
@@ -26,6 +27,8 @@ interface TopBarProps {
   entrySlug?: string | null;
   takenSlugs?: ReadonlySet<string>;
   onRename?: (name: string, slug: string) => void;
+  /** Device-preview picker: only while a spec renders (plan 059). */
+  showDevicePreview?: boolean;
 }
 
 const ROW_CLASS = "h-9 w-full justify-start gap-2 rounded-md px-2";
@@ -38,6 +41,7 @@ export function TopBar({
   entrySlug,
   takenSlugs,
   onRename,
+  showDevicePreview,
 }: TopBarProps) {
   const t = useTranslations();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -99,6 +103,7 @@ export function TopBar({
               content language lives on the ToolRail. */}
           <LocaleSwitcher />
           <ThemeToggle />
+          {showDevicePreview && <DevicePreviewPicker />}
           <Button
             type="button"
             variant="ghost"

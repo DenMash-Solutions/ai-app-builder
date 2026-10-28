@@ -88,7 +88,9 @@ export function CanvasDnd({
     ): IndicatorState | null => {
       const currentSpec = specRef.current;
       if (!currentSpec) return null;
-      const hovered = document.elementFromPoint(x, y);
+      // ownerDocument: inside the device frame the container lives in the
+      // iframe's document — the global `document` would hit-test the parent (R3).
+      const hovered = container.ownerDocument.elementFromPoint(x, y);
       const wrapper =
         hovered instanceof Element
           ? hovered.closest<HTMLElement>("[data-jr-key]")
@@ -252,7 +254,10 @@ export function CanvasDnd({
     container.addEventListener("dragstart", handleDragStart);
     container.addEventListener("click", handleClick, true);
     container.addEventListener("scroll", handleScroll, true);
-    window.addEventListener("keydown", handleKeyDown);
+    // Keyboard events with focus inside the device frame fire on the frame's
+    // window — attach to the container's realm, not the global window (R3).
+    const keyTarget = container.ownerDocument.defaultView ?? window;
+    keyTarget.addEventListener("keydown", handleKeyDown);
     return () => {
       container.removeEventListener("pointerdown", handlePointerDown);
       container.removeEventListener("pointermove", handlePointerMove);
@@ -261,7 +266,7 @@ export function CanvasDnd({
       container.removeEventListener("dragstart", handleDragStart);
       container.removeEventListener("click", handleClick, true);
       container.removeEventListener("scroll", handleScroll, true);
-      window.removeEventListener("keydown", handleKeyDown);
+      keyTarget.removeEventListener("keydown", handleKeyDown);
       clearDrag();
     };
   }, [enabled, containerRef]);
