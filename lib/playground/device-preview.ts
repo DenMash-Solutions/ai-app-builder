@@ -35,17 +35,24 @@ export const DEVICE_PRESET_ORDER: readonly DevicePresetKey[] = [
 export const DEVICE_MIN_SIZE = 320;
 export const DEVICE_MAX_SIZE = 4096;
 
+/** Manual zoom steps in percent (plan 059 step 2). `null` zoom = fit-to-screen. */
+export const ZOOM_STEPS = [50, 75, 100, 125, 150] as const;
+export type ZoomStep = (typeof ZOOM_STEPS)[number];
+
 export interface DevicePreviewState {
   preset: DevicePresetKey;
   /** Custom preset viewport, clamped to [DEVICE_MIN_SIZE, DEVICE_MAX_SIZE]. */
   customWidth: number;
   customHeight: number;
+  /** Manual zoom percent (a ZOOM_STEPS entry) or null = fit-to-screen (default). */
+  zoom: number | null;
 }
 
 export const DEFAULT_DEVICE_PREVIEW: DevicePreviewState = {
   preset: "responsive",
   customWidth: 420,
   customHeight: 900,
+  zoom: null,
 };
 
 export function isDevicePresetKey(value: unknown): value is DevicePresetKey {
@@ -58,6 +65,14 @@ export function clampDeviceSize(value: unknown, fallback: number): number {
     DEVICE_MAX_SIZE,
     Math.max(DEVICE_MIN_SIZE, Math.round(value)),
   );
+}
+
+function validateZoom(value: unknown): number | null {
+  if (value === null || value === undefined) return DEFAULT_DEVICE_PREVIEW.zoom;
+  return typeof value === "number" &&
+    (ZOOM_STEPS as readonly number[]).includes(value)
+    ? value
+    : DEFAULT_DEVICE_PREVIEW.zoom;
 }
 
 function validate(raw: Partial<DevicePreviewState>): DevicePreviewState {
@@ -73,6 +88,7 @@ function validate(raw: Partial<DevicePreviewState>): DevicePreviewState {
       raw.customHeight,
       DEFAULT_DEVICE_PREVIEW.customHeight,
     ),
+    zoom: validateZoom(raw.zoom),
   };
 }
 
@@ -115,7 +131,8 @@ export function setDevicePreview(next: Partial<DevicePreviewState>): void {
   if (
     resolved.preset === current.preset &&
     resolved.customWidth === current.customWidth &&
-    resolved.customHeight === current.customHeight
+    resolved.customHeight === current.customHeight &&
+    resolved.zoom === current.zoom
   ) {
     return;
   }
@@ -134,6 +151,38 @@ export function setDevicePreview(next: Partial<DevicePreviewState>): void {
 export interface DeviceFrameSize {
   width: number;
   height: number;
+}
+
+/**
+ * Effective frame scale (plan 059 step 2, R5 policy): fit and fixed percent
+ * are mutually exclusive modes. Fit = `min(stage / device)` from the
+ * UNSCALED stage content box (the transform never feeds back into layout,
+ * so the ResizeObserver can't loop); a fixed percent applies directly.
+ * Pure so the math is unit-testable; degenerate inputs fall back to 1:1.
+ */
+export function computeFrameScale(
+  zoom: number | null,
+  stageWidth: number,
+  stageHeight: number,
+  deviceWidth: number,
+  deviceHeight: number,
+): number {
+  if (
+    !Number.isFinite(stageWidth) ||
+    !Number.isFinite(stageHeight) ||
+    !Number.isFinite(deviceWidth) ||
+    !Number.isFinite(deviceHeight) ||
+    stageWidth <= 0 ||
+    stageHeight <= 0 ||
+    deviceWidth <= 0 ||
+    deviceHeight <= 0
+  ) {
+    return 1;
+  }
+  if (zoom === null) {
+    return Math.min(stageWidth / deviceWidth, stageHeight / deviceHeight);
+  }
+  return zoom / 100;
 }
 
 /**

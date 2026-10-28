@@ -296,6 +296,8 @@ export function Playground({ initialRef }: PlaygroundProps) {
     completedSpec: Spec;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  /** Last canvas scroll offset — carried across the frame portal remount (R1). */
+  const scrollOffsetRef = useRef(0);
   /** Frame window (ready ↔ null): keydown must be bridged into it (R3). */
   const [frameWindow, setFrameWindow] = useState<Window | null>(null);
   /** The main keydown handler below, exposed for the frame bridge. */
@@ -1469,6 +1471,20 @@ export function Playground({ initialRef }: PlaygroundProps) {
     frameWindow.addEventListener("keydown", forward);
     return () => frameWindow.removeEventListener("keydown", forward);
   }, [frameWindow]);
+
+  // Scroll-offset restore (R1): the portal move unmounts and remounts the
+  // scroller in the frame document, dropping scrollTop — carry the offset
+  // across and re-apply once the destination scroller is committed (the rAF
+  // lets the restored content lay out first; overscroll clamps safely).
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const el = containerRef.current;
+      if (el && scrollOffsetRef.current > 0) {
+        el.scrollTop = scrollOffsetRef.current;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [frameWindow]);
   // Route gates: resolution runs client-side, so a deep link first paints
   // the neutral loading state (never the empty state or the error panel);
   // an unknown/deleted/foreign id explains itself instead of silently
@@ -1587,6 +1603,9 @@ export function Playground({ initialRef }: PlaygroundProps) {
           <DeviceFrameHost frameSize={frameSize} onFrameWindow={setFrameWindow}>
             <div
               ref={containerRef}
+              onScroll={(event) => {
+                scrollOffsetRef.current = event.currentTarget.scrollTop;
+              }}
               className={`absolute inset-0 overflow-y-auto ${
                 pickMode ? "jr-pick-enabled" : ""
               } ${xrayMode ? "jr-xray" : ""} ${

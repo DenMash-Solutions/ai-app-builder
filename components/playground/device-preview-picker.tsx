@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/popover";
 import {
   DEVICE_PRESET_ORDER,
+  ZOOM_STEPS,
   clampDeviceSize,
   getDevicePreview,
   getServerDevicePreview,
@@ -118,6 +119,45 @@ export function DevicePreviewPicker() {
             );
           })}
         </div>
+        {/* Zoom (step 2): fit (default) or a fixed percent — only while a
+            frame is mounted; inline Responsive fills the window. */}
+        {isActive && (
+          <div className="mt-2 border-t pt-2">
+            <div
+              role="radiogroup"
+              aria-label={t("playground.devicePreview.zoom")}
+              className="flex flex-wrap gap-0.5"
+            >
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 hover:bg-accent">
+                <input
+                  type="radio"
+                  name="device-zoom"
+                  className="accent-primary"
+                  checked={state.zoom === null}
+                  onChange={() => setDevicePreview({ zoom: null })}
+                />
+                <span className="text-sm">
+                  {t("playground.devicePreview.zoomFit")}
+                </span>
+              </label>
+              {ZOOM_STEPS.map((step) => (
+                <label
+                  key={step}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 hover:bg-accent"
+                >
+                  <input
+                    type="radio"
+                    name="device-zoom"
+                    className="accent-primary"
+                    checked={state.zoom === step}
+                    onChange={() => setDevicePreview({ zoom: step })}
+                  />
+                  <span className="text-sm">{step}%</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         {state.preset === "custom" && (
           <div className="mt-2 flex items-center gap-2 border-t pt-2">
             <label className="flex min-w-0 flex-1 items-center gap-1.5">

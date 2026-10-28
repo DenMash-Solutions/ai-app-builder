@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
+import {
+  computeFrameScale,
+  getDevicePreview,
+  getServerDevicePreview,
+  subscribeDevicePreview,
+} from "@/lib/playground/device-preview";
 
 /**
  * Device frame (plan 059 step 1): a same-origin iframe sized to the preset
@@ -23,6 +35,9 @@ import { useTranslations } from "next-intl";
  */
 
 type FrameStatus = "initializing" | "ready" | "error";
+
+/** Outer chrome added to the viewport box by the frame border (1px each side). */
+const FRAME_BORDER = 2;
 
 interface DeviceFrameProps {
   width: number;
@@ -88,6 +103,17 @@ export function DeviceFrame({
 
   const [status, setStatus] = useState<FrameStatus>("initializing");
   const [frameDoc, setFrameDoc] = useState<Document | null>(null);
+  const zoom = useSyncExternalStore(
+    subscribeDevicePreview,
+    getDevicePreview,
+    getServerDevicePreview,
+  ).zoom;
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  /** Unscaled stage CONTENT box — the fit measurement base (R5). */
+  const [stageSize, setStageSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     const gen = ++genRef.current;
@@ -245,36 +271,106 @@ export function DeviceFrame({
     };
   }, []);
 
+  // Fit measurement (step 2, R5): the stage content box, in unscaled px.
+  // The transform is visual-only and ResizeObserver watches the stage
+  // itself, so the fit output can never re-trigger it (safeguard 5).
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => {
+      const cs = getComputedStyle(stage);
+      const width =
+        stage.clientWidth -
+        parseFloat(cs.paddingLeft) -
+        parseFloat(cs.paddingRight);
+      const height =
+        stage.clientHeight -
+        parseFloat(cs.paddingTop) -
+        parseFloat(cs.paddingBottom);
+      setStageSize((prev) =>
+        prev && prev.width === width && prev.height === height
+          ? prev
+          : { width, height },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
+  // The device box includes the frame border — fit must fit the OUTER box,
+  // or the 2px chrome would overflow the stage at the fitted scale.
+  const outerWidth = width + FRAME_BORDER;
+  const outerHeight = height + FRAME_BORDER;
+  const scale = stageSize
+    ? computeFrameScale(
+        zoom,
+        stageSize.width,
+        stageSize.height,
+        outerWidth,
+        outerHeight,
+      )
+    : 1;
+  const percent = Math.round(scale * 100);
+
   return (
     // Stage policy (R5 as revised 2026-10-27, user request): a frame larger
     // than the stage SCROLLS instead of clipping, so a fixed-size artboard
     // (Desktop 1440×900, large Custom) stays fully reachable in a smaller
     // window. Flexbox + `m-auto` (not `place-items-center`, which clips the
     // start edge on overflow) keeps the frame centered while scrolling from
-    // both edges; the fit-to-screen zoom of plan 059 step 2 will scale the
-    // frame down as the first line of defense, scroll as the fallback.
+    // both edges. Fit-to-screen (step 2) is the first line of defense — it
+    // scales the frame down to the stage; scroll is the fallback at 100%+.
     <div
+      ref={stageRef}
       data-device-frame
       className="absolute inset-0 flex overflow-auto px-6 pb-28 pt-20"
     >
-      <div className="relative m-auto" data-device-frame-box>
-        <iframe
-          ref={iframeRef}
-          title={t("playground.devicePreview.label")}
-          data-device-frame-iframe
-          className="block rounded-xl border border-border bg-background shadow-md"
-          // content-box: the border must NOT shrink the CSS viewport — the
-          // whole point is that innerWidth === the preset width exactly.
-          style={{ width, height, boxSizing: "content-box" }}
-        />
+      {/* R5 scaled-space reservation: the slot reserves the SCALED outer
+          size (the transform is visual only and would otherwise report the
+          unscaled box to the scroller), the scaler holds the unscaled device
+          box with origin top-left so the two map onto each other exactly.
+          At 100% no transform is emitted — a 1:1 frame stays pixel-exact. */}
+      <div
+        className="relative m-auto"
+        data-device-frame-box
+        style={{ width: outerWidth * scale, height: outerHeight * scale }}
+      >
+        <div
+          data-device-frame-scaler
+          className="absolute left-0 top-0 origin-top-left"
+          style={{
+            width: outerWidth,
+            height: outerHeight,
+            transform: scale === 1 ? undefined : `scale(${scale})`,
+          }}
+        >
+          <iframe
+            ref={iframeRef}
+            title={t("playground.devicePreview.label")}
+            data-device-frame-iframe
+            className="block rounded-xl border border-border bg-background shadow-md"
+            // content-box: the border must NOT shrink the CSS viewport — the
+            // whole point is that innerWidth === the preset width exactly.
+            style={{ width, height, boxSizing: "content-box" }}
+          />
+        </div>
         {status === "ready" && frameDoc
           ? createPortal(children, frameDoc.body)
           : null}
+        {/* The chip is a sibling of the scaler: its text stays unscaled (and
+            readable) at every zoom step. */}
         <span
           data-device-frame-label
           className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border bg-background/90 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground shadow-sm backdrop-blur-sm"
         >
-          {t("playground.devicePreview.sizeLabel", { width, height })}
+          {t("playground.devicePreview.sizeLabel", { width, height })} ·{" "}
+          <span data-device-frame-zoom>
+            {zoom === null
+              ? t("playground.devicePreview.fitLabel", { percent })
+              : t("playground.devicePreview.percentLabel", { percent })}
+          </span>
         </span>
         {status === "error" && (
           <div

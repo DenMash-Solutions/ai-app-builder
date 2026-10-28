@@ -66,6 +66,10 @@
       "customWidth": "Width",
       "customHeight": "Height",
       "sizeLabel": "{width} × {height}",
+      "zoom": "Zoom",
+      "zoomFit": "Fit",
+      "fitLabel": "fit {percent}%",
+      "percentLabel": "{percent}%",
       "failed": "The preview frame failed to initialize. Switch back to Responsive to keep working."
     }
   },

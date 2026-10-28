@@ -66,6 +66,10 @@
       "customWidth": "Ancho",
       "customHeight": "Alto",
       "sizeLabel": "{width} × {height}",
+      "zoom": "Zoom",
+      "zoomFit": "Ajustar",
+      "fitLabel": "ajuste {percent}%",
+      "percentLabel": "{percent}%",
       "failed": "El marco de vista previa no se pudo inicializar. Vuelve a Responsivo para seguir trabajando."
     }
   },

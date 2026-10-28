@@ -132,4 +132,60 @@ describe("device preview store", () => {
     expect(readRaw()?.preset).toBe("mobile");
     store.setDevicePreview({ preset: "desktop" });
   });
+
+  test("zoom persists, validates to the step set, and skips no-op updates", () => {
+    let notified = 0;
+    const unsubscribe = store.subscribeDevicePreview(() => {
+      notified += 1;
+    });
+
+    store.setDevicePreview({ zoom: 75 });
+    expect(store.getDevicePreview().zoom).toBe(75);
+    expect(readRaw()?.zoom).toBe(75);
+    expect(notified).toBe(1);
+
+    // Same value again → no write, no notification.
+    store.setDevicePreview({ zoom: 75 });
+    expect(notified).toBe(1);
+
+    // A value outside ZOOM_STEPS falls back to the default (fit), never
+    // stored as-is; a bogus persisted value can't stick either.
+    store.setDevicePreview({ zoom: 80 });
+    expect(store.getDevicePreview().zoom).toBeNull();
+    expect(readRaw()?.zoom).toBeNull();
+    expect(notified).toBe(2);
+
+    store.setDevicePreview({ zoom: null }); // already fit → no-op
+    expect(notified).toBe(2);
+
+    unsubscribe();
+    store.setDevicePreview({ zoom: 150 });
+    expect(notified).toBe(2);
+    store.setDevicePreview({ zoom: null });
+  });
+
+  test("fit and fixed percent are mutually exclusive scale modes (R5)", () => {
+    // Fit = min(stage / device) from the unscaled stage…
+    expect(store.computeFrameScale(null, 1000, 700, 1440, 900)).toBeCloseTo(
+      Math.min(1000 / 1440, 700 / 900),
+    );
+    // …fit scales DOWN oversized frames…
+    expect(store.computeFrameScale(null, 800, 800, 1440, 900)).toBeCloseTo(
+      800 / 1440,
+    );
+    // …and may fill the stage when the frame is smaller (literal formula).
+    expect(store.computeFrameScale(null, 2000, 2000, 390, 844)).toBeCloseTo(
+      2000 / 844,
+    );
+    // Fixed percent applies directly, stage size irrelevant.
+    expect(store.computeFrameScale(100, 1000, 700, 390, 844)).toBe(1);
+    expect(store.computeFrameScale(50, 1000, 700, 390, 844)).toBe(0.5);
+    expect(store.computeFrameScale(150, 400, 300, 1440, 900)).toBe(1.5);
+    // Degenerate measurements (first layout, hidden route) fall back to 1:1
+    // instead of producing NaN/Infinity scales.
+    expect(store.computeFrameScale(null, 0, 700, 390, 844)).toBe(1);
+    expect(store.computeFrameScale(null, 1000, 0, 390, 844)).toBe(1);
+    expect(store.computeFrameScale(100, 1000, 700, 0, 0)).toBe(1);
+    expect(store.computeFrameScale(null, Number.NaN, 700, 390, 844)).toBe(1);
+  });
 });

@@ -7,7 +7,9 @@ import { mockGenerate, waitForMsw } from "./helpers";
 
 const DP = en.playground.devicePreview;
 
-/** Frame label is ICU-templated (`{width} × {height}`) — render it here. */
+/** Frame label is ICU-templated (`{width} × {height}`) — render it here. The
+ * zoom chip (step 2) appends a nondeterministic fit percent, so the size is
+ * asserted as a substring and the zoom chip separately. */
 const SIZE_LABEL = DP.sizeLabel
   .replace("{width}", "390")
   .replace("{height}", "844");
@@ -56,11 +58,11 @@ async function generate(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 }
 
-async function pickPreset(page: Page, name: string): Promise<void> {
+async function pickOption(page: Page, name: string): Promise<void> {
   const trigger = page
     .getByRole(ROLE.button, { name: DP.open })
     .filter({ visible: true });
-  const radio = page.getByRole("radio", { name });
+  const radio = page.getByRole("radio", { name, exact: true });
   // The popover does NOT close itself on selection, so blindly clicking the
   // trigger on a later pick would toggle it shut (the radio then resolves
   // mid-exit-animation and detaches). Open only when needed, close after.
@@ -73,8 +75,9 @@ async function pickPreset(page: Page, name: string): Promise<void> {
 }
 
 test.describe("device preview", () => {
-  // The 844px Mobile frame must fit the stage: Playwright's default 1280×720
-  // would clip it (fit-scaling lands in plan 059 step 2).
+  // Fit (the default zoom) scales the 844px Mobile frame down to the stage,
+  // but the scroll-fallback assertions need a stage smaller than the frame
+  // — the fixed 1280×720 default is borderline; pin a generous viewport.
   test.use({ viewport: { width: 1440, height: 1000 } });
 
   test("Mobile preset gives a true CSS viewport; Responsive is inline again", async ({
@@ -87,7 +90,7 @@ test.describe("device preview", () => {
     await expect(inlineGrid).toBeVisible();
     expect(await trackCount(inlineGrid)).toBe(5);
 
-    await pickPreset(page, DP.mobile);
+    await pickOption(page, DP.mobile);
 
     // Exact CSS viewport — the iframe border must not shrink it (content-box).
     const iframe = page.locator(FRAME);
@@ -119,15 +122,20 @@ test.describe("device preview", () => {
     // poll therefore counts VISIBLE main-document canvases only. The portal
     // move lands a tick after the radio click → poll, don't snapshot.
     await expect.poll(() => mainCanvasCount(page)).toBe(0);
-    await expect(page.locator("[data-device-frame-label]")).toHaveText(
+    await expect(page.locator("[data-device-frame-label]")).toContainText(
       SIZE_LABEL,
+    );
+    // Default zoom is fit-to-screen — the chip reports the effective scale
+    // (nondeterministic: the stage size decides it).
+    await expect(page.locator("[data-device-frame-zoom]")).toHaveText(
+      /^fit \d+%$/,
     );
     await expect(
       page.getByRole(ROLE.button, { name: EDITOR.pick }),
     ).toBeVisible();
 
     // Back to Responsive: iframe gone, inline rendering restored, `lg:` back.
-    await pickPreset(page, DP.responsive);
+    await pickOption(page, DP.responsive);
     await expect(page.locator(FRAME)).toHaveCount(0);
     await expect.poll(() => mainCanvasCount(page)).toBe(1);
     await expect.poll(() => trackCount(inlineGrid)).toBe(5);
@@ -137,7 +145,7 @@ test.describe("device preview", () => {
     page,
   }) => {
     await generate(page);
-    await pickPreset(page, DP.mobile);
+    await pickOption(page, DP.mobile);
     await expect(page.locator(FRAME)).toBeVisible();
 
     // Pick inside the frame — hit-testing must run in the frame's document (R3).
@@ -165,14 +173,14 @@ test.describe("device preview", () => {
     await expect(frame.locator(".jr-pick-enabled")).toHaveCount(0);
 
     // The frame survives the interaction and Responsive restores the inline canvas.
-    await pickPreset(page, DP.responsive);
+    await pickOption(page, DP.responsive);
     await expect(page.locator(FRAME)).toHaveCount(0);
     await expect.poll(() => mainCanvasCount(page)).toBe(1);
   });
 
   test("the preset persists across reloads", async ({ page }) => {
     await generate(page);
-    await pickPreset(page, DP.mobile);
+    await pickOption(page, DP.mobile);
     await expect(page.locator(FRAME)).toBeVisible();
 
     await page.reload();
@@ -188,7 +196,7 @@ test.describe("device preview", () => {
     page,
   }) => {
     await generate(page);
-    await pickPreset(page, DP.desktop);
+    await pickOption(page, DP.desktop);
 
     const iframe = page.locator(FRAME);
     await expect(iframe).toBeVisible();
@@ -217,9 +225,23 @@ test.describe("device preview", () => {
     await expect(frameGrid).toBeVisible();
     expect(await trackCount(frameGrid)).toBe(5);
 
-    // Oversized frame is reachable: the stage scrolls instead of clipping.
+    // Fit (default) is the first line of defense: scaled to the stage, the
+    // artboard needs no scrolling at all (the ResizeObserver lands the new
+    // scale after the viewport resize — poll, don't snapshot).
+    await expect(page.locator("[data-device-frame-zoom]")).toHaveText(
+      /^fit \d+%$/,
+    );
     const stage = page.locator("[data-device-frame]");
     await expect(stage).toBeVisible();
+    await expect
+      .poll(() => stage.evaluate((el) => el.scrollWidth - el.clientWidth))
+      .toBeLessThanOrEqual(0);
+
+    // Pin 100%: the documented fallback — the stage scrolls instead of
+    // clipping an oversized frame (R5).
+    await pickOption(page, "100%");
+
+    // Oversized frame is reachable: the stage scrolls instead of clipping.
     const overflow = await stage.evaluate((el) => ({
       client: el.clientWidth,
       scroll: el.scrollWidth,
@@ -255,8 +277,54 @@ test.describe("device preview", () => {
     );
 
     // Back to the inline default.
-    await pickPreset(page, DP.responsive);
+    await pickOption(page, DP.responsive);
     await expect(page.locator(FRAME)).toHaveCount(0);
     await expect.poll(() => mainCanvasCount(page)).toBe(1);
+  });
+
+  test("zoom steps scale the frame without changing its CSS viewport", async ({
+    page,
+  }) => {
+    await generate(page);
+    await pickOption(page, DP.mobile);
+    const iframe = page.locator(FRAME);
+    await expect(iframe).toBeVisible();
+
+    // Visual width = (viewport 390 + 1px border each side) × scale.
+    const visualWidth = async () => (await iframe.boundingBox())!.width;
+    const cssViewport = () =>
+      iframe.evaluate(
+        (el) => (el as HTMLIFrameElement).contentWindow!.innerWidth,
+      );
+
+    // Fit (default): scaled to the stage, viewport stays exactly 390.
+    await expect(page.locator("[data-device-frame-zoom]")).toHaveText(
+      /^fit \d+%$/,
+    );
+    const fitWidth = await visualWidth();
+    expect(await cssViewport()).toBe(390);
+
+    // 100% = the unscaled artboard (390 + 2px border).
+    await pickOption(page, "100%");
+    await expect(page.locator("[data-device-frame-zoom]")).toHaveText("100%");
+    await expect.poll(async () => Math.round(await visualWidth())).toBe(392);
+    expect(await cssViewport()).toBe(390);
+
+    // 50% halves the surface — the CSS viewport never moves with the zoom
+    // (safeguard 4: transform-only scaling, breakpoints stay device-true).
+    await pickOption(page, "50%");
+    await expect(page.locator("[data-device-frame-zoom]")).toHaveText("50%");
+    await expect.poll(async () => Math.round(await visualWidth())).toBe(196);
+    expect(await cssViewport()).toBe(390);
+
+    // Back to fit — same stage, same fitted scale.
+    await pickOption(page, DP.zoomFit);
+    await expect(page.locator("[data-device-frame-zoom]")).toHaveText(
+      /^fit \d+%$/,
+    );
+    await expect
+      .poll(async () => Math.round(await visualWidth()))
+      .toBe(Math.round(fitWidth));
+    expect(await cssViewport()).toBe(390);
   });
 });
