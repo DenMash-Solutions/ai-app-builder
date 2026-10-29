@@ -119,6 +119,13 @@ This file serves as the central entry point for all lessons learned and problem-
 - Capture the target once per run; shield listeners by matching the applied value (`restoringRef`/`appliedScrollRef`, `-1` sentinel); lift the shield a frame later (or leave armed — the next run re-captures first)
 - Signature: passes in e2e, fails live (the destination didn't overflow in the test viewport); state lost only on the **second** transition
 
+#### **[radix-escape-capture.md](../lessons/radix-escape-capture.md)** - RADIX ESCAPE IS CAPTURE-PHASE ON `document` — React `stopPropagation` CAN'T CANCEL IT
+
+- Radix dismiss layers (`Dialog`, `Popover`, …) listen `document.addEventListener("keydown", …, { capture: true })` → they run **before** React's input handler; by the time your Escape branch fires the dialog is already dismissed
+- Cancel a specific Escape with `onEscapeKeyDown(event) => event.preventDefault()` (Radix honors `defaultPrevented`); keep your own input handler for the draft reset — the next Escape closes normally
+- Signature: commit path (Enter) works, cancel path (Escape) closes the **whole dialog**
+- Related: `take_snapshot` prunes non-option children of `role="listbox"` → a visible empty-state `<p>` looks "missing"; DOM probe is ground truth
+
 ## 🚨 Critical Insights (Feature Organization)
 
 ### **Architecture Classification**
@@ -183,6 +190,8 @@ Before writing ANY code, follow this exact sequence:
 - Listener attached but "never fires" inside the frame / works inline, dead in frame → `instanceof` rejects iframe-realm nodes → **[cross-realm-dom.md](../lessons/cross-realm-dom.md)**
 - Restored state wrong only on the second transition → clamped write self-clobbered the source → **[restore-write-clobber.md](../lessons/restore-write-clobber.md)**
 - MCP probe dispatches an event and reads synchronously → React hasn't flushed; wait a tick → **[mcp-verification.md](../lessons/mcp-verification.md)**
+- Escape in an inline edit closes the whole dialog → Radix's document/capture listener already ran → `onEscapeKeyDown` + `preventDefault`, never `stopPropagation` → **[radix-escape-capture.md](../lessons/radix-escape-capture.md)**
+- A visible string absent from `take_snapshot` → a11y tree pruned non-semantic children (e.g. `listbox` non-options) → probe the DOM → **[radix-escape-capture.md](../lessons/radix-escape-capture.md)**
 
 ### **Green Flags** → Continue with confidence
 

@@ -164,6 +164,12 @@
 **Lesson Reference**: `.agents/lessons/e2e-auth-quota.md`
 **Prevention**: data-source tests failing with "unavailable" → query `auth_logs` for 429 first, before touching the adapter/RLS/schema; failures that start mid-marathon (not after a code change) = suspect external quota; red-in-batch/green-in-isolation = state/quota/race, not logic
 
+### 28. `stopPropagation` Used to Cancel a Radix Escape (NEW)
+
+**Problem**: inline rename in the picker had to cancel **only itself** on Escape; I wrote `event.stopPropagation()` in the input's `onKeyDown` and the e2e showed the **entire dialog** closed instead — Radix's dismiss layer listens `document` in the **capture** phase, so it runs before React's bubble-phase handler at the root container, and React's synthetic `stopPropagation` can't reach it
+**Lesson Reference**: `.agents/lessons/radix-escape-capture.md`
+**Prevention**: Escape cancel-scoping for Radix → `onEscapeKeyDown(event) => event.preventDefault()` on the content (Radix checks `defaultPrevented` before `onDismiss`); any library listener on `document`/`window` or in capture phase is unreachable from React's `stopPropagation` — ask which phase/node a handler is registered on before assuming propagation can block it
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -306,6 +312,7 @@ When I see these → STOP and check lessons:
 - **NEW**: FPS/resize performance complaint → check CSS rule count (`@layer utilities`) before blaming the renderer; measure control-first with DevTools open (`css-safelist-performance.md`)
 - **NEW**: e2e flake at a valid URL, intermittent, no code change → did a *harness* write bypass tag invalidation? (`cache-invalidation-writers.md`, mistake #26)
 - **NEW**: Data-source tests fail "…are unavailable" → `auth_logs` 429 probe before any adapter/RLS debugging; mid-marathon failures = quota burn (`e2e-auth-quota.md`, mistake #27)
+- **NEW**: About to write `event.stopPropagation()` to cancel a library's Escape/dismiss → it may be capture-phase on `document` (React can't reach it) → `onEscapeKeyDown` + `preventDefault` (`radix-escape-capture.md`, mistake #28)
 
 ## ⚡ Quick Recovery Commands
 
