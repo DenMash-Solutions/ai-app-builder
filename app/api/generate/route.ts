@@ -14,6 +14,11 @@ import {
   repairPatchText,
 } from "@/lib/playground/repair-patch-line";
 import { DATA_SOURCE_RULES } from "@/lib/playground/data-source-rules";
+import {
+  NAVIGATE_RULES,
+  parseScreens,
+  siblingScreensBlock,
+} from "@/lib/playground/navigate-rules";
 import { STYLING_RULES } from "@/lib/playground/styling-rules";
 import { google } from "@ai-sdk/google";
 import { buildUserPrompt, isNonEmptySpec } from "@json-render/core";
@@ -31,7 +36,9 @@ Additional rules:
 interface GenerateBody {
   prompt?: unknown;
   currentSpec?: unknown;
-  context?: { model?: unknown; locale?: unknown } | null;
+  // screens: client-computed sibling list ({ref, name} pairs, 061) — the
+  // only side that can see this device's history. Validated by parseScreens.
+  context?: { model?: unknown; locale?: unknown; screens?: unknown } | null;
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -120,6 +127,11 @@ export async function POST(req: Request) {
   // Edit mode documents JSONL patch semantics; completeness rules only apply
   // to fresh generations (a patch never needs to "finish every section").
   // The language contract applies to both — edits add copy too.
+  // Screen navigation (061, decision 3): NAVIGATE_RULES and the sibling list
+  // ship as a pair — the rules teach the action only when the request
+  // carries real targets, so a fresh project never sees the action offered.
+  const screens = parseScreens(context?.screens);
+  const hasSiblings = screens.length > 0;
   const systemPrompt =
     playgroundCatalog.prompt({
       editModes: ["patch"],
@@ -128,13 +140,15 @@ export async function POST(req: Request) {
     STYLING_RULES +
     DATA_SOURCE_RULES +
     i18nRules(locale) +
+    (hasSiblings ? NAVIGATE_RULES : "") +
     (isEdit ? "" : COMPLETENESS_RULES);
 
-  const userPrompt = buildUserPrompt({
-    prompt,
-    currentSpec: spec,
-    editModes: ["patch"],
-  });
+  const userPrompt =
+    buildUserPrompt({
+      prompt,
+      currentSpec: spec,
+      editModes: ["patch"],
+    }) + (hasSiblings ? siblingScreensBlock(screens) : "");
 
   const result = streamText({
     model: google(model),

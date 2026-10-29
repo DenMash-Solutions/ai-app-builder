@@ -1,5 +1,6 @@
 import type { Spec, UIElement, VisibilityCondition } from "@json-render/core";
 import { REVISION_LABELS } from "@/lib/history";
+import { NAVIGATE_ACTION } from "@/lib/projects/screen-nav";
 import type { InstanceChain, InstanceScope } from "./instance-path";
 import { countKeyInstances, resolveInstanceScope } from "./instance-path";
 
@@ -157,6 +158,57 @@ export function replaceVisible(
   };
 }
 
+/** The element's press bindings as a list (single binding or array). */
+function pressBindings(element: UIElement) {
+  const press = element.on?.press;
+  if (press === undefined || press === null) return [];
+  return Array.isArray(press) ? press : [press];
+}
+
+/**
+ * The screen ref of the element's `navigate` press binding (061) — `null`
+ * when the element does not navigate (or the binding is malformed; the tile
+ * then reads it as "no navigation", which is how it renders anyway).
+ */
+export function navigateBindingOf(element: UIElement): string | null {
+  for (const binding of pressBindings(element)) {
+    if (binding.action === NAVIGATE_ACTION) {
+      const screen = binding.params?.screen;
+      return typeof screen === "string" ? screen : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Write (or clear, `ref = null`) the element's `navigate` press binding
+ * (061, decision 6) while preserving every other press binding: the press
+ * list is filtered of old navigate entries and the new one appended, so a
+ * `data_mutate` press binding on the same button survives a retarget.
+ * `spec` is returned unchanged when the key is unknown.
+ */
+export function replaceNavigateBinding(
+  spec: Spec,
+  key: string,
+  ref: string | null,
+): Spec {
+  const element = spec.elements[key];
+  if (!element) return spec;
+  const bindings = pressBindings(element).filter(
+    (binding) => binding.action !== NAVIGATE_ACTION,
+  );
+  if (ref !== null) {
+    bindings.push({ action: NAVIGATE_ACTION, params: { screen: ref } });
+  }
+  const on = { ...(element.on ?? {}) };
+  if (bindings.length === 0) delete on.press;
+  else on.press = bindings.length === 1 ? bindings[0] : bindings;
+  return {
+    ...spec,
+    elements: { ...spec.elements, [key]: { ...element, on } },
+  };
+}
+
 /**
  * A prompt-scope target: element key plus the repeat chain of the picked
  * instance (null = template-level).
@@ -251,6 +303,11 @@ export function propertyRevisionLabel(prop: string): string {
 
 export function actionRevisionLabel(key: EditActionKey): string {
   return `${REVISION_LABELS.action}:${key}`;
+}
+
+/** Revision label for the navigate tile's commits (061). */
+export function navigateRevisionLabel(): string {
+  return `${REVISION_LABELS.action}:${NAVIGATE_ACTION}`;
 }
 
 export function freeformRevisionLabel(text: string): string {

@@ -5,6 +5,7 @@ import {
   PROP_FIELD_VARIANTS,
 } from "../editor";
 import {
+  PRESSABLE_TYPES,
   examplePropsFor,
   isContainerType,
   pickerItems,
@@ -266,5 +267,36 @@ describe("playgroundCatalog spec-driven theme", () => {
     // Convention (gap 4): state is 0-based; URL/label are 1-based.
     expect(description).toContain("Seed state /page 0-BASED");
     expect(description).toContain("1-based URL to the 0-based state");
+  });
+});
+
+describe("playgroundCatalog navigate (061)", () => {
+  test("declares the action with its screen param and prints it into the prompt", () => {
+    const data = playgroundCatalog.data as {
+      actions?: Record<string, { description?: string }>;
+    };
+
+    expect(data.actions).toHaveProperty("navigate");
+
+    const prompt = playgroundCatalog.prompt({ editModes: ["patch"] });
+    expect(prompt).toContain("navigate");
+
+    const description = data.actions?.navigate?.description ?? "";
+    expect(description).toContain('"screen"');
+    expect(description).toContain("Sibling screens");
+    expect(description).toContain("never guess a ref");
+  });
+
+  test("PRESSABLE_TYPES is derived from the definitions' press events", () => {
+    // The editor's navigate tile only appears where press can fire.
+    expect(PRESSABLE_TYPES.has("Button")).toBe(true);
+    expect(PRESSABLE_TYPES.has("Icon")).toBe(true);
+    expect(PRESSABLE_TYPES.has("Text")).toBe(false);
+
+    for (const [name, definition] of componentDefinitions()) {
+      expect(PRESSABLE_TYPES.has(name)).toBe(
+        definition.events?.includes("press") ?? false,
+      );
+    }
   });
 });

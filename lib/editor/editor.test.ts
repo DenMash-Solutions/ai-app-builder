@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Spec } from "@json-render/core";
+import type { Spec, UIElement } from "@json-render/core";
 import { REVISION_LABELS } from "@/lib/history";
 import {
   EDIT_ACTION_KEYS,
@@ -8,8 +8,11 @@ import {
   actionRevisionLabel,
   freeformRevisionLabel,
   getEditableFields,
+  navigateBindingOf,
+  navigateRevisionLabel,
   promptRevisionLabel,
   propertyRevisionLabel,
+  replaceNavigateBinding,
   replaceProp,
   replaceVisible,
   scopeInstruction,
@@ -97,6 +100,86 @@ describe("replaceVisible", () => {
     expect(replaceVisible(spec, "missing", { $state: "/page", eq: 1 })).toBe(
       spec,
     );
+  });
+});
+
+describe("navigate bindings (061)", () => {
+  function pressSpec(press: NonNullable<UIElement["on"]>["press"]): Spec {
+    return {
+      root: "root",
+      elements: {
+        heading: {
+          type: "Heading",
+          props: { text: "Hello" },
+          on: { press },
+        },
+      },
+    };
+  }
+
+  test("reads the press binding and writes it immutably", () => {
+    const spec = makeSpec();
+    expect(navigateBindingOf(spec.elements.heading)).toBeNull();
+
+    const bound = replaceNavigateBinding(spec, "heading", "screen-b");
+
+    expect(navigateBindingOf(bound.elements.heading)).toBe("screen-b");
+    expect(bound.elements.heading.on?.press).toEqual({
+      action: "navigate",
+      params: { screen: "screen-b" },
+    });
+    // The source spec is untouched (undo relies on it).
+    expect(navigateBindingOf(spec.elements.heading)).toBeNull();
+  });
+
+  test("retargeting preserves a sibling press binding (array form)", () => {
+    const spec = pressSpec({
+      action: "data_mutate",
+      params: { op: "create", resource: "notes" },
+    });
+
+    const bound = replaceNavigateBinding(spec, "heading", "s2");
+    expect(bound.elements.heading.on?.press).toEqual([
+      { action: "data_mutate", params: { op: "create", resource: "notes" } },
+      { action: "navigate", params: { screen: "s2" } },
+    ]);
+
+    const retargeted = replaceNavigateBinding(bound, "heading", "s3");
+    const press = retargeted.elements.heading.on?.press;
+    expect(navigateBindingOf(retargeted.elements.heading)).toBe("s3");
+    expect(Array.isArray(press) && press.length).toBe(2);
+  });
+
+  test("clearing removes only the navigate binding", () => {
+    const spec = pressSpec([
+      { action: "data_mutate", params: { op: "create" } },
+      { action: "navigate", params: { screen: "s1" } },
+    ]);
+
+    const cleared = replaceNavigateBinding(spec, "heading", null);
+
+    expect(cleared.elements.heading.on?.press).toEqual({
+      action: "data_mutate",
+      params: { op: "create" },
+    });
+    expect(navigateBindingOf(cleared.elements.heading)).toBeNull();
+  });
+
+  test("clearing the only binding removes press but keeps the element", () => {
+    const bound = replaceNavigateBinding(makeSpec(), "heading", "s1");
+    const cleared = replaceNavigateBinding(bound, "heading", null);
+
+    expect(cleared.elements.heading.on?.press).toBeUndefined();
+    expect(cleared.elements.heading.props.text).toBe("Hello");
+  });
+
+  test("returns the spec unchanged for an unknown key", () => {
+    const spec = makeSpec();
+    expect(replaceNavigateBinding(spec, "missing", "s1")).toBe(spec);
+  });
+
+  test("the revision label uses the action kind", () => {
+    expect(navigateRevisionLabel()).toBe(`${REVISION_LABELS.action}:navigate`);
   });
 });
 

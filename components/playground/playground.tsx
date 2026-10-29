@@ -59,7 +59,10 @@ import {
   moveSibling,
   promptRevisionLabel,
   propertyRevisionLabel,
+  navigateBindingOf,
+  navigateRevisionLabel,
   removeElement,
+  replaceNavigateBinding,
   replaceProp,
   replaceVisible,
   resolveInstanceScope,
@@ -80,6 +83,14 @@ import { examplePropsFor } from "@/lib/playground/catalog";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
+import {
+  NAVIGATE_ACTION,
+  runNavigate,
+  screenScope,
+  screensInScope,
+  toScreenListings,
+} from "@/lib/projects/screen-nav";
+import type { ScreenListing } from "@/lib/projects/screen-nav";
 import {
   deviceFrameSize,
   getDevicePreview,
@@ -319,6 +330,21 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   const activeEntry = routeEntry ?? null;
 
+  // Sibling screens of the current scope (plan 061, decision 3): the
+  // generate/steer payload lists them so the model can bind real `navigate`
+  // targets, and the editor's navigate tile offers the same set. One scope
+  // chain (screenScope) feeds prompt, tile and runtime handlers, so a ref
+  // listed here resolves exactly where it was listed.
+  const siblingScreens = useMemo<ScreenListing[]>(
+    () =>
+      toScreenListings(
+        screensInScope(history, screenScope(activeEntry)).filter(
+          (screen) => screen.id !== activeEntry?.id,
+        ),
+      ),
+    [history, activeEntry],
+  );
+
   const { spec, isStreaming, send, clear, rawLines } = useUIStream({
     api: "/api/generate",
     onError: (streamError) => {
@@ -408,8 +434,15 @@ export function Playground({ initialRef }: PlaygroundProps) {
   ): void => {
     lastRequestRef.current = { prompt, context };
     // The route locale seeds the generation contract: copy is written in
-    // this language, translations ship under state.i18n.<tag>.
-    void send(prompt, { ...context, model: getModel(), locale });
+    // this language, translations ship under state.i18n.<tag>. Screens ride
+    // only when there are siblings to list (061) — the route pairs that
+    // block with NAVIGATE_RULES, so neither half ships alone.
+    void send(prompt, {
+      ...context,
+      model: getModel(),
+      locale,
+      ...(siblingScreens.length > 0 ? { screens: siblingScreens } : {}),
+    });
   };
 
   /* eslint-disable react-hooks/set-state-in-effect -- the completion
@@ -690,10 +723,31 @@ export function Playground({ initialRef }: PlaygroundProps) {
       writeContentLang(activeEntry?.id ?? null, tag);
     };
   });
+  // Screen navigation (061, decision 4): the ref resolves against this
+  // device's screens in the current scope and pushes /ui/[id]; an unknown
+  // ref warns and toasts — never throws (a stale link must not break the
+  // screen). Same stable-once-behind-a-ref seam as switch_language.
+  const navigateRef = useRef<(params: Record<string, unknown>) => void>(
+    () => {},
+  );
+  useEffect(() => {
+    navigateRef.current = (params) => {
+      if (isStreaming) return;
+      const ok = runNavigate(params, {
+        entries: history,
+        scope: screenScope(activeEntry),
+        surface: "editor",
+        navigate: (route) => router.push(route),
+      });
+      if (!ok) toast.error(t("playground.navigateUnknown"));
+    };
+  });
   const handlers = useMemo(
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
+      [NAVIGATE_ACTION]: (params: Record<string, unknown>) =>
+        navigateRef.current(params),
     }),
     [],
   );
@@ -1181,6 +1235,21 @@ export function Playground({ initialRef }: PlaygroundProps) {
       routeEntry,
       replaceVisible(displayedSpec, selectedKey, condition),
       propertyRevisionLabel(VISIBLE_FIELD),
+    );
+    updateEntry(updated);
+  };
+
+  // The navigate tile's write path (061, decision 6): same undoable commit
+  // as the other spec edits, idempotent when the target did not change (no
+  // spurious revision).
+  const handleNavigateChange = (ref: string | null) => {
+    if (!displayedSpec || !selectedKey || !routeEntry || isStreaming) return;
+    const element = displayedSpec.elements[selectedKey];
+    if (!element || navigateBindingOf(element) === ref) return;
+    const updated = commitRevision(
+      routeEntry,
+      replaceNavigateBinding(displayedSpec, selectedKey, ref),
+      navigateRevisionLabel(),
     );
     updateEntry(updated);
   };
@@ -1881,6 +1950,8 @@ export function Playground({ initialRef }: PlaygroundProps) {
             instanceChain={selectedChain}
             onPropChange={handlePropChange}
             onConditionChange={handleConditionChange}
+            screens={siblingScreens}
+            onNavigateChange={handleNavigateChange}
             onAction={handleAction}
             onInsert={handleInsert}
             onRemove={handleRemove}

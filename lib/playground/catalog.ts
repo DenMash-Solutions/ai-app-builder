@@ -11,6 +11,7 @@ import {
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { LUCIDE_ICON_NAMES } from "@/lib/playground/icons";
+import { NAVIGATE_ACTION } from "@/lib/projects/screen-nav";
 import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 
 const STYLE_PROPS = {
@@ -172,6 +173,17 @@ export const playgroundCatalog = defineCatalog(schema, {
       description:
         'Switch the design\'s theme to <theme> ("light" or "dark"). Bind it to the ThemeSwitcher\'s change event with params.theme bound to the switcher\'s value ({"$state": "/theme"}).',
     },
+    // Screen navigation (plan 061, decision 2): the ref resolves at click
+    // time on the rendering surface — a path would be locale- and
+    // surface-specific and unknowable before publish. The description
+    // teaches the SHAPE; NAVIGATE_RULES + the sibling-screen list (appended
+    // together by the route) teach when to bind it — without a listed target
+    // the action is not offered at all (decision 3).
+    [NAVIGATE_ACTION]: {
+      params: z.object({ screen: z.string() }),
+      description:
+        'Navigate to a sibling screen of the same project: bind it to a press event with params.screen set to a screen ref from the "Sibling screens" list in the user prompt ({"action": "navigate", "params": {"screen": "<ref>"}}). Only bind it when that list exists — never guess a ref or write a path.',
+    },
     // Data sources (docs/plan/043-data-sources): the model declares the
     // top-level dataSources/resources/queries blocks; reads mirror into
     // /queries/<name>, and this action persists writes through the
@@ -197,6 +209,7 @@ interface CatalogDefinitionLike {
   slots?: string[];
   description?: string;
   example?: Record<string, unknown>;
+  events?: readonly string[];
 }
 
 function rawDefinition(type: string): CatalogDefinitionLike | undefined {
@@ -211,6 +224,22 @@ function rawDefinition(type: string): CatalogDefinitionLike | undefined {
 export function isContainerType(type: string): boolean {
   return (rawDefinition(type)?.slots?.length ?? 0) > 0;
 }
+
+/**
+ * Element types whose catalog definition emits `press` — derived from the
+ * definitions themselves, so the editor's navigate tile only appears where a
+ * press binding can actually fire (Button, Icon, Link today).
+ */
+export const PRESSABLE_TYPES: ReadonlySet<string> = new Set(
+  Object.entries(
+    playgroundCatalog.data.components as unknown as Record<
+      string,
+      CatalogDefinitionLike | undefined
+    >,
+  )
+    .filter(([, definition]) => definition?.events?.includes("press"))
+    .map(([name]) => name),
+);
 
 /** Default props for a freshly inserted element of `type`. */
 export function examplePropsFor(type: string): Record<string, unknown> {

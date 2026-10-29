@@ -26,6 +26,11 @@ import {
   specUrlSync,
   urlSearchAfterStateChange,
 } from "@/lib/playground/url-sync";
+import {
+  NAVIGATE_ACTION,
+  runNavigate,
+  screenScope,
+} from "@/lib/projects/screen-nav";
 import type { LivePageData } from "@/lib/publish/featured";
 import { localizeSpec } from "@/lib/specs/localize";
 import {
@@ -120,12 +125,32 @@ export default function PreviewPage({
       router.push(`/${tag}/${slug}`);
     };
   });
+  // Screen navigation (061, decision 4): resolves the ref against this
+  // device's screens in the entry's project scope and pushes
+  // /{locale}/{slug}. A visitor's browser holds no history, so an unknown
+  // ref there warns and no-ops — never throws. Same stable-once ref seam.
+  const navigateRef = useRef<(params: Record<string, unknown>) => void>(
+    () => {},
+  );
+  useEffect(() => {
+    navigateRef.current = (params) => {
+      runNavigate(params, {
+        entries: getHistory(),
+        scope: screenScope(entry),
+        surface: "preview",
+        locale,
+        navigate: (route) => router.push(route),
+      });
+    };
+  });
   const handlers = useMemo(
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
       [SWITCH_THEME_ACTION]: (params: Record<string, unknown>) =>
         themeRef.current(params),
+      [NAVIGATE_ACTION]: (params: Record<string, unknown>) =>
+        navigateRef.current(params),
     }),
     [],
   );

@@ -14,11 +14,12 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type TouchEvent } from "react";
-import { playgroundCatalog } from "@/lib/playground/catalog";
+import { PRESSABLE_TYPES, playgroundCatalog } from "@/lib/playground/catalog";
 import {
   analyzePropBinding,
   getEditableFields,
   getClassSuggestions,
+  navigateBindingOf,
   resolveInstanceScope,
 } from "@/lib/editor";
 import type {
@@ -26,7 +27,9 @@ import type {
   InstanceChain,
   MoveDirection,
 } from "@/lib/editor";
+import type { ScreenListing } from "@/lib/projects/screen-nav";
 import { ActionTiles } from "./action-tiles";
+import { NavigateTile } from "./navigate-tile";
 import { PropertyForm } from "./property-form";
 import { StatesTab } from "./states-tab";
 import { StructureTab } from "./structure-tab";
@@ -94,6 +97,11 @@ interface EditPanelProps {
   onPropChange: (prop: string, value: unknown, dataPath: string | null) => void;
   /** Writes an edited `visible` condition back into the spec. */
   onConditionChange: (next: VisibilityCondition) => void;
+  /** Sibling screens the navigate tile offers (061) — same list the prompt
+   * was taught with. */
+  screens: readonly ScreenListing[];
+  /** Writes (or clears, `ref = null`) the element's `navigate` binding. */
+  onNavigateChange: (ref: string | null) => void;
   onAction: (instruction: string, label: string) => void;
   onInsert: (parentKey: string, type: string) => void;
   onRemove: (key: string) => void;
@@ -131,6 +139,8 @@ export function EditPanel({
   onSelectKey,
   onPropChange,
   onConditionChange,
+  screens,
+  onNavigateChange,
   onAction,
   onInsert,
   onRemove,
@@ -565,7 +575,19 @@ export function EditPanel({
           />
         )}
         {tab === PANEL_TABS.actions && (
-          <ActionTiles key={elementKey} onAction={onAction} />
+          <div className="flex flex-col">
+            <ActionTiles key={elementKey} onAction={onAction} />
+            {/* The navigate tile only on press-emitting types (derived from
+                the catalog's events) — a press binding on anything else
+                can never fire. */}
+            {PRESSABLE_TYPES.has(element.type) && (
+              <NavigateTile
+                screens={screens}
+                currentRef={navigateBindingOf(element)}
+                onChange={onNavigateChange}
+              />
+            )}
+          </div>
         )}
       </div>
     </div>

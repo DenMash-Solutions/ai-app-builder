@@ -5,6 +5,7 @@ import type { Components } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
 import { DATA_MUTATE_ACTION, DATA_READ_ACTION } from "@/lib/data-sources/types";
 import { SWITCH_LANGUAGE_ACTION } from "@/lib/i18n/language-switcher";
+import { NAVIGATE_ACTION } from "@/lib/projects/screen-nav";
 import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 import { playgroundCatalog } from "./catalog";
 import { IconImpl } from "./icons";
@@ -55,6 +56,11 @@ const { registry } = defineRegistry(playgroundCatalog, {
     // bindState write IS the persistence there); public surfaces persist
     // the visitor's decision via their own handler.
     [SWITCH_THEME_ACTION]: async () => {},
+    // Screen navigation (plan 061, decision 2): registry default is inert —
+    // every surface resolves the ref itself through JSONUIProvider's
+    // handlers prop (editor = /ui/[id], preview/live = /{locale}/{slug});
+    // an unhandled navigate must never throw (decision 4).
+    [NAVIGATE_ACTION]: async () => {},
     // Data sources (docs/plan/043-data-sources, rev 1.2): this map is a type
     // requirement of defineRegistry, not a wiring point — the real
     // data_mutate handler is registered at runtime inside the provider

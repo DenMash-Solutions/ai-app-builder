@@ -71,7 +71,8 @@
       "fitLabel": "fit {percent}%",
       "percentLabel": "{percent}%",
       "failed": "The preview frame failed to initialize. Switch back to Responsive to keep working."
-    }
+    },
+    "navigateUnknown": "That screen no longer exists — the link may be stale."
   },
   "uiRoute": {
     "loading": "Loading UI…",
@@ -348,6 +349,12 @@
         "confirm": "Remove"
       },
       "source": "Source"
+    },
+    "navigate": {
+      "title": "Navigate to screen",
+      "none": "No navigation",
+      "empty": "No sibling screens yet — generate another screen in this project to link to it.",
+      "missingTarget": "Missing screen ({ref})"
     }
   },
   "historyDrawer": {

@@ -71,7 +71,8 @@
       "fitLabel": "ajuste {percent}%",
       "percentLabel": "{percent}%",
       "failed": "El marco de vista previa no se pudo inicializar. Vuelve a Responsivo para seguir trabajando."
-    }
+    },
+    "navigateUnknown": "Esa pantalla ya no existe: el enlace puede estar obsoleto."
   },
   "uiRoute": {
     "loading": "Cargando interfaz…",
@@ -348,6 +349,12 @@
         "confirm": "Quitar"
       },
       "source": "Original"
+    },
+    "navigate": {
+      "title": "Navegar a otra pantalla",
+      "none": "Sin navegación",
+      "empty": "Aún no hay pantallas hermanas: genera otra pantalla en este proyecto para enlazarla.",
+      "missingTarget": "Pantalla ausente ({ref})"
     }
   },
   "historyDrawer": {
