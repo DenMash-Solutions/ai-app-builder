@@ -53,6 +53,8 @@ const ACTION_BUTTON_CLASS = "gap-1 px-2 text-xs";
 
 - **No top-level timers in the `execute` sandbox** (`setTimeout`/`setInterval` throw `ReferenceError`) — page-context timers inside `evaluate_script` (`new Promise((r) => setTimeout(r, ms))`) work fine; sequence slow steps across separate tool calls instead.
 - **`initScript` persists until cleared** — a fetch/network block installed via `navigate_page({ initScript })` stays armed for later navigations; re-navigate *without* the script and re-read the flag to confirm it cleared.
+- **Dispatch → query in the same synchronous block races React** (plan 059) — firing a synthetic event (`dispatchEvent`) and immediately `querySelector`-ing for its rendered output reads the DOM *before* React flushes; the miss looks like "the fix didn't work". `await` a tick (`sleep(100)` or two rAFs) between stimulus and read.
+- **A probe result can carry an earlier phase's fingerprint** — the badge that "appeared after the switch" measured `390×4610` (the *pre*-switch frame): state left over from the previous dispatch, not proof the current step worked. Phase-tag probes (reset first, or assert a value that can only come from the current step).
 
 ## Verification
 
@@ -75,3 +77,5 @@ const ACTION_BUTTON_CLASS = "gap-1 px-2 text-xs";
 - Rule "missing" from stylesheet scan → did I recurse into `@layer` grouping rules?
 - `ReferenceError: Unknown identifier 'setTimeout'` in execute → timers only live inside `evaluate_script`
 - A check behaves as if never installed → is a previous `initScript` still armed?
+- Probe fires an event then reads the DOM synchronously → wait a tick, React hasn't flushed
+- Probe "proof" matches the PREVIOUS state's dimensions/content → stale phase; reset and re-tag

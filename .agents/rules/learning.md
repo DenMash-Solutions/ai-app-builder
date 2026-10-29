@@ -106,6 +106,19 @@ This file serves as the central entry point for all lessons learned and problem-
 - `@source inline("…")` lines must end exactly `");` (no trailing comments); after a bulk splice re-derive source/candidate counts
 - Revisit "declined/slimming rejected" decisions when new measurement evidence arrives (plan 016 reopened by plan 057)
 
+#### **[cross-realm-dom.md](../lessons/cross-realm-dom.md)** - CROSS-REALM DOM: `instanceof` REJECTS IFRAME NODES
+
+- Portaled/iframe content belongs to the frame's realm → parent-realm `target instanceof Element` is **false** for it: the listener is attached but every event no-ops — "works inline, dead in frame"
+- Duck-type with `asElement` (`components/editor/cross-realm.ts`: `typeof target?.closest === "function"`); methods resolve on the node's own prototype and work cross-realm, constructors don't
+- Realm-correct globals via `container.ownerDocument` (`elementFromPoint`, `defaultView`) — and their **results** are same-realm nodes, so duck-type those too
+- Adoption preserves creation realm: a parent-realm `cloneNode` inserted into the frame keeps parent prototypes (not every `instanceof` near a frame is a bug)
+
+#### **[restore-write-clobber.md](../lessons/restore-write-clobber.md)** - RESTORE LOOPS VS THEIR OWN CLAMPED WRITES
+
+- Carrying a value across a remount: the destination may CLAMP the write, and the clamp fires the event that *observes* the value → the listener records the clamped value back into the source ref → original lost after ONE round trip
+- Capture the target once per run; shield listeners by matching the applied value (`restoringRef`/`appliedScrollRef`, `-1` sentinel); lift the shield a frame later (or leave armed — the next run re-captures first)
+- Signature: passes in e2e, fails live (the destination didn't overflow in the test viewport); state lost only on the **second** transition
+
 ## 🚨 Critical Insights (Feature Organization)
 
 ### **Architecture Classification**
@@ -167,6 +180,9 @@ Before writing ANY code, follow this exact sequence:
 - `evaluate_script` timeout / rule "missing" from stylesheet scan / `setTimeout` ReferenceError in execute → stepwise calls, recurse `@layer`, page-context timers → **[mcp-verification.md](../lessons/mcp-verification.md)**
 - Check reports 0 attempts / 0 elements / "nothing happened" → probe may not have exercised the path; invalid run, not a pass → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**
 - Bulk-replace script exited 0 → re-derive the counts from a fresh read before trusting it → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**
+- Listener attached but "never fires" inside the frame / works inline, dead in frame → `instanceof` rejects iframe-realm nodes → **[cross-realm-dom.md](../lessons/cross-realm-dom.md)**
+- Restored state wrong only on the second transition → clamped write self-clobbered the source → **[restore-write-clobber.md](../lessons/restore-write-clobber.md)**
+- MCP probe dispatches an event and reads synchronously → React hasn't flushed; wait a tick → **[mcp-verification.md](../lessons/mcp-verification.md)**
 
 ### **Green Flags** → Continue with confidence
 
