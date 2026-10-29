@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 import type { Spec } from "@json-render/core";
 import { useTranslations } from "next-intl";
 import { Check, Plus, X } from "lucide-react";
+import { asElement } from "@/components/editor/cross-realm";
 import type { InstanceChain } from "@/lib/editor";
 import { scopeTargetId } from "@/lib/editor";
 import {
@@ -419,8 +420,10 @@ export function XrayLabels({
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (scopeMenu !== null) return;
       if (pinned.size === 0 || pinned.size === removing.size) return;
-      const target = event.target;
-      if (target instanceof Element && target.closest("[data-editor-panel]")) {
+      const target = asElement(event.target);
+      // Realm-safe (R3): focus can live in the frame — its iframe-realm nodes
+      // fail `instanceof Element`.
+      if (target?.closest("[data-editor-panel]")) {
         return;
       }
       event.preventDefault();
@@ -557,9 +560,11 @@ export function XrayLabels({
                       // scope — it does not remove the chip. Only the X button
                       // (and Escape) removes. The dropdown trigger keeps its own
                       // click for the popover.
+                      // Realm-safe (R3): the chip renders inside the frame —
+                      // its iframe-realm target fails `instanceof Element`,
+                      // which would fall through and mis-toggle the scope.
                       if (
-                        event.target instanceof Element &&
-                        event.target.closest("[data-xray-scope]")
+                        asElement(event.target)?.closest("[data-xray-scope]")
                       ) {
                         return;
                       }

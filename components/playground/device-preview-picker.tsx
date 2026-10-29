@@ -166,6 +166,7 @@ export function DevicePreviewPicker() {
               </span>
               <Input
                 type="number"
+                name="device-width"
                 inputMode="numeric"
                 min={320}
                 max={4096}
@@ -187,6 +188,7 @@ export function DevicePreviewPicker() {
               </span>
               <Input
                 type="number"
+                name="device-height"
                 inputMode="numeric"
                 min={320}
                 max={4096}

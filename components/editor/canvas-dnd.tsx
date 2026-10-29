@@ -4,6 +4,7 @@ import type { Spec } from "@json-render/core";
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useTranslations } from "next-intl";
+import { asElement } from "@/components/editor/cross-realm";
 import { DROP_ZONES, resolveMoveTarget, type DropZone } from "@/lib/editor";
 import { isContainerType } from "@/lib/playground/catalog";
 
@@ -91,10 +92,11 @@ export function CanvasDnd({
       // ownerDocument: inside the device frame the container lives in the
       // iframe's document — the global `document` would hit-test the parent (R3).
       const hovered = container.ownerDocument.elementFromPoint(x, y);
+      // Realm-safe (R3): ownerDocument.elementFromPoint returns IFRAME-realm
+      // nodes when the canvas is framed — `instanceof Element` would reject
+      // every one of them and the drop indicator would never draw.
       const wrapper =
-        hovered instanceof Element
-          ? hovered.closest<HTMLElement>("[data-jr-key]")
-          : null;
+        asElement(hovered)?.closest<HTMLElement>("[data-jr-key]") ?? null;
       if (!wrapper || !container.contains(wrapper)) return null;
       const hoverKey = wrapper.dataset.jrKey;
       if (!hoverKey) return null;
@@ -161,8 +163,11 @@ export function CanvasDnd({
 
     const handlePointerDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
+      // Realm-safe (R3): a pointerdown inside the device frame targets an
+      // iframe-realm node — `instanceof Element` would bail here and drag
+      // would never arm in frame.
+      const target = asElement(event.target);
+      if (!target) return;
       if (target.closest("[data-editor-panel]")) return;
       suppressClickRef.current = false;
       const key = target.closest<HTMLElement>("[data-jr-key]")?.dataset.jrKey;

@@ -298,6 +298,13 @@ export function Playground({ initialRef }: PlaygroundProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   /** Last canvas scroll offset — carried across the frame portal remount (R1). */
   const scrollOffsetRef = useRef(0);
+  /** Restore shield: while a restore is retrying, the scroll event produced
+   * by our own clamped write (target > the destination's provisional max)
+   * must not overwrite the carried offset — `onScroll` matches it against the
+   * value the restore last applied and drops it. Any other scroll is genuine
+   * and lifts the shield. */
+  const restoringRef = useRef(false);
+  const appliedScrollRef = useRef(-1); // -1: never matches a real scrollTop
   /** Frame window (ready ↔ null): keydown must be bridged into it (R3). */
   const [frameWindow, setFrameWindow] = useState<Window | null>(null);
   /** The main keydown handler below, exposed for the frame bridge. */
@@ -1474,16 +1481,59 @@ export function Playground({ initialRef }: PlaygroundProps) {
 
   // Scroll-offset restore (R1): the portal move unmounts and remounts the
   // scroller in the frame document, dropping scrollTop — carry the offset
-  // across and re-apply once the destination scroller is committed (the rAF
-  // lets the restored content lay out first; overscroll clamps safely).
+  // across and re-apply once the destination scroller is committed. Two
+  // things make a single rAF insufficient:
+  //   1. the frame's viewport settles a few frames after the commit, so an
+  //      assignment into a not-yet-laid-out scroller clamps to 0 and would
+  //      never be retried;
+  //   2. a clamped assignment (target > the destination's current max — e.g.
+  //      restoring 4186 into the inline scroller, whose max is 1754) fires a
+  //      scroll event whose value would clobber `scrollOffsetRef`, so the
+  //      NEXT restore would recapture the clamped value and lose the offset.
+  // So the target is captured once per run, the retry re-applies it across a
+  // bounded number of frames, and while a restore is in flight `onScroll`
+  // ignores writes equal to our own applied value (genuine user scrolls still
+  // land — they differ from it).
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
+    const target = scrollOffsetRef.current;
+    if (target <= 0) {
+      restoringRef.current = false;
+      return;
+    }
+    restoringRef.current = true;
+    let cancelled = false;
+    let raf = 0;
+    let tries = 0;
+    // Lift the shield one frame later: the scroll event from our final write
+    // is dispatched by the render steps, after this callback — lifting
+    // synchronously would let it through as a "genuine" scroll.
+    const deferShieldLift = () => {
+      raf = requestAnimationFrame(() => {
+        if (!cancelled) restoringRef.current = false;
+      });
+    };
+    const step = () => {
+      if (cancelled) return;
       const el = containerRef.current;
-      if (el && scrollOffsetRef.current > 0) {
-        el.scrollTop = scrollOffsetRef.current;
+      if (el && el.scrollHeight > el.clientHeight) {
+        el.scrollTop = target;
+        appliedScrollRef.current = el.scrollTop;
+        if (Math.abs(el.scrollTop - target) <= 1) {
+          deferShieldLift(); // landed at the carried offset
+          return;
+        }
       }
-    });
-    return () => cancelAnimationFrame(raf);
+      if (tries++ < 60) raf = requestAnimationFrame(step);
+      else deferShieldLift(); // destination can't scroll that far — carry on
+    };
+    raf = requestAnimationFrame(step);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      // Deliberately leave the shield armed: React runs cleanup right before
+      // the next run's body, which re-captures the (still intact) offset and
+      // re-arms it; clearing here would race that run's first write.
+    };
   }, [frameWindow]);
   // Route gates: resolution runs client-side, so a deep link first paints
   // the neutral loading state (never the empty state or the error panel);
@@ -1604,7 +1654,15 @@ export function Playground({ initialRef }: PlaygroundProps) {
             <div
               ref={containerRef}
               onScroll={(event) => {
-                scrollOffsetRef.current = event.currentTarget.scrollTop;
+                const next = event.currentTarget.scrollTop;
+                // Drop the event produced by the restore's own clamped write
+                // (it would swap the carried offset for the provisional max);
+                // anything else is a real scroll and takes over.
+                if (restoringRef.current && next === appliedScrollRef.current) {
+                  return;
+                }
+                restoringRef.current = false;
+                scrollOffsetRef.current = next;
               }}
               className={`absolute inset-0 overflow-y-auto ${
                 pickMode ? "jr-pick-enabled" : ""

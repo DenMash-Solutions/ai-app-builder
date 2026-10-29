@@ -228,6 +228,41 @@ export const FILTER_UI_LINES: string[] = [
   }),
 ];
 
+/** Minimal portal-capable fixture (plan 059 R6): a spec-driven Select —
+ * `@json-render/shadcn` renders it through Radix `Portal`, which always
+ * targets the PARENT document. Used to characterize the known limitation
+ * (overlays escape the frame) with a live reference for follow-up F16. */
+export const SELECT_UI_LINES: string[] = [
+  line({
+    op: PATCH_OP.add,
+    path: PATCH_PATH.state,
+    value: { country: "" },
+  }),
+  line({ op: PATCH_OP.add, path: PATCH_PATH.root, value: "select-root" }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("select-root"),
+    value: {
+      type: COMPONENT.stack,
+      props: { direction: "vertical", gap: "md" },
+      children: ["country-select"],
+    },
+  }),
+  line({
+    op: PATCH_OP.add,
+    path: elementPath("country-select"),
+    value: {
+      type: "Select",
+      props: {
+        label: "Country",
+        value: { $bindState: "/country" },
+        options: ["US", "Canada", "UK"],
+      },
+      children: [],
+    },
+  }),
+];
+
 /** D2 (docs/plan/041-responsive-ui): pagination fixture mirroring the rules
  *  pattern — the press actions move /page through the catalog's stepPage
  *  (bounded), the label is a pageLabel Text, Previous is hidden at the start

@@ -39,6 +39,12 @@ type FrameStatus = "initializing" | "ready" | "error";
 /** Outer chrome added to the viewport box by the frame border (1px each side). */
 const FRAME_BORDER = 2;
 
+/** Frame-open timing tripwire (safeguard 2): dev-only performance marks from
+ * init start to the first layout inside the frame after ready. */
+const TRIPWIRE_START = "device-frame:init-start";
+const TRIPWIRE_MEASURE = "device-frame:open";
+const isDev = process.env.NODE_ENV !== "production";
+
 interface DeviceFrameProps {
   width: number;
   height: number;
@@ -116,6 +122,15 @@ export function DeviceFrame({
   } | null>(null);
 
   useLayoutEffect(() => {
+    // Tripwire start = preset activation (plan 059 verification); the stop
+    // lands on the first rAF after ready (see the effect below).
+    if (isDev) {
+      try {
+        performance.mark(TRIPWIRE_START);
+      } catch {
+        // Marks are best-effort — never block frame init on telemetry.
+      }
+    }
     const gen = ++genRef.current;
     const iframe = iframeRef.current;
     const parentDoc = document;
@@ -265,11 +280,31 @@ export function DeviceFrame({
       mirrors.clear();
       baseRef.current = null;
       initedGenRef.current = -1;
+      if (isDev) performance.clearMarks(TRIPWIRE_START);
       onFrameWindowRef.current?.(null);
       setFrameDoc(null);
       setStatus("initializing");
     };
   }, []);
+
+  // Tripwire stop: the first rAF after ready is the first layout inside the
+  // frame with its stylesheets applied (fonts gated separately — plan 059).
+  useEffect(() => {
+    if (!isDev || status !== "ready") return;
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      try {
+        performance.measure(TRIPWIRE_MEASURE, TRIPWIRE_START);
+      } catch {
+        // Start mark was cleared by a Strict-Mode teardown — skip the sample.
+      }
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [status]);
 
   // Fit measurement (step 2, R5): the stage content box, in unscaled px.
   // The transform is visual-only and ResizeObserver watches the stage

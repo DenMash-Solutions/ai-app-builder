@@ -1,9 +1,23 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import en from "@/lib/i18n/locale/en.json";
-import { EDITOR, PATHS, PROMPTS, ROLE } from "./constants";
-import { FILTER_UI_LINES } from "./msw/fixture";
-import { mockGenerate, waitForMsw } from "./helpers";
+import {
+  ACTIONS,
+  EDITOR,
+  PATHS,
+  PATCH_OP,
+  PATCH_PATH,
+  PROMPTS,
+  ROLE,
+  dndGhostLabel,
+} from "./constants";
+import { FILTER_UI_LINES, SELECT_UI_LINES } from "./msw/fixture";
+import {
+  generateCalls,
+  mockGenerate,
+  readHistoryStorage,
+  waitForMsw,
+} from "./helpers";
 
 const DP = en.playground.devicePreview;
 
@@ -47,8 +61,11 @@ function mainCanvasCount(page: Page) {
   );
 }
 
-async function generate(page: Page): Promise<void> {
-  await mockGenerate(page, { lines: FILTER_UI_LINES });
+async function generate(
+  page: Page,
+  lines: string[] = FILTER_UI_LINES,
+): Promise<void> {
+  await mockGenerate(page, { lines });
   await page.goto(PATHS.ui);
   await waitForMsw(page);
   await page
@@ -58,20 +75,85 @@ async function generate(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
 }
 
-async function pickOption(page: Page, name: string): Promise<void> {
+/** The picker trigger's open state — flips atomically with the popover, unlike
+ * the radio count, which stays >0 through the exit animation (a radio counted
+ * mid-teardown resolves, then detaches under the click). */
+function pickerTrigger(page: Page) {
   const trigger = page
     .getByRole(ROLE.button, { name: DP.open })
     .filter({ visible: true });
+  const content = page.locator('[data-slot="popover-content"]');
+  return {
+    trigger,
+    open: async () => {
+      if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+        await trigger.click();
+        await expect(trigger).toHaveAttribute("aria-expanded", "true");
+      }
+      await expect(content).toBeVisible();
+    },
+    close: async () => {
+      if ((await trigger.getAttribute("aria-expanded")) === "true") {
+        await trigger.click();
+        await expect(trigger).toHaveAttribute("aria-expanded", "false");
+      }
+      // Wait out the exit animation so the next open can't race a detaching
+      // radio (Radix keeps the content mounted until animate-out finishes).
+      await expect(content).toHaveCount(0);
+    },
+  };
+}
+
+async function pickOption(page: Page, name: string): Promise<void> {
+  const picker = pickerTrigger(page);
   const radio = page.getByRole("radio", { name, exact: true });
-  // The popover does NOT close itself on selection, so blindly clicking the
-  // trigger on a later pick would toggle it shut (the radio then resolves
-  // mid-exit-animation and detaches). Open only when needed, close after.
-  if ((await radio.count()) === 0) await trigger.click();
+  // The popover does NOT close itself on selection, so open only when the
+  // trigger says closed, select, then close and wait for full unmount.
+  await picker.open();
+  await expect(radio).toBeVisible();
   await radio.click();
-  if ((await radio.count()) > 0) {
-    await trigger.click();
-    await expect(radio).toHaveCount(0);
+  await expect(radio).toBeChecked();
+  await picker.close();
+}
+
+/**
+ * Custom preset committed to an exact viewport. The preset's default
+ * (420×900) is taller than the fixture's content, so scroll assertions need a
+ * deliberately short height — commit via Enter and wait for the frame to
+ * report the new CSS viewport before returning.
+ */
+async function pickCustom(
+  page: Page,
+  width: number,
+  height: number,
+): Promise<void> {
+  const picker = pickerTrigger(page);
+  await picker.open();
+  const custom = page.getByRole("radio", { name: DP.custom, exact: true });
+  await custom.click();
+  await expect(custom).toBeChecked();
+
+  const content = page.locator('[data-slot="popover-content"]');
+  for (const [label, value] of [
+    [DP.customWidth, String(width)],
+    [DP.customHeight, String(height)],
+  ] as const) {
+    const input = content.getByLabel(label);
+    await input.fill(value);
+    await input.press("Enter");
   }
+  await picker.close();
+
+  const iframe = page.locator(FRAME);
+  await expect(iframe).toBeVisible();
+  await expect
+    .poll(() =>
+      iframe.evaluate((el) => {
+        const win = (el as HTMLIFrameElement).contentWindow!;
+        return `${win.innerWidth}x${win.innerHeight}`;
+      }),
+    )
+    .toBe(`${width}x${height}`);
 }
 
 test.describe("device preview", () => {
@@ -326,5 +408,384 @@ test.describe("device preview", () => {
       .poll(async () => Math.round(await visualWidth()))
       .toBe(Math.round(fitWidth));
     expect(await cssViewport()).toBe(390);
+  });
+
+  test("transitions preserve selection and scroll; rapid switching never duplicates the frame", async ({
+    page,
+  }) => {
+    await generate(page);
+
+    // --- R1: selection lives ABOVE the portal boundary ---
+    // Custom 420×320, not Mobile: the fixture's content doesn't overflow
+    // 844px (the surface stretches to min-height:100%), so a scroll offset
+    // only exists once the viewport is deliberately shorter than the content.
+    await pickCustom(page, 420, 320);
+    await pickOption(page, "100%");
+    await page
+      .getByRole(ROLE.button, { name: EDITOR.pick })
+      .filter({ visible: true })
+      .click();
+    const frame = page.frameLocator(FRAME);
+    await frame.locator('input[name="search"]').click();
+    const panel = page.locator("[data-editor-panel]");
+    await expect(panel).toBeVisible();
+
+    // --- R1: canvas scroll offset survives the frame ↔ inline remount ---
+    // The portal move recreates the scroller in the other document; the
+    // playground carries scrollTop across (onScroll → ref → restore).
+    const scroller = frame.locator(".jr-pick-enabled");
+    const before = await scroller.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop;
+    });
+    expect(before).toBeGreaterThan(0);
+
+    await pickOption(page, DP.responsive);
+    await expect(page.locator(FRAME)).toHaveCount(0);
+    await expect(panel).toBeVisible(); // selection never left
+
+    // Back to the SAME overflowing viewport — Mobile's 844px wouldn't clamp
+    // to the saved offset at all (no overflow → scrollTop 0 by definition).
+    await pickOption(page, DP.custom);
+    await expect
+      .poll(() =>
+        frame
+          .locator(".jr-pick-enabled")
+          .evaluate((el) => Math.round(el.scrollTop)),
+      )
+      .toBe(Math.round(before));
+    await expect(panel).toBeVisible();
+
+    // --- R2: switching mid-init never orphans or duplicates a frame ---
+    await pickOption(page, DP.responsive);
+    await pickOption(page, DP.mobile); // frame still initializing…
+    await pickOption(page, DP.responsive); // …immediately torn down
+    await pickOption(page, DP.tablet); // …and superseded
+    const iframes = page.locator(FRAME);
+    await expect.poll(() => iframes.count()).toBe(1);
+    const width = await iframes.evaluate(
+      (el) => (el as HTMLIFrameElement).contentWindow!.innerWidth,
+    );
+    expect(width).toBe(768);
+    // No half-initialized frame ever reports ready (error state = residue).
+    await expect(page.locator("[data-device-frame-error]")).toHaveCount(0);
+    await expect(panel).toBeVisible();
+  });
+
+  test("R1/R3: an in-flight stream, a typed edit, and hover/drag survive preset switches", async ({
+    page,
+  }) => {
+    await mockGenerate(page, {
+      lines: FILTER_UI_LINES,
+      // Steer (edit) response: retarget a prop the FILTER fixture actually
+      // has — MOCK_EDIT_LINES patches the MOCK key set, not this fixture.
+      editLines: [
+        JSON.stringify({
+          op: PATCH_OP.replace,
+          path: `${PATCH_PATH.elements}/filter-input/props/placeholder`,
+          value: "Streamed update",
+        }),
+      ],
+    });
+    await page.goto(PATHS.ui);
+    await waitForMsw(page);
+    await page
+      .getByRole(ROLE.button, { name: PROMPTS.signIn })
+      .filter({ visible: true })
+      .click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+
+    // Inline baseline — the steered stream starts HERE, in the parent document.
+    await pickOption(page, DP.responsive);
+    const frame = page.frameLocator(FRAME);
+    const inlineSearch = page
+      .locator('input[name="search"]')
+      .filter({ visible: true });
+    await expect(inlineSearch).toHaveAttribute("placeholder", "Filter by name");
+
+    // --- R1: switch to the frame WHILE the stream is in flight ---
+    await page.evaluate(() => {
+      // Delay only the upcoming request: the initial generation already
+      // completed, and the preset switch must fit inside the flight window.
+      (
+        window as unknown as { __GENERATE_MOCK__: { delayMs: number } }
+      ).__GENERATE_MOCK__.delayMs = 3000;
+    });
+    await page
+      .getByPlaceholder(en.playground.promptPlaceholder)
+      .filter({ visible: true })
+      .fill("Refresh the search hint");
+    await page
+      .getByRole(ROLE.button, { name: ACTIONS.steer })
+      .filter({ visible: true })
+      .click();
+    // In flight: the delay guarantees the old spec is still painted…
+    await expect(inlineSearch).toHaveAttribute("placeholder", "Filter by name");
+    await pickOption(page, DP.mobile); // …mid-stream the canvas moves house
+    // …and the stream lands in the FRAME: one request, one completion.
+    await expect(frame.locator('input[name="search"]')).toHaveAttribute(
+      "placeholder",
+      "Streamed update",
+    );
+    expect(await generateCalls(page)).toBe(2);
+
+    // --- R1: an in-progress edit survives the next switch ---
+    await page
+      .getByRole(ROLE.button, { name: EDITOR.pick })
+      .filter({ visible: true })
+      .click();
+    await frame.locator('input[name="search"]').click();
+    const panel = page.locator("[data-editor-panel]");
+    await expect(panel).toBeVisible();
+    const draftField = panel.getByLabel("placeholder");
+    await expect(draftField).toHaveValue("Streamed update");
+    await draftField.fill("Draft edit survives"); // no Enter — blur commits
+    await pickOption(page, DP.tablet);
+    await expect(panel).toBeVisible(); // selection never left
+    await expect(draftField).toHaveValue("Draft edit survives");
+    await expect(frame.locator('input[name="search"]')).toHaveAttribute(
+      "placeholder",
+      "Draft edit survives",
+    );
+
+    // --- R3: hover badge inside the 50%-scaled frame ---
+    await pickOption(page, "50%");
+    await frame.locator('[data-jr-key="filter-input"]').hover();
+    const badge = frame.locator("[data-editor-badge]");
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText("filter-input");
+
+    // --- R3: drag arms and drops inside the 50%-scaled frame ---
+    // Leave pick first so the edit panel can't cover drop targets (as in
+    // editor.spec) — and pointerdown must reach the realm-safe dnd handler.
+    await page
+      .getByRole(ROLE.button, { name: EDITOR.pick })
+      .filter({ visible: true })
+      .click();
+    await expect(page.locator("[data-editor-panel]")).toHaveCount(0);
+    await page
+      .getByRole(ROLE.button, { name: EDITOR.dragdrop })
+      .filter({ visible: true })
+      .click();
+    await expect(frame.locator(".jr-dnd")).toHaveCount(1);
+
+    // Wrappers paint no box — measure the element child (editor.spec pattern);
+    // boundingBox rides Playwright's frame-quad pipeline, same as the clicks
+    // that already land at 50%.
+    const box = async (key: string) => {
+      const bounds = await frame
+        .locator(`[data-jr-key="${key}"] > *`)
+        .first()
+        .boundingBox();
+      if (!bounds) throw new Error(`no bounding box for ${key}`);
+      return bounds;
+    };
+    const grid = await box("filter-grid");
+    const input = await box("filter-input");
+    const start = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 10, start.y); // cross the 5px threshold
+    await page.mouse.move(
+      input.x + input.width / 2,
+      input.y + input.height * 0.15,
+      { steps: 6 },
+    );
+    const ghost = frame.locator("[data-dnd-ghost]");
+    await expect(ghost).toHaveAttribute(
+      "aria-label",
+      dndGhostLabel("filter-grid"),
+    );
+    await expect(frame.locator('[data-dnd-zone="before"]')).toBeAttached();
+    await page.mouse.up();
+    await expect(ghost).toHaveCount(0);
+    // filter-root reordered: the grid now precedes the input — assert the
+    // spec contract (editor.spec pattern) and its rendering in document order.
+    const entries = await readHistoryStorage(page);
+    expect(entries[0].spec.elements["filter-root"]?.children).toEqual([
+      "filter-grid",
+      "filter-input",
+    ]);
+    await expect
+      .poll(() =>
+        frame
+          .locator('[data-jr-key="filter-root"]')
+          .evaluate((el) =>
+            Array.from(
+              el.querySelectorAll(
+                '[data-jr-key="filter-grid"], [data-jr-key="filter-input"]',
+              ),
+            ).map((node) => node.getAttribute("data-jr-key")),
+          ),
+      )
+      .toEqual(["filter-grid", "filter-input"]);
+  });
+
+  test("pick hit-testing works at every zoom step; frame style/theme parity holds", async ({
+    page,
+  }) => {
+    // Fresh session per step — no selection-state ambiguity across rounds.
+    for (const step of ["50%", "100%", "150%"]) {
+      await generate(page);
+      await pickOption(page, DP.mobile);
+      await pickOption(page, step);
+      await page
+        .getByRole(ROLE.button, { name: EDITOR.pick })
+        .filter({ visible: true })
+        .click();
+      const frame = page.frameLocator(FRAME);
+      await expect(frame.locator(".jr-pick-enabled")).toHaveCount(1);
+      // Clicks must land inside the TRANSFORMED iframe (R3: rect math and
+      // elementFromPoint run in the frame realm — zoom-scaled coordinates).
+      await frame.locator('input[name="search"]').click();
+      await expect(page.locator("[data-editor-panel]")).toBeVisible();
+      await expect(page.locator(FRAME)).toBeVisible();
+    }
+
+    // R4 parity: same stylesheet set as the parent head (none missing, no
+    // duplicates) and mirrored root theme/lang attributes.
+    const parity = () =>
+      page.evaluate(() => {
+        const iframe = document.querySelector(
+          "iframe[data-device-frame-iframe]",
+        ) as HTMLIFrameElement;
+        const count = (doc: Document) =>
+          doc.querySelectorAll('head > style, head > link[rel="stylesheet"]')
+            .length;
+        const frameDoc = iframe.contentDocument!;
+        return {
+          parent: count(document),
+          frame: count(frameDoc),
+          htmlClass:
+            document.documentElement.className ===
+            frameDoc.documentElement.className,
+          bodyClass: document.body.className === frameDoc.body.className,
+          lang: document.documentElement.lang === frameDoc.documentElement.lang,
+        };
+      });
+    // The mirror is delta-synced and rAF-coalesced — poll, don't snapshot.
+    await expect
+      .poll(async () => {
+        const p = await parity();
+        return p.parent === p.frame && p.htmlClass && p.bodyClass && p.lang;
+      })
+      .toBe(true);
+  });
+
+  test("a11y: frame title, keyboard radios, focus flow; teardown leaves no residue", async ({
+    page,
+  }) => {
+    await generate(page);
+    await pickOption(page, DP.mobile);
+    const iframe = page.locator(FRAME);
+    await expect(iframe).toBeVisible();
+
+    // WCAG frame requirement: every embedded frame carries an accessible name.
+    await expect(iframe).toHaveAttribute("title", DP.label);
+
+    // Sane focus flow in: the frame is programmatically focusable (from
+    // here, Tab walks into the frame document natively — iframes always
+    // expose their nested browsing context to sequential focus).
+    const focused = await iframe.evaluate((el) => {
+      (el as HTMLIFrameElement).focus();
+      return document.activeElement === el;
+    });
+    expect(focused).toBe(true);
+
+    // Picker is keyboard-operable: arrows walk the native radio group
+    // (free keyboard support, plan scope item 5) and the change event
+    // actually switches the preset.
+    const trigger = page
+      .getByRole(ROLE.button, { name: DP.open })
+      .filter({ visible: true });
+    await trigger.click();
+    await page.getByRole("radio", { name: DP.mobile, exact: true }).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      page.getByRole("radio", { name: DP.tablet, exact: true }),
+    ).toBeChecked();
+    await expect
+      .poll(() =>
+        iframe.evaluate(
+          (el) => (el as HTMLIFrameElement).contentWindow!.innerWidth,
+        ),
+      )
+      .toBe(768);
+    await trigger.click(); // close the popover
+
+    // Teardown stability (safeguard 6): repeated enter/leave — Strict-Mode
+    // double-mounts in dev — leaks no frames, overlays, or error nodes.
+    for (let i = 0; i < 3; i++) {
+      await pickOption(page, DP.mobile);
+      await expect(page.locator(FRAME)).toBeVisible();
+      await pickOption(page, DP.responsive);
+      await expect(page.locator(FRAME)).toHaveCount(0);
+    }
+    await expect.poll(() => mainCanvasCount(page)).toBe(1);
+    const residue = await page.evaluate(
+      () =>
+        document.querySelectorAll(
+          "[data-device-frame], [data-device-frame-error], iframe[data-device-frame-iframe]",
+        ).length,
+    );
+    expect(residue).toBe(0);
+  });
+
+  test("known limitation (R6/F16): a spec-driven Select portals into the PARENT document", async ({
+    page,
+  }) => {
+    await generate(page, SELECT_UI_LINES);
+    await pickOption(page, DP.mobile);
+    const frame = page.frameLocator(FRAME);
+    const trigger = frame.getByRole("combobox");
+    await expect(trigger).toBeVisible();
+
+    await trigger.click();
+
+    // Documented behavior: Radix resolves its portal container as
+    // globalThis.document.body — the PARENT's, always (plan 059 R6).
+    // page.locator queries only the main document, so a hit here proves
+    // the overlay ESCAPED the frame; a frame-only mount would count 0.
+    // This characterization is the living reference for follow-up F16.
+    const content = page.locator('[data-slot="select-content"]');
+    await expect(content).toBeVisible();
+    await expect(content).toHaveCount(1);
+    // …while the trigger it belongs to still lives inside the frame.
+    await expect(trigger).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(content).toHaveCount(0);
+    await pickOption(page, DP.responsive);
+    await expect(page.locator(FRAME)).toHaveCount(0);
+  });
+
+  test("frame-open timing tripwire reports a bounded first layout (safeguard 2)", async ({
+    page,
+  }) => {
+    await generate(page);
+    await pickOption(page, DP.mobile);
+    await expect(page.locator(FRAME)).toBeVisible();
+
+    // Dev-only measure: preset activation → first rAF after ready (styles
+    // applied; fonts gated separately). Poll briefly — the measure lands
+    // one frame after ready.
+    const duration = await page.evaluate(async () => {
+      for (let i = 0; i < 120; i++) {
+        const entries = performance.getEntriesByName(
+          "device-frame:open",
+          "measure",
+        );
+        if (entries.length > 0) {
+          return entries[entries.length - 1].duration;
+        }
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return -1;
+    });
+    // Present, finite, and inside the regression tripwire (50ms is the CSS-
+    // bloat target on dev hardware; 500ms here only catches gross regressions
+    // without flaking on CI contention).
+    expect(duration).toBeGreaterThan(0);
+    expect(duration).toBeLessThan(500);
   });
 });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { RefObject } from "react";
 import type { Spec } from "@json-render/core";
 import { useTranslations } from "next-intl";
+import { asElement } from "@/components/editor/cross-realm";
 import { elementMarkers } from "@/lib/editor";
 import type { ElementMarker } from "@/lib/editor";
 
@@ -41,10 +42,10 @@ export function HoverBadge({ enabled, containerRef, spec }: HoverBadgeProps) {
       return;
     }
 
-    const resolveWrapper = (target: EventTarget | null): HTMLElement | null => {
-      if (!(target instanceof Element)) return null;
-      return target.closest<HTMLElement>("[data-jr-key]");
-    };
+    const resolveWrapper = (target: EventTarget | null): HTMLElement | null =>
+      // Realm-safe (R3): frame-origin events carry iframe-realm nodes, which
+      // fail `instanceof Element` — that would kill the badge inside the frame.
+      asElement(target)?.closest<HTMLElement>("[data-jr-key]") ?? null;
 
     // Measure the WRAPPER that was hovered, never a key lookup — repeated
     // instances share keys and querySelector returns the first one, which

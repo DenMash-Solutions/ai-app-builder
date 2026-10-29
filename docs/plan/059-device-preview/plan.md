@@ -1,6 +1,6 @@
 # Device Preview (viewport emulation + zoom) — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-27
 
 ## Goal
@@ -260,60 +260,90 @@ preview on the curated 057 baseline (~64 FPS, DevTools open).
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit: fit-scale math (stage size × device size × zoom step clamp), preset
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test` —
+      final chain 2026-10-28 all green, **737 unit**
+- [x] Unit: fit-scale math (stage size × device size × zoom step clamp), preset
       constants, store persistence (write → read → fallback on corrupt value),
       custom W×H validation/clamping
-- [ ] e2e: activate Mobile → an `iframe` exists with width 390; **inside the frame**
+- [x] e2e: activate Mobile → an `iframe` exists with width 390; **inside the frame**
       (`frameLocator`) the Pokédex-style responsive grid no longer applies `lg:`
       styles while the inline view does (media queries provably follow the frame);
       pick an element inside the frame → edit panel opens outside; overlay selection
       ring lands on the element; switching back to Desktop removes the iframe and the
       canvas renders inline
-- [ ] e2e: existing 114 stay green (Desktop default → inline rendering untouched)
-- [ ] Zoom: Fit recomputes when the edit panel docks (stage resize); % steps change
+- [x] e2e: existing 114 stay green (Desktop default → inline rendering untouched) —
+      full suite **125/125** = 114 baseline + 11 device-preview, run twice (incl.
+      after a fresh dev restart, mistake #23 sanity check)
+- [x] Zoom: Fit recomputes when the edit panel docks (stage resize); % steps change
       the frame scale without changing the iframe's CSS viewport width
-- [ ] Frame-open timing tripwire — **defined**: starts at preset activation
+- [x] Frame-open timing tripwire — **defined**: starts at preset activation
   (initializing), ends at the first layout inside the iframe after its stylesheets
   have applied (first rAF following ready; **fonts excluded** — `document.fonts.ready`
   gates readiness separately). Primary in development mode, probe reusable in prod.
   ~50ms is a **regression tripwire for CSS bloat, not a budget**; reported separately
   from FPS (a fast first layout ≠ correct or interactive render) (safeguard 2)
-- [ ] State preservation (R1): Desktop → Mobile → Desktop **during selection, an
+- [x] State preservation (R1): Desktop → Mobile → Desktop **during selection, an
   in-progress edit, and active streaming** → required state survives, no duplicate
   subscriptions/listeners/streaming ops; canvas scroll offset restored across the
   transition; canvas-local draft behavior verified as intended (`controlled-input-drafts`)
-- [ ] Iframe readiness (R2): delay stylesheet loading and switch presets rapidly →
+  — selection + scroll in "transitions preserve selection and scroll" (live round
+  trip restores 4186; **real bug found + fixed**: a clamped restore write's own
+  scroll event clobbered the carried offset → `restoringRef`/`appliedScrollRef`
+  shield in `playground.tsx`); streaming + typed edit in the R1/R3 test (steer in
+  flight → preset switch mid-request → lands in the frame, `generateCalls === 2`,
+  no duplicate stream; typed draft survives the next switch)
+- [x] Iframe readiness (R2): delay stylesheet loading and switch presets rapidly →
   no stale mount into a superseded iframe, no unhandled async work, no
   partially-initialized state reported as ready; failure surfaces an error state
-- [ ] Coordinate correctness (R3): select, hover, and drag elements at 50 / 100 /
+- [x] Coordinate correctness (R3): select, hover, and drag elements at 50 / 100 /
   150% zoom; overlay geometry aligned; correct when the edit panel docks; global-API
   audit passes — `elementFromPoint`/keydown and any other global use goes through
   `ownerDocument`/`defaultView` (the two codebase findings in R3 are fixed)
-- [ ] Style parity (R4): fonts, relative assets, dark/light theme, stylesheet
+  — select/hit-testing at all three steps ("pick hit-testing works at every zoom
+  step"); hover + drag at 50% in the R1/R3 test (badge, ghost, `before` zone,
+  spec reorder). **Audit extension this step: a cross-realm `instanceof` defect
+  class found live** (frame nodes belong to the iframe realm →
+  `instanceof Element === false`): the hover badge was dead in frame, drag never
+  armed, `elementFromPoint` results were rejected, x-ray chip scope-toggle
+  misbehaved — fixed at 4 sites via the realm-safe `asElement` guard
+  (`components/editor/cross-realm.ts`), verified live via MCP (badge before AND
+  after a preset switch) + e2e. Matrix note: hover/drag asserted at 50%, select
+  at 50/100/150 — same coordinate pipeline (frame quads), no 100/150 hover/drag
+  cases
+- [x] Style parity (R4): fonts, relative assets, dark/light theme, stylesheet
   ordering after insert/remove/replace, and HMR updates all correct inside the
       iframe with no duplicate or stale stylesheets
-- [ ] Scaled layout (R5): frames smaller and larger than the stage in both
+- [x] Scaled layout (R5): frames smaller and larger than the stage in both
       dimensions → correct centering, documented clipping at fixed % > stage, Fit
       recalculation on stage resize; iframe CSS viewport unchanged at every zoom
-- [ ] Teardown (R2/safeguard 6): repeatedly enter/leave device-preview mode in dev —
+- [x] Teardown (R2/safeguard 6): repeatedly enter/leave device-preview mode in dev —
       pending work, observers, and event listeners cleaned up; document node and
       observer counts stay stable (Strict Mode double-mount)
-- [ ] a11y: iframe carries a `title`; picker is keyboard-operable with radio
+- [x] a11y: iframe carries a `title`; picker is keyboard-operable with radio
       semantics; focus flow into/out of the frame behaves sanely
-- [ ] Portal-leakage characterization (R6, known limitation): with a preset active, a
+- [x] Portal-leakage characterization (R6, known limitation): with a preset active, a
       spec-driven Radix overlay (Select/Dialog) mounts in the parent body — assert
       the documented behavior so follow-up F16 has a failing/passing reference
-- [ ] FPS spot-check per `css-safelist-performance.md` protocol — **control arm
+- [x] FPS spot-check per `css-safelist-performance.md` protocol — **control arm
       (inline Desktop) measured first, DevTools open** (the reported condition;
       DevTools-closed reads ~120 on every variant): rapid preset cycling
       Mobile↔Tablet↔Desktop must not regress the 057 baseline (~64 FPS, 0 frames
       >100ms). Two prior FPS runs were invalidated by measuring with DevTools closed
       — follow the protocol exactly; never `bun run build` while `next dev` serves
-      the same `.next` (mistake #23)
-- [ ] MCP spot-check: real spec at Mobile → screenshot showing single-column layout,
-      size label correct; back to Desktop → identical to pre-preview state
-- [ ] i18n: en/es keys present for picker/label strings
+      the same `.next` (mistake #23) — done 2026-10-28 on the **prod build** (dev
+      stopped first, mistake #23), DevTools-open verified via `outer−inner` =
+      304×143, control arm measured first: control **120.2 FPS / 16.6ms max / 0
+      frames >100ms** (88 resizes), variant 41 preset switches **118.8 / 33.4ms /
+      0**, bonus arm incl. Responsive unmount ×35 **114.4 / 26ms / 0** — all ≥ the
+      ~64 bar; caveat: control read 120 this session (not 057's 64), so the
+      comparison is session-relative
+- [x] MCP spot-check: real spec at Mobile → screenshot showing single-column layout,
+      size label correct; back to Desktop → identical to pre-preview state — exact
+      390×844, frame centered (dy=32 = intentional pb-28/pt-20), 1 grid track in
+      frame vs 5 inline, label `390 × 844 · fit 87%`, pick-inside → panel-outside;
+      console clean except the pre-existing form-field a11y issue
+- [x] i18n: en/es keys present for picker/label strings — `devicePreview` key sets
+      identical in en/es, 0 missing
 
 ## Status log
 
@@ -325,3 +355,4 @@ preview on the curated 057 baseline (~64 FPS, DevTools open).
 | 2026-10-27 | gap sweep — **R6 portal leakage** found in code (`@json-render/shadcn` uses `Portal(…)` 10×, Radix targets `globalThis.document.body` → spec overlays would escape the frame): v1 known limitation + follow-up F16; R3 audit extended (`matchMedia`, observer realm, `getComputedStyle`); added a11y scope, input-modality out-of-scope (viewport ≠ touch fidelity), picker availability, and a **Steps** section (3-step commit breakdown) |
 | 2026-10-27 | step 1 live feedback (user) — **scope change recorded above**: Responsive preset added (inline fill, stays default so the 114 e2e tests are untouched), Desktop = fixed 1440×900 artboard in the frame, stage **scrolls** for oversized frames (R5 revised, clip rule dropped); T1 e2e fixed (assert main-document membership with `document.querySelectorAll` scoped to **visible** canvases — Next 16 Cache Components keeps the previous route mounted via React's `<Activity>` (`display:none`, `preserving-ui-state.md`), so a raw count always includes hidden routes; verified pre-existing on clean HEAD, not caused by this feature), T2 root-caused + fixed (EditPanel's Escape listener is parent-window only, so a key typed with focus in the frame dead-ended the cascade — the playground handler now closes the panel when the event arrives from the frame realm; cascade semantics per `shortcuts.spec.ts` = first Escape closes the panel, second disarms pick) |
 | 2026-10-28 | **step 1 committed** (`c1726f7`, plan status draft → approved, INDEX row updated same turn; user-directed commit rework: attribution footer removed, bullet-point body per `/gen-commit`). **step 2 implemented + verified** — zoom store (`zoom: number \| null`, null = fit default, `ZOOM_STEPS` 50–150, validated + persisted) and pure `computeFrameScale` (fit = min(stage/device) from the UNSCALED stage content box, fixed % applies directly, degenerate inputs → 1:1); frame measures the stage via ResizeObserver (no-op guard, observes the unscaled stage — transform can't re-trigger, safeguard 5), R5 scaled-space reservation (slot = scaled outer box incl. 2px border, scaler = unscaled + `origin-top-left`, no transform at 100% → pixel-exact 1:1); size chip now `390 × 844 · fit 82%` with the zoom text in an unscaled sibling (`data-device-frame-zoom`); picker gains a Fit + 50–150% radio row (frame presets only); canvas scroll offset carried across the portal remount (R1: onScroll → ref, re-apply on `frameWindow` change). Verification: **format/lint/tsc green, 737 unit (+2: zoom persistence/validation, fit-math), full e2e 119/119** (device-preview 5/5 — new zoom test proves % steps change only the visual scale: 392/196px surfaces, CSS viewport pinned at 390; Desktop test now asserts fit closes the overflow first, then pins 100% for the scroll fallback). Step 3 (a11y tripwires, characterization, FPS/MCP, implemented) remains |
+| 2026-10-28 | **step 3 implemented + verified — Status: implemented, all 17 verification items ticked with results** — new R1/R3 e2e (11th device test): steer stream in flight → preset switch mid-request lands in the frame (`generateCalls === 2`, no duplicate stream), typed draft survives the next switch, hover badge + drag (ghost, `before` zone, spec reorder) at 50%; **cross-realm `instanceof` audit found a real defect class live** (frame nodes belong to the iframe realm → `instanceof Element === false`: hover badge dead in frame, drag never armed, `elementFromPoint` results rejected, x-ray chip scope-toggle misbehaved) → realm-safe `asElement` guard (`components/editor/cross-realm.ts`) at 4 sites, verified via MCP (badge before AND after a preset switch) + e2e; scroll-restore clobber fixed (`restoringRef`/`appliedScrollRef` shield, live round trip restores 4186); FPS spot-check protocol-correct (prod build, DevTools open verified 304×143, control arm first): 120.2 / 118.8 / 114.4 FPS, 0 frames >100ms; gates green (format/lint/tsc, **737 unit**, **125/125 e2e** = 114 baseline + 11 device); MCP spot-check + i18n en/es identical; picker W/H inputs get `name` attrs (silences 2 of 6 Chrome form-field issues) |
