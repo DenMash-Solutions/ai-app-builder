@@ -364,6 +364,16 @@
       "days": "{n}d ago"
     }
   },
+  "projects": {
+    "label": "Project",
+    "none": "No project",
+    "noneYet": "No projects yet — create one to group this app's screens.",
+    "create": "New project",
+    "createPlaceholder": "Project name",
+    "rename": "Rename project",
+    "delete": "Delete project",
+    "switch": "Switch project"
+  },
   "localeSwitcher": {
     "label": "Language"
   },

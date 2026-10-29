@@ -107,6 +107,7 @@ import {
   undoRevision,
   updateEntry,
 } from "@/lib/history";
+import { getActiveProjectId } from "@/lib/projects/projects";
 import { languageName } from "@/lib/i18n/languages";
 import {
   SWITCH_LANGUAGE_ACTION,
@@ -511,7 +512,11 @@ export function Playground({ initialRef }: PlaygroundProps) {
     }
 
     if (op.kind === PENDING_OP_KINDS.generate) {
-      const entry = createEntry(op.prompt, boundSpec);
+      const entry = createEntry(
+        op.prompt,
+        boundSpec,
+        getActiveProjectId() ?? undefined,
+      );
       addEntry(entry);
       // The URL owns the active UI: the landing streams the generation,
       // then the committed entry takes over at /ui/[id] (the destination
@@ -938,7 +943,11 @@ export function Playground({ initialRef }: PlaygroundProps) {
   // is on canvas.
   const handleImportSpec = (importedSpec: Spec) => {
     const { spec: normalized } = normalizeSpecCopy(importedSpec);
-    const entry = createEntry(t("playground.importedEntry"), normalized);
+    const entry = createEntry(
+      t("playground.importedEntry"),
+      normalized,
+      getActiveProjectId() ?? undefined,
+    );
     addEntry(entry);
     setHistoryOpen(false);
     router.push(`/ui/${entry.id}`);

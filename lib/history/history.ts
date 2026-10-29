@@ -40,6 +40,13 @@ export interface HistoryEntry {
    * ingest flag (device-local: the `uis` sync rows don't carry it).
    */
   i18nMissing?: string[];
+  /**
+   * Project grouping (plan 061 A1) — which project of screens this entry
+   * belongs to. Device-local like `i18nMissing` (projects are local-only in
+   * v1, F17 would sync them): absent on legacy entries, on entries whose
+   * project was deleted, and on account-synced copies pulled from `uis`.
+   */
+  projectId?: string;
 }
 
 let cache: HistoryEntry[] | null = null;
@@ -85,6 +92,15 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
     typeof entry.slug === "string" && entry.slug !== "" ? entry.slug : entry.id;
   const updatedAt =
     typeof entry.updatedAt === "number" ? entry.updatedAt : entry.createdAt;
+  // Grouping is optional and must be a real id — a corrupt/non-string value
+  // drops the entry back into the "no project" bucket.
+  const projectId =
+    typeof entry.projectId === "string" && entry.projectId !== ""
+      ? entry.projectId
+      : undefined;
+  const base: HistoryEntry = { ...entry, name, slug, updatedAt };
+  if (projectId === undefined) delete base.projectId;
+  else base.projectId = projectId;
   const revisions =
     Array.isArray(entry.revisions) && entry.revisions.length > 0
       ? entry.revisions.filter(
@@ -100,10 +116,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
 
   if (revisions.length === 0) {
     return withCoverageFlag({
-      ...entry,
-      name,
-      slug,
-      updatedAt,
+      ...base,
       revisions: [
         {
           spec: entry.spec,
@@ -123,10 +136,7 @@ export function normalizeEntry(entry: HistoryEntry): HistoryEntry {
     revisions.length - 1,
   );
   return withCoverageFlag({
-    ...entry,
-    name,
-    slug,
-    updatedAt,
+    ...base,
     revisions,
     head,
     spec: revisions[head].spec,
@@ -312,7 +322,12 @@ export function canRedo(entry: HistoryEntry): boolean {
   return entry.head < entry.revisions.length - 1;
 }
 
-export function createEntry(prompt: string, spec: Spec): HistoryEntry {
+export function createEntry(
+  prompt: string,
+  spec: Spec,
+  /** Project grouping (061 A1) — omitted when nothing is active (legacy bucket). */
+  projectId?: string,
+): HistoryEntry {
   const createdAt = Date.now();
   const snapshot = cloneSpec(spec);
   const id = crypto.randomUUID();
@@ -326,7 +341,26 @@ export function createEntry(prompt: string, spec: Spec): HistoryEntry {
     head: 0,
     createdAt,
     updatedAt: createdAt,
+    ...(projectId ? { projectId } : {}),
   });
+}
+
+/**
+ * Drops the grouping from every entry that references a deleted project —
+ * the entries themselves are kept and fall back to the "no project" bucket
+ * (061 A1; called by `removeProject`).
+ */
+export function clearProjectFromEntries(projectId: string): void {
+  const history = getHistory();
+  if (!history.some((entry) => entry.projectId === projectId)) return;
+  commit(
+    history.map((entry) => {
+      if (entry.projectId !== projectId) return entry;
+      const ungrouped: HistoryEntry = { ...entry };
+      delete ungrouped.projectId;
+      return ungrouped;
+    }),
+  );
 }
 
 export type TranslateFn = (

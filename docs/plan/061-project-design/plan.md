@@ -152,3 +152,4 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 | ---- | ----- |
 | 2026-10-29 | plan drafted (Step 0: lessons grepped, `json-render` skill loaded, F15 re-read, persistence/routing/actions/data-source/prompt surfaces researched) |
 | 2026-10-29 | approved — clarifications answered per recommendation: local-only projects (Q1), project namespace + `/session` subtree (Q2), drawer grouping + top-bar switcher (Q3), publishing deferred to F18 (Q4), navigate tile ships in v1 (Q5) |
+| 2026-10-29 | 061-1 implemented — `lib/projects/projects.ts` store (+ active id), `HistoryEntry.projectId` (sync pull keeps the local grouping), history-drawer project groups with create/rename/switch/delete, top-bar `ProjectSwitcher` (pill + row), en/es `projects.*`; 760 unit / 127 e2e / i18n 306=306 / MCP spot-check (create, switch, rename via Enter, Escape cancels without closing the drawer, delete, mobile row) |

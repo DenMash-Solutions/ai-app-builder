@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { ModelSwitcher } from "@/components/model-switcher";
+import { ProjectSwitcher } from "@/components/projects/project-switcher";
 import { SyncStatusDot } from "@/components/sync/sync-status-dot";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Link } from "@/lib/i18n/navigation";
@@ -98,6 +99,7 @@ export function TopBar({
       <div className="flex">
         <div className="hidden items-center gap-1.5 rounded-full border bg-background/80 px-2 py-1.5 shadow-lg backdrop-blur-md sm:flex">
           <SyncStatusDot />
+          <ProjectSwitcher variant="pill" />
           <ModelSwitcher variant="pill" />
           {/* App-shell language only (user boundary, plan rev 3): the SPEC's
               content language lives on the ToolRail. */}
@@ -150,6 +152,7 @@ export function TopBar({
                 </div>
               </div>
               <ThemeToggle showLabel />
+              <ProjectSwitcher variant="row" />
               <ModelSwitcher variant="row" />
               <Button
                 type="button"

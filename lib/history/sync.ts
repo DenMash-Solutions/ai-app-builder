@@ -204,7 +204,12 @@ export function startSync(
       const remote = rowToEntry(raw);
       const local = getHistory().find((entry) => entry.id === remote.id);
       if (!local || remote.updatedAt > local.updatedAt) {
-        applyRemoteEntry(remote);
+        // `uis` has no project column (projects are local-only, 061): a remote
+        // row winning the LWW merge must not drop the local grouping — carry
+        // the device's own projectId onto the adopted copy.
+        applyRemoteEntry(
+          local?.projectId ? { ...remote, projectId: local.projectId } : remote,
+        );
       }
     }
   }

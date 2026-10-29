@@ -142,6 +142,19 @@ describe("row mapping", () => {
     expect(back.head).toBe(entry.head);
     expect(back.spec).toEqual(entry.spec);
   });
+
+  test("project grouping is device-local — rows never carry projectId", () => {
+    const entry = createEntry("prompt", makeSpec("v0"), "proj-1");
+    expect(entry.projectId).toBe("proj-1");
+
+    const row = entryToRow(entry, "owner-1");
+    expect(row).not.toHaveProperty("projectId");
+
+    const back = rowToEntry(row as unknown as Parameters<typeof rowToEntry>[0]);
+    // The `uis` table has no project column (projects are local-only, 061):
+    // an account copy never resurrects a grouping this device doesn't have.
+    expect(back.projectId).toBeUndefined();
+  });
 });
 
 describe("sync", () => {
@@ -185,6 +198,26 @@ describe("sync", () => {
     const [stored] = getHistory();
     expect(stored.name).toBe("renamed remotely");
     expect(stored.updatedAt).toBe(9000);
+    stop();
+  });
+
+  test("a remote win keeps the local project grouping (061)", async () => {
+    const id = "44444444-4444-4444-8444-444444444444";
+    addEntry({
+      ...createEntry("local copy", makeSpec("v0"), "proj-9"),
+      id,
+      updatedAt: 1000,
+    });
+    state.rows.push(remoteRow(id, { updatedAt: 9000 }));
+
+    const stop = startSync(makeClient(state), "owner-1", { debounceMs: 1 });
+    await sleep(20);
+
+    const [stored] = getHistory();
+    expect(stored.updatedAt).toBe(9000);
+    // The remote row has no project column (projects are local-only, 061), so
+    // adopting it must carry the device's own grouping across the merge.
+    expect(stored.projectId).toBe("proj-9");
     stop();
   });
 

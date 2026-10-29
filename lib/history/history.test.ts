@@ -6,6 +6,7 @@ import {
   canRedo,
   canUndo,
   clearHistory,
+  clearProjectFromEntries,
   commitRevision,
   createEntry,
   getHistory,
@@ -191,6 +192,61 @@ describe("normalizeEntry", () => {
     expect(normalized.name).toBe("Clinical Dental Sonrisas");
     expect(normalized.slug).toBe("dental-sonrisas");
   });
+});
+
+describe("project grouping (061)", () => {
+  test("createEntry stamps the projectId only when one is given", () => {
+    const grouped = createEntry("screen a", makeSpec("v0"), "proj-1");
+    const legacy = createEntry("screen b", makeSpec("v0"));
+
+    expect(grouped.projectId).toBe("proj-1");
+    expect(legacy.projectId).toBeUndefined();
+  });
+
+  test("normalizeEntry keeps a valid projectId and drops a corrupt one", () => {
+    const valid = normalizeEntry({
+      ...createEntry("a", makeSpec("v0")),
+      projectId: "proj-1",
+    });
+    const corrupt = normalizeEntry({
+      ...createEntry("b", makeSpec("v0")),
+      projectId: 42,
+    } as unknown as HistoryEntry);
+    const empty = normalizeEntry({
+      ...createEntry("c", makeSpec("v0")),
+      projectId: "",
+    });
+
+    expect(valid.projectId).toBe("proj-1");
+    expect(corrupt.projectId).toBeUndefined();
+    expect(empty.projectId).toBeUndefined();
+  });
+
+  test("clearProjectFromEntries ungroups only that project's entries", () => {
+    clearHistory();
+    const mine = addAndReturn(createEntry("mine", makeSpec("v0"), "proj-1"));
+    const other = addAndReturn(createEntry("other", makeSpec("v0"), "proj-2"));
+    const legacy = addAndReturn(createEntry("legacy", makeSpec("v0")));
+
+    clearProjectFromEntries("proj-1");
+
+    const byId = new Map(getHistory().map((entry) => [entry.id, entry]));
+    expect(byId.get(mine.id)?.projectId).toBeUndefined();
+    expect(byId.get(other.id)?.projectId).toBe("proj-2");
+    expect(byId.get(legacy.id)?.projectId).toBeUndefined();
+
+    // Nothing matches → no commit (history stays byte-identical).
+    const before = JSON.stringify(getHistory());
+    clearProjectFromEntries("proj-unknown");
+    expect(JSON.stringify(getHistory())).toBe(before);
+
+    clearHistory();
+  });
+
+  function addAndReturn(entry: HistoryEntry): HistoryEntry {
+    addEntry(entry);
+    return entry;
+  }
 });
 
 describe("updatedAt (LWW timestamp for account sync)", () => {

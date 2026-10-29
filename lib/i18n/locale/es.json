@@ -364,6 +364,16 @@
       "days": "hace {n} d"
     }
   },
+  "projects": {
+    "label": "Proyecto",
+    "none": "Sin proyecto",
+    "noneYet": "Aún no hay proyectos: crea uno para agrupar las pantallas de esta app.",
+    "create": "Nuevo proyecto",
+    "createPlaceholder": "Nombre del proyecto",
+    "rename": "Renombrar proyecto",
+    "delete": "Eliminar proyecto",
+    "switch": "Cambiar de proyecto"
+  },
   "localeSwitcher": {
     "label": "Idioma"
   },

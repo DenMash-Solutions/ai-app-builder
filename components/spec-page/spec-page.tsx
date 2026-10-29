@@ -8,6 +8,7 @@ import { PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { addEntry, createEntry } from "@/lib/history";
+import { getActiveProjectId } from "@/lib/projects/projects";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { QueryLoader } from "@/components/data-sources/query-loader";
 import { localizeSpec } from "@/lib/specs/localize";
@@ -30,7 +31,11 @@ export function EditInPlaygroundPill({ spec }: { spec: Spec }) {
   const router = useRouter();
 
   const handleImport = () => {
-    const entry = createEntry(t("specPage.editSourceLabel"), spec);
+    const entry = createEntry(
+      t("specPage.editSourceLabel"),
+      spec,
+      getActiveProjectId() ?? undefined,
+    );
     addEntry(entry);
     router.push(`/${locale}/ui/${entry.id}`);
   };
