@@ -312,9 +312,17 @@ export const EDITOR = {
   remove: en.editor.structure.remove,
   noChildren: en.editor.structure.noChildren,
   breadcrumb: en.editor.structure.breadcrumb,
+  templates: en.editor.structure.templates,
+  saveTemplate: en.editor.structure.saveTemplate,
+  saveTemplateLabel: en.editor.structure.saveTemplateLabel,
+  saveTemplateSubmit: en.editor.structure.saveTemplateSubmit,
   pickerTitle: en.editor.picker.title,
   pickerGroupTitle: en.editor.picker.groupTitle,
   pickerSearch: en.editor.picker.search,
+  pickerTemplatesTitle: en.editor.picker.templatesTitle,
+  pickerTemplatesEmpty: en.editor.picker.templatesEmpty,
+  pickerRenameTemplate: en.editor.picker.renameTemplate,
+  pickerDeleteTemplate: en.editor.picker.deleteTemplate,
   instanceScope: (index: number, count: number, path: string): string =>
     en.editor.instance.scope
       .replace("{index}", String(index))

@@ -8,6 +8,8 @@ import {
   findParentKey,
   getServerTemplates,
   getTemplates,
+  removeTemplate,
+  renameTemplate,
   saveTemplate,
   subscribeTemplates,
 } from "@/lib/editor";
@@ -290,6 +292,8 @@ export function StructureTab({
           }}
           onPick={handlePick}
           onPickTemplate={handlePickTemplate}
+          onRenameTemplate={renameTemplate}
+          onDeleteTemplate={removeTemplate}
         />
       )}
     </div>

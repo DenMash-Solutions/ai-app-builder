@@ -305,6 +305,8 @@
       "templatesDescription": "Pick a saved template to insert into this element.",
       "templatesEmpty": "No templates yet — select an element and use \"Save as template\" in the Structure tab.",
       "templateCount": "{count, plural, one {# element} other {# elements}}",
+      "renameTemplate": "Rename template",
+      "deleteTemplate": "Delete template",
       "noMatches": "No components match your search"
     },
     "generalActions": {

@@ -305,6 +305,8 @@
       "templatesDescription": "Elige una plantilla guardada para insertarla en este elemento.",
       "templatesEmpty": "Aún no hay plantillas — selecciona un elemento y usa «Guardar como plantilla» en la pestaña Estructura.",
       "templateCount": "{count, plural, one {# elemento} other {# elementos}}",
+      "renameTemplate": "Renombrar plantilla",
+      "deleteTemplate": "Eliminar plantilla",
       "noMatches": "Ningún componente coincide con tu búsqueda"
     },
     "generalActions": {

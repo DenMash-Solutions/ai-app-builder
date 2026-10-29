@@ -1,6 +1,6 @@
 # Component Templates — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-28
 
 ## Goal
@@ -96,22 +96,32 @@ prefixing/remapping.
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit: store persistence (write → read → corrupt-value fallback), subtree
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test` — all
+      green at step 3: format/lint/tsc clean, **748 unit** (6 + 5 + 0 new)
+- [x] Unit: store persistence (write → read → corrupt-value fallback), subtree
       snapshot isolation, key remap produces no collisions with existing spec
       keys, `data-template-id` stamped exactly on the expanded root, save/insert
-      round trip preserves structure (children/slots/visible/on/repeat/watch)
-- [ ] e2e: select an element → save as template → insert it into a different
+      round trip preserves structure (children/slots/visible/on/repeat/watch) —
+      `lib/editor/templates.test.ts` (6) + `insertTemplate` block in
+      `lib/editor/structure.test.ts` (5, incl. `validateSpec`-clean expansion
+      with slots/repeat preserved)
+- [x] e2e: select an element → save as template → insert it into a different
       container → expanded keys are unique, structure matches the source, root
       carries `data-template-id`; insert the same template twice → two independent
       copies (editing one does not affect the other); reload → library survives
-      (localStorage), delete → row disappears and insert is no longer offered
-- [ ] e2e: existing suite stays green (125 tests, insert/group flows untouched)
-- [ ] MCP spot-check per step: save a real selection from the structure tab,
+      (localStorage), delete → row disappears and insert is no longer offered —
+      `e2e/templates.spec.ts` (2 tests)
+- [x] e2e: existing suite stays green — **127/127** (125 pre-existing + 2 new),
+      insert/group flows untouched
+- [x] MCP spot-check per step: save a real selection from the structure tab,
       insert via the Templates picker mode, screenshot proving the copy landed with
-      provenance attr; rename + delete in the live UI; console clean
-- [ ] i18n: en/es key sets identical for all new strings
-- [ ] No `progress.md` — plan.md + INDEX.md only (user call 2026-10-28)
+      provenance attr; rename + delete in the live UI; console clean — steps 1–3
+      each spot-checked (see status log); step 3 also verified the empty-state
+      hint renders on first delete and after reopening, and the spec stayed
+      untouched by library writes
+- [x] i18n: en/es key sets identical for all new strings — 298 keys each, zero
+      diffs (13 template-related keys)
+- [x] No `progress.md` — plan.md + INDEX.md only (user call 2026-10-28)
 
 ## Status log
 
@@ -121,3 +131,4 @@ prefixing/remapping.
 | 2026-10-28 | approved — clarifications answered per recommendation: state bindings copied verbatim (decision 3), save = structure-tab row action + insert = third picker mode (decision 4), library scope = save/insert/rename/delete |
 | 2026-10-28 | **step 1 implemented + MCP-tested** — `lib/editor/templates.ts` visitor-level store (SSR-safe hydration, sanitizer drops junk entries, corrupt-JSON fallback, quota best-effort), `saveTemplate` snapshots the subtree detached via `subtreeKeys` + `structuredClone`, structure-tab **Save as template** row action (disabled for root) + `save-template-dialog.tsx` name prompt, `subtreeKeys` exported from `structure.ts`, en/es keys (6, identical); unit **743/743** (6 new — note: hydration test needed a cache-busted import because another test file loads `lib/editor/templates` via the `@/lib/editor` barrel first), full e2e **125/125**, MCP spot-check: saved a leaf (`pokemon-name`) and a container (`pokemon-card` → 8-element subtree) in the live UI, both persisted to `genui-component-templates`, dialog closed, console clean (only pre-existing a11y issues) |
 | 2026-10-28 | **step 2 implemented + MCP-tested** — `insertTemplate` in `structure.ts` (copy-expand: `subtreeKeys` traversal of the detached snapshot, `uniqueKeyFor` key remap shared with `duplicateElement`, `data-template-id` stamped on the expanded root ONLY, optional clamped index, null guards), `PICKER_MODES.templates` third mode in `ComponentPicker` (two typed row memos — a union array defeats narrowing; element-count chip via ICU plural, empty-state hint), structure-tab **Templates** button + live library subscription, `onInsertTemplate` wired through EditPanel → playground (`structure:insert:<name>` revision), `TemplateSubtree` type moved to `structure.ts` (no import cycle), en/es keys (5); unit **748/748** (5 new insertTemplate tests incl. validateSpec-clean expansion, independent double-insert, root-only stamp, index clamp, guards), full e2e **125/125**, MCP spot-check: picker lists 2 templates with counts, search filters, insert into `pokemon-card` → 27→35 elements, **0 key collisions**, exactly one stamp matching the template id, appended, revision `structure:insert:Pokemon card block`, REPEAT marker preserved; post-refactor picker re-verified (rows + filter + close), console clean |
+| 2026-10-29 | **step 3 implemented + MCP-tested — feature complete** — `ComponentPicker` templates rows gained inline rename (Pencil → input with `draft ?? template.name`, Enter commits trimmed value, Escape cancels) + direct delete (Trash2, no confirm — matches the structure-tab Remove pattern); `onRenameTemplate`/`onDeleteTemplate` wired from the structure tab to `renameTemplate`/`removeTemplate`; en/es keys (4). **Escape-in-rename bug found + fixed**: React `event.stopPropagation()` cannot stop Radix — its Escape handler is registered **capture-phase on `document`** (runs before React's input handler) and React's synthetic `stopPropagation` doesn't reach it, so the whole dialog closed instead of cancelling the rename; fixed with `onEscapeKeyDown` on `DialogContent` calling `event.preventDefault()` while a rename is active (Radix honors `defaultPrevented`). New `e2e/templates.spec.ts` (2 tests): save → insert ×2 → level-edit independence → reload persistence; rename Enter/Escape → delete → empty hint → spec untouched. Gates: format/lint/tsc green, unit **748/748**, e2e **127/127** (125 + 2). MCP spot-check: rename Enter commits live (`Renamed live`), Escape cancels without touching the library, 2nd Escape closes the picker, delete removes the row + empties the library while the spec stays `structure:remove`/27 keys, empty-state hint visible on first delete and after reopening (a11y snapshot prunes non-option `listbox` children — DOM probe is ground truth), library restored afterwards (both templates rehydrate on reload) |
