@@ -26,6 +26,13 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
   **screen ref** (id → slug → in-project name) to a route and pushes it —
   `/ui/<ref>` in the editor, `/<locale>/<slug>` on preview/live surfaces — plus
   the editor affordance to author the binding (sibling-screen picker).
+  **Scope extension (2026-10-29)**: the action also carries **params** (e.g.
+  `id: {"$item": "id"}`, pre-resolved by the renderer at click time) appended
+  as **path segments**, and projects get a **route namespace**:
+  `/{locale}/{project-slug}` → project home screen, `/{locale}/{project-slug}/
+  {segment}` → in-project route resolution (exact screen slug first, then a
+  screen's spec-level `route` pattern like `"{id}"` binding the segment into
+  the target's state seed), so a detail screen loads the right record by id.
 - **A3 — shared data/state**: a **project-scoped data namespace**
   (`QueryLoader namespace = projectId` → `genui-data:{projectId}:…` /
   `genui_records.app_id = projectId`) **plus a shared `/session` subtree** — the
@@ -114,6 +121,23 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
    rejected: whole-project publish, because it drags in routing,
    `proxy.ts` `APP_SEGMENTS`, artifacts and the featured pointer — a different
    plan's worth of work on its own.
+9. **Project route namespace = `/{locale}/{project-slug}` with spec-level
+   `route` patterns** (added 2026-10-29, scope extension): the project slug
+   (derived from the name — "Pokédex app v2" → "Pokédex") names the namespace,
+   the project's home screen serves the bare segment, and a screen declares a
+   top-level `route: "{id}"` (same extension style as `urlSync`) so
+   `/en/pokedex/4` matches it and seeds `state./id = "4"` before mount — the
+   declared `get` query then fetches the record. `navigate` params ride the
+   existing dispatch pipeline: `emit` pre-resolves `$item`/`$state` with the
+   repeat scope (proven in `@json-render` core/react sources), the handler
+   derefs `/`-leading paths like `resolveRecordId` already does. Editor keeps
+   `/ui/<ref>[/<param>]`. — rejected: query params (`?id=4`), because the
+   requested URL shape is path-style `/pokedex/{id}`; rejected: one spec with
+   conditional grid/detail views, because the detail is a separate screen with
+   its own spec; rejected: `/{locale}/{screen-slug}` sub-routes, because screen
+   slugs are flat (no `/`) and per-screen publishing (056) already owns that
+   namespace. Decided with user sign-off on locale prefix (`/en/...` kept),
+   slug rename, and step order (params+routes before shared data).
 
 ## Step breakdown (commit per step)
 
@@ -122,7 +146,14 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 2. **061-2 — navigate**: catalog action + prompt rule (sibling screens listed in
    the user prompt), ref-resolution helper, handler on every surface
    (editor/preview/live), editor action tile with sibling select, unit tests
-3. **061-3 — shared data/state**: `QueryLoader namespace = projectId`,
+3. **061-3 — navigate params + project routes**: `navigate` params (extras
+   pre-resolved at dispatch, `$item` paths deref'd against state), spec-level
+   `route` pattern + `overlayPathState` path-param seeding, project `slug` +
+   home screen (rename "Pokédex app v2" → "Pokédex"), route resolution on
+   editor (`/ui/<ref>/<param>`) and preview (`/{locale}/{project-slug}[/{route}]`),
+   editor tile "send record id" toggle, hand-crafted PokéAPI detail spec as
+   the demo target (cards → detail with per-card id), unit tests + MCP
+4. **061-4 — shared data/state**: `QueryLoader namespace = projectId`,
    `/session` seed + write-through, e2e, full verification chain + MCP spot-check
 
 ## Verification
@@ -143,6 +174,11 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
       the navigate action tile writes a ref and routes to the sibling
 - [ ] MCP spot-check per step (create/switch project, navigate live, shared data
       visible on both screens), console clean
+- [ ] 061-3: `/{locale}/{project-slug}` serves the home screen;
+      `/{locale}/{project-slug}/{id}` seeds `/id` and the detail query fetches
+      that record; a card click carries the per-card id (`$item`) and lands on
+      the detail; editor `/ui/<ref>/<param>` mirrors it; screens without a
+      project/route behave exactly as before
 - [ ] i18n: en/es key sets identical for all new strings
 - [ ] No `progress.md` — plan.md + INDEX.md only
 
@@ -153,3 +189,5 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 | 2026-10-29 | plan drafted (Step 0: lessons grepped, `json-render` skill loaded, F15 re-read, persistence/routing/actions/data-source/prompt surfaces researched) |
 | 2026-10-29 | approved — clarifications answered per recommendation: local-only projects (Q1), project namespace + `/session` subtree (Q2), drawer grouping + top-bar switcher (Q3), publishing deferred to F18 (Q4), navigate tile ships in v1 (Q5) |
 | 2026-10-29 | 061-1 implemented — `lib/projects/projects.ts` store (+ active id), `HistoryEntry.projectId` (sync pull keeps the local grouping), history-drawer project groups with create/rename/switch/delete, top-bar `ProjectSwitcher` (pill + row), en/es `projects.*`; 760 unit / 127 e2e / i18n 306=306 / MCP spot-check (create, switch, rename via Enter, Escape cancels without closing the drawer, delete, mobile row) |
+| 2026-10-29 | **scope change (user-directed)** — the demo goal is a Pokédex detail screen linked from the grid cards with the record id: `navigate` gains params + a project route namespace (`/{locale}/{project-slug}`, `/{locale}/{project-slug}/{id}`), new step **061-3 = navigate params + project routes** (detail spec hand-crafted via JSON import; cards → same detail screen, per-card id; project renamed to "Pokédex"; locale prefix kept), shared data/state renumbered **061-4**. Design decisions #9 added; Q&A: locale `/en/...` ✓, rename ✓, 061-2 commits first ✓ |
+| 2026-10-29 | 061-2 implemented — catalog `navigate` action + `NAVIGATE_RULES`/`siblingScreensBlock` prompt pair, `lib/projects/screen-nav.ts` (scope + ref resolution + `runNavigate`), handlers on editor/preview/live, editor Navigate tile (`PRESSABLE_TYPES` gate, sibling select, `replaceNavigateBinding` preserves sibling press actions, stale-ref "Missing screen"), en/es `editor.navigate.*` + `playground.navigateUnknown`; 792 unit / i18n 311=311 / MCP: empty state on a 1-screen project, export→import sibling listed in the tile, binding written (`setState` sibling preserved), canvas click routes `/en/ui/b83b31fd…` → `/en/ui/d4c9fd10…`; console clean (known Radix aria-hidden warn + transient Supabase `ERR_ADDRESS_UNREACHABLE` poll) |
