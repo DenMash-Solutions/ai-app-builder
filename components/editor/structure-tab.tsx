@@ -1,12 +1,15 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { MoveDirection } from "@/lib/editor";
+import type { ComponentTemplate, MoveDirection } from "@/lib/editor";
 import {
   MOVE_DIRECTIONS,
   elementMarkers,
   findParentKey,
+  getServerTemplates,
+  getTemplates,
   saveTemplate,
+  subscribeTemplates,
 } from "@/lib/editor";
 import { isContainerType, pickerItems } from "@/lib/playground/catalog";
 import type { Spec, UIElement } from "@json-render/core";
@@ -16,12 +19,13 @@ import {
   BookmarkPlus,
   Copy,
   Group,
+  LayoutTemplate,
   Plus,
   Trash2,
   Ungroup,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useSyncExternalStore, useState } from "react";
 import type { PickerMode } from "./component-picker";
 import { ComponentPicker, PICKER_MODES } from "./component-picker";
 import { SaveTemplateDialog } from "./save-template-dialog";
@@ -40,6 +44,8 @@ interface StructureTabProps {
   onUnwrap: (key: string) => void;
   onMove: (key: string, direction: MoveDirection) => void;
   onDuplicate: (key: string) => void;
+  /** Copy-expand a saved template under `parentKey` (plan 060 step 2). */
+  onInsertTemplate: (template: ComponentTemplate, parentKey: string) => void;
 }
 
 /**
@@ -58,10 +64,18 @@ export function StructureTab({
   onUnwrap,
   onMove,
   onDuplicate,
+  onInsertTemplate,
 }: StructureTabProps) {
   const t = useTranslations();
   const [picker, setPicker] = useState<PickerMode | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  // Live view of the visitor-level library — saves/renames/deletes in any
+  // panel refresh the list without a remount.
+  const templates = useSyncExternalStore(
+    subscribeTemplates,
+    getTemplates,
+    getServerTemplates,
+  );
 
   const children = element.children ?? [];
   const ownMarkers = elementMarkers(element);
@@ -83,6 +97,12 @@ export function StructureTab({
     setPicker(null);
   };
 
+  const handlePickTemplate = (id: string) => {
+    const template = templates.find((entry) => entry.id === id);
+    if (template && insertTarget) onInsertTemplate(template, insertTarget);
+    setPicker(null);
+  };
+
   return (
     <div className="flex flex-col gap-3 px-3 py-3">
       <div className="flex flex-wrap gap-1.5">
@@ -101,6 +121,23 @@ export function StructureTab({
         >
           <Plus className="h-3.5 w-3.5" />
           {t("editor.structure.insert")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={ACTION_BUTTON_CLASS}
+          disabled={!insertTarget}
+          aria-label={t("editor.structure.templates")}
+          title={
+            insertTarget
+              ? t("editor.structure.insertInto", { key: insertTarget })
+              : undefined
+          }
+          onClick={() => setPicker(PICKER_MODES.templates)}
+        >
+          <LayoutTemplate className="h-3.5 w-3.5" />
+          {t("editor.structure.templates")}
         </Button>
         <Button
           type="button"
@@ -242,11 +279,17 @@ export function StructureTab({
         <ComponentPicker
           mode={picker}
           open
-          items={pickerItems(picker === PICKER_MODES.group)}
+          items={
+            picker === PICKER_MODES.templates
+              ? []
+              : pickerItems(picker === PICKER_MODES.group)
+          }
+          templates={templates}
           onOpenChange={(open) => {
             if (!open) setPicker(null);
           }}
           onPick={handlePick}
+          onPickTemplate={handlePickTemplate}
         />
       )}
     </div>

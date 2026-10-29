@@ -15,16 +15,12 @@
  * session).
  */
 
-import { subtreeKeys } from "@/lib/editor/structure";
+import { subtreeKeys, type TemplateSubtree } from "@/lib/editor/structure";
 import type { Spec } from "@json-render/core";
 
 export const TEMPLATE_STORAGE_KEY = "genui-component-templates";
 
-/** Detached copy of one element and its descendants, keyed independently of any spec. */
-export interface TemplateSubtree {
-  rootKey: string;
-  elements: Spec["elements"];
-}
+export type { TemplateSubtree };
 
 export interface ComponentTemplate {
   id: string;

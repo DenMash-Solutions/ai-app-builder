@@ -10,11 +10,13 @@ import {
   findParentKey,
   getAncestorPath,
   insertElement,
+  insertTemplate,
   moveElement,
   moveSibling,
   removeElement,
   resolveMoveTarget,
   structureRevisionLabel,
+  type TemplateSubtree,
   unwrapElement,
   wrapElement,
 } from "./structure";
@@ -482,6 +484,154 @@ describe("duplicateElement", () => {
 
   test("refuses to duplicate the root", () => {
     expect(duplicateElement(makeSpec(), "card-1")).toBeNull();
+  });
+});
+
+describe("insertTemplate", () => {
+  const SNAPSHOT: TemplateSubtree = {
+    rootKey: "tpl-root",
+    elements: {
+      "tpl-root": {
+        type: "Stack",
+        props: {},
+        children: ["tpl-body"],
+        slots: { footer: ["tpl-btn"] },
+      },
+      "tpl-body": { type: "Text", props: { text: "Hi" } },
+      "tpl-btn": { type: "Button", props: { label: "Go" } },
+    },
+  };
+
+  const snapshotOfStack = (): TemplateSubtree => ({
+    rootKey: "stack-1",
+    elements: {
+      "stack-1": {
+        type: "Stack",
+        props: { direction: "vertical" },
+        children: ["text-1", "button-1"],
+      },
+      "text-1": { type: "Text", props: { text: "Body" } },
+      "button-1": { type: "Button", props: { label: "Go" } },
+    },
+  });
+
+  test("expands with fresh keys and remaps children and slots", () => {
+    const spec = makeSpec();
+    const result = insertTemplate(spec, {
+      parentKey: "card-1",
+      subtree: SNAPSHOT,
+      templateId: "tpl-1",
+    });
+
+    expect(result).not.toBeNull();
+    // Every key collides with the spec's own keys → all fresh.
+    expect(result!.key).toBe("stack-2");
+    expect(result!.spec.elements["stack-2"].children).toEqual(["text-2"]);
+    expect(result!.spec.elements["stack-2"].slots).toEqual({
+      footer: ["button-2"],
+    });
+    expect(result!.spec.elements["text-2"].props.text).toBe("Hi");
+    expect(result!.spec.elements["button-2"].props.label).toBe("Go");
+    expect(result!.spec.elements["card-1"].children).toEqual([
+      "heading",
+      "stack-1",
+      "stack-2",
+    ]);
+    expect(validateSpec(result!.spec).issues).toEqual([]);
+  });
+
+  test("stamps data-template-id on the expanded root only", () => {
+    const result = insertTemplate(makeSpec(), {
+      parentKey: "card-1",
+      subtree: SNAPSHOT,
+      templateId: "tpl-42",
+    });
+
+    expect(result!.spec.elements["stack-2"].props["data-template-id"]).toBe(
+      "tpl-42",
+    );
+    // Descendants stay unstamped, and the snapshot source is untouched.
+    expect(result!.spec.elements["text-2"].props["data-template-id"]).toBe(
+      undefined,
+    );
+    expect(SNAPSHOT.elements["tpl-root"].props["data-template-id"]).toBe(
+      undefined,
+    );
+  });
+
+  test("two inserts of the same template are independent copies", () => {
+    const spec = makeSpec();
+    const first = insertTemplate(spec, {
+      parentKey: "card-1",
+      subtree: snapshotOfStack(),
+      templateId: "tpl-1",
+    })!;
+    const second = insertTemplate(first.spec, {
+      parentKey: "card-1",
+      subtree: snapshotOfStack(),
+      templateId: "tpl-1",
+    })!;
+
+    expect(first.key).not.toBe(second.key);
+    expect(second.spec.elements[first.key]).toBeDefined();
+    // Editing copy A never leaks into copy B (or the source snapshot).
+    first.spec.elements[first.key].props.direction = "horizontal";
+    first.spec.elements[first.key].children!.push("heading");
+    expect(second.spec.elements[second.key].props.direction).toBe("vertical");
+    expect(second.spec.elements[second.key].children).toEqual([
+      "text-3",
+      "button-3",
+    ]);
+    expect(second.spec.elements["stack-1"].props.direction).toBe("vertical");
+  });
+
+  test("appends by default and clamps an explicit index", () => {
+    const spec = makeSpec();
+    const appended = insertTemplate(spec, {
+      parentKey: "card-1",
+      subtree: SNAPSHOT,
+      templateId: "t",
+    })!;
+    expect(appended.spec.elements["card-1"].children).toEqual([
+      "heading",
+      "stack-1",
+      appended.key,
+    ]);
+
+    const first = insertTemplate(spec, {
+      parentKey: "card-1",
+      subtree: SNAPSHOT,
+      templateId: "t",
+      index: 0,
+    })!;
+    const firstChildren = first.spec.elements["card-1"].children ?? [];
+    expect(firstChildren[0]).toBe(first.key);
+
+    const clamped = insertTemplate(spec, {
+      parentKey: "card-1",
+      subtree: SNAPSHOT,
+      templateId: "t",
+      index: 99,
+    })!;
+    const clampedChildren = clamped.spec.elements["card-1"].children ?? [];
+    expect(clampedChildren[clampedChildren.length - 1]).toBe(clamped.key);
+  });
+
+  test("refuses a missing parent or a missing snapshot root", () => {
+    expect(
+      insertTemplate(makeSpec(), {
+        parentKey: "ghost",
+        subtree: SNAPSHOT,
+        templateId: "t",
+      }),
+    ).toBeNull();
+    expect(
+      insertTemplate(makeSpec(), {
+        parentKey: "card-1",
+        subtree: { rootKey: "ghost", elements: SNAPSHOT.elements },
+        templateId: "t",
+      }),
+    ).toBeNull();
   });
 });
 

@@ -275,6 +275,7 @@
     "structure": {
       "breadcrumb": "Element path",
       "insert": "Insert",
+      "templates": "Templates",
       "insertInto": "Insert into {key}",
       "group": "Group",
       "ungroup": "Ungroup",
@@ -300,6 +301,10 @@
       "description": "Pick a component to add to the layout.",
       "search": "Search components…",
       "containerChip": "container",
+      "templatesTitle": "Insert template",
+      "templatesDescription": "Pick a saved template to insert into this element.",
+      "templatesEmpty": "No templates yet — select an element and use \"Save as template\" in the Structure tab.",
+      "templateCount": "{count, plural, one {# element} other {# elements}}",
       "noMatches": "No components match your search"
     },
     "generalActions": {

@@ -54,6 +54,7 @@ import {
   freeformRevisionLabel,
   getAncestorPath,
   insertElement,
+  insertTemplate,
   moveElement,
   moveSibling,
   promptRevisionLabel,
@@ -70,6 +71,7 @@ import {
   wrapElement,
 } from "@/lib/editor";
 import type {
+  ComponentTemplate,
   InstanceChain,
   MoveDirection,
   PromptScopeTarget,
@@ -1205,6 +1207,25 @@ export function Playground({ initialRef }: PlaygroundProps) {
     );
   };
 
+  // Copy-expand a saved template (plan 060 step 2): fresh keys, provenance
+  // stamp on the expanded root, revision labeled with the template name.
+  const handleInsertTemplate = (
+    template: ComponentTemplate,
+    parentKey: string,
+  ) => {
+    if (!displayedSpec || !activeEntry || isStreaming) return;
+    const result = insertTemplate(displayedSpec, {
+      parentKey,
+      subtree: template.subtree,
+      templateId: template.id,
+    });
+    commitStructure(
+      result?.spec ?? null,
+      structureRevisionLabel(STRUCTURE_OPS.insert, template.name),
+      result?.key,
+    );
+  };
+
   const handleRemove = (key: string) => {
     if (!displayedSpec || !activeEntry || isStreaming) return;
     commitStructure(
@@ -1858,6 +1879,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
             onUnwrap={handleUnwrap}
             onMove={handleMove}
             onDuplicate={handleDuplicate}
+            onInsertTemplate={handleInsertTemplate}
             inPromptScope={selectionInScope}
             onTogglePromptScope={() => {
               if (effectiveKey) {

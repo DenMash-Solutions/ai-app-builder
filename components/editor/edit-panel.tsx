@@ -21,7 +21,11 @@ import {
   getClassSuggestions,
   resolveInstanceScope,
 } from "@/lib/editor";
-import type { InstanceChain, MoveDirection } from "@/lib/editor";
+import type {
+  ComponentTemplate,
+  InstanceChain,
+  MoveDirection,
+} from "@/lib/editor";
 import { ActionTiles } from "./action-tiles";
 import { PropertyForm } from "./property-form";
 import { StatesTab } from "./states-tab";
@@ -97,6 +101,8 @@ interface EditPanelProps {
   onUnwrap: (key: string) => void;
   onMove: (key: string, direction: MoveDirection) => void;
   onDuplicate: (key: string) => void;
+  /** Copy-expand a saved template under `parentKey` (plan 060 step 2). */
+  onInsertTemplate: (template: ComponentTemplate, parentKey: string) => void;
   /** True when this element is in the prompt scope (main-prompt chips). */
   inPromptScope: boolean;
   onTogglePromptScope: () => void;
@@ -132,6 +138,7 @@ export function EditPanel({
   onUnwrap,
   onMove,
   onDuplicate,
+  onInsertTemplate,
   inPromptScope,
   onTogglePromptScope,
   promptScopeInstanceCount,
@@ -546,6 +553,7 @@ export function EditPanel({
               onUnwrap={onUnwrap}
               onMove={onMove}
               onDuplicate={onDuplicate}
+              onInsertTemplate={onInsertTemplate}
             />
           </>
         )}

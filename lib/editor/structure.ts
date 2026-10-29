@@ -482,6 +482,91 @@ function uniqueKeyFor(
   }
 }
 
+/**
+ * Isolated snapshot of one element and its descendants (plan 060) — the stored
+ * shape of a component template, keyed independently of any live spec.
+ */
+export interface TemplateSubtree {
+  rootKey: string;
+  elements: Spec["elements"];
+}
+
+/**
+ * Expands `subtree` into `spec` under `parentKey` with fresh keys — the same
+ * remap `duplicateElement` uses — and stamps `data-template-id` on the
+ * expanded root for provenance (copy-expand semantics, plan 060). Copies are
+ * independent: inserting the same template twice yields two unrelated
+ * subtrees. Returns `null` when the parent or the snapshot root is missing.
+ */
+export function insertTemplate(
+  spec: Spec,
+  request: {
+    parentKey: string;
+    subtree: TemplateSubtree;
+    templateId: string;
+    index?: number;
+  },
+): StructureResult | null {
+  const parent = spec.elements[request.parentKey];
+  const { subtree } = request;
+  if (!parent || !subtree.elements[subtree.rootKey]) return null;
+
+  // Traverse the detached snapshot through the same helper duplicateElement
+  // uses — a pseudo-spec rooted at the snapshot's root.
+  const members = subtreeKeys(
+    { root: subtree.rootKey, elements: subtree.elements },
+    subtree.rootKey,
+  );
+
+  const keyMap = new Map<string, string>();
+  for (const member of members) {
+    keyMap.set(
+      member,
+      uniqueKeyFor(spec, subtree.elements[member].type, keyMap),
+    );
+  }
+
+  const newRoot = keyMap.get(subtree.rootKey) as string;
+  const elements: Spec["elements"] = { ...spec.elements };
+  for (const member of members) {
+    const source = subtree.elements[member];
+    const newKey = keyMap.get(member) as string;
+    const clone: UIElement = {
+      ...source,
+      // Provenance: stamped on the expanded ROOT only — descendants keep their
+      // own props (a `data-*` prop passes renderers without warnings).
+      props:
+        member === subtree.rootKey
+          ? { ...source.props, "data-template-id": request.templateId }
+          : source.props,
+      children: (source.children ?? []).map(
+        (child) => keyMap.get(child) ?? child,
+      ),
+      ...(source.slots
+        ? {
+            slots: Object.fromEntries(
+              Object.entries(source.slots).map(([name, slotKeys]) => [
+                name,
+                slotKeys.map((child) => keyMap.get(child) ?? child),
+              ]),
+            ),
+          }
+        : {}),
+    };
+    elements[newKey] = clone;
+  }
+
+  const children = [...(parent.children ?? [])];
+  const index =
+    request.index === undefined
+      ? children.length
+      : Math.max(0, Math.min(request.index, children.length));
+  children.splice(index, 0, newRoot);
+  elements[request.parentKey] = { ...parent, children };
+
+  return { key: newRoot, spec: { ...spec, elements } };
+}
+
 export function structureRevisionLabel(
   op: StructureOp,
   detail?: string,

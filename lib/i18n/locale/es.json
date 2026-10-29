@@ -275,6 +275,7 @@
     "structure": {
       "breadcrumb": "Ruta del elemento",
       "insert": "Insertar",
+      "templates": "Plantillas",
       "insertInto": "Insertar en {key}",
       "group": "Agrupar",
       "ungroup": "Desagrupar",
@@ -300,6 +301,10 @@
       "description": "Elige un componente para añadirlo a la composición.",
       "search": "Buscar componentes…",
       "containerChip": "contenedor",
+      "templatesTitle": "Insertar plantilla",
+      "templatesDescription": "Elige una plantilla guardada para insertarla en este elemento.",
+      "templatesEmpty": "Aún no hay plantillas — selecciona un elemento y usa «Guardar como plantilla» en la pestaña Estructura.",
+      "templateCount": "{count, plural, one {# elemento} other {# elementos}}",
       "noMatches": "Ningún componente coincide con tu búsqueda"
     },
     "generalActions": {
