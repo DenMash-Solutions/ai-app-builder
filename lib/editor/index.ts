@@ -8,3 +8,4 @@ export * from "./state-overrides";
 export * from "./style-text";
 export * from "./structure";
 export * from "./suggestions";
+export * from "./templates";

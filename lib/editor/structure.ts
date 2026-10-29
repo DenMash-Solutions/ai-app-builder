@@ -62,7 +62,8 @@ function uniqueKey(spec: Spec, type: string): string {
   }
 }
 
-function subtreeKeys(spec: Spec, key: string): string[] {
+/** All keys in `key`'s subtree (`key` first, then children and slot members). */
+export function subtreeKeys(spec: Spec, key: string): string[] {
   const collected: string[] = [];
   const visit = (currentKey: string) => {
     collected.push(currentKey);

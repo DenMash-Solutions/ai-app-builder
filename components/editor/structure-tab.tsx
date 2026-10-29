@@ -2,12 +2,18 @@
 
 import { Button } from "@/components/ui/button";
 import type { MoveDirection } from "@/lib/editor";
-import { MOVE_DIRECTIONS, elementMarkers, findParentKey } from "@/lib/editor";
+import {
+  MOVE_DIRECTIONS,
+  elementMarkers,
+  findParentKey,
+  saveTemplate,
+} from "@/lib/editor";
 import { isContainerType, pickerItems } from "@/lib/playground/catalog";
 import type { Spec, UIElement } from "@json-render/core";
 import {
   ArrowDown,
   ArrowUp,
+  BookmarkPlus,
   Copy,
   Group,
   Plus,
@@ -18,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { PickerMode } from "./component-picker";
 import { ComponentPicker, PICKER_MODES } from "./component-picker";
+import { SaveTemplateDialog } from "./save-template-dialog";
 import { SpecMarkers } from "./spec-markers";
 
 const ACTION_BUTTON_CLASS = "dark gap-1 px-2 text-xs";
@@ -54,6 +61,7 @@ export function StructureTab({
 }: StructureTabProps) {
   const t = useTranslations();
   const [picker, setPicker] = useState<PickerMode | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
 
   const children = element.children ?? [];
   const ownMarkers = elementMarkers(element);
@@ -133,6 +141,19 @@ export function StructureTab({
           type="button"
           variant="outline"
           size="sm"
+          className={ACTION_BUTTON_CLASS}
+          disabled={isRoot}
+          aria-label={t("editor.structure.saveTemplate")}
+          title={t("editor.structure.saveTemplate")}
+          onClick={() => setSaveOpen(true)}
+        >
+          <BookmarkPlus className="h-3.5 w-3.5" />
+          {t("editor.structure.saveTemplate")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           className={`${ACTION_BUTTON_CLASS} text-destructive hover:text-destructive`}
           disabled={isRoot}
           aria-label={t("editor.structure.remove")}
@@ -205,6 +226,17 @@ export function StructureTab({
           );
         })}
       </div>
+
+      {saveOpen && (
+        <SaveTemplateDialog
+          open
+          onOpenChange={setSaveOpen}
+          onSave={(name) => {
+            saveTemplate(name, spec, elementKey);
+            setSaveOpen(false);
+          }}
+        />
+      )}
 
       {picker && (
         <ComponentPicker
