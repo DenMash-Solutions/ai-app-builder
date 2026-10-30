@@ -69,6 +69,7 @@ import {
   scopeInstruction,
   scopeTargetId,
   scopeTargetsInstruction,
+  setNavigateRecordParam,
   structureRevisionLabel,
   unwrapElement,
   wrapElement,
@@ -84,8 +85,6 @@ import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
 import {
-  NAVIGATE_ACTION,
-  runNavigate,
   screenScope,
   screensInScope,
   toScreenListings,
@@ -131,6 +130,7 @@ import { normalizeSpecCopy } from "@/lib/i18n/spec-normalize";
 import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
 import { QueryLoader } from "@/components/data-sources/query-loader";
+import { NavigateHandler } from "@/components/projects/navigate-handler";
 import {
   describeDataIssues,
   validateDataSources,
@@ -147,6 +147,11 @@ import {
   specUrlSync,
   urlSearchAfterStateChange,
 } from "@/lib/playground/url-sync";
+import {
+  matchRoutePattern,
+  overlayPathState,
+  specRoutePattern,
+} from "@/lib/projects/screen-routes";
 import { AddLanguageDialog } from "@/components/playground/add-language-dialog";
 import {
   SPEC_STATE_KEYS,
@@ -220,13 +225,22 @@ type RouteStatus = "pending" | "ready" | "missing";
 interface PlaygroundProps {
   /** Entry ref (id or slug) from the `/ui/[ref]` route — absent on the `/` landing. */
   initialRef?: string;
+  /**
+   * Path segments below the ref (`/ui/<ref>/4` → `["4"]`) from the
+   * `[[...param]]` catch-all — the record path a `navigate` built for this
+   * screen, overlaid onto the canvas seed below (061-3, §B). Absent on the
+   * plain `/ui/<ref>` route and the `/` landing.
+   */
+  initialParam?: string[];
 }
 
-export function Playground({ initialRef }: PlaygroundProps) {
+export function Playground({ initialRef, initialParam }: PlaygroundProps) {
   const t = useTranslations();
   const locale = useLocale();
   const router = useRouter();
   const routeRef = initialRef ?? null;
+  const routeParamPath =
+    initialParam && initialParam.length > 0 ? initialParam.join("/") : null;
   const history = useSyncExternalStore(
     subscribeHistory,
     getHistory,
@@ -658,14 +672,26 @@ export function Playground({ initialRef }: PlaygroundProps) {
     // BEFORE the canvas mounts — the first paged read already runs at the
     // linked page. Client-only: window is absent during SSR (the seed
     // renders there and the overlay joins on hydration).
-    return typeof window === "undefined"
-      ? seeded
-      : overlayUrlState(
-          seeded,
-          window.location.search,
-          specUrlSync(displayedSpec),
-        );
-  }, [displayedSpec, contentLang]);
+    const withUrl =
+      typeof window === "undefined"
+        ? seeded
+        : overlayUrlState(
+            seeded,
+            window.location.search,
+            specUrlSync(displayedSpec),
+          );
+    // Record path (061-3, §B): `/ui/<ref>/<param>` overlays LAST — the URL
+    // path wins over the query — and, unlike the window-guarded urlSync
+    // overlay, it applies during SSR too. Only the spec's own `route`
+    // pattern captures (`{id}`); an unmatchable path seeds nothing.
+    const pattern = specRoutePattern(displayedSpec);
+    return overlayPathState(
+      withUrl,
+      pattern && routeParamPath
+        ? matchRoutePattern(pattern, routeParamPath)
+        : null,
+    );
+  }, [displayedSpec, contentLang, routeParamPath]);
   // The design's own switcher writes state.locale at runtime — treat that as
   // a content-language selection so canvas and pill always agree (the pill's
   // onChange does the same in reverse). Only real tags the spec carries
@@ -723,31 +749,20 @@ export function Playground({ initialRef }: PlaygroundProps) {
       writeContentLang(activeEntry?.id ?? null, tag);
     };
   });
-  // Screen navigation (061, decision 4): the ref resolves against this
-  // device's screens in the current scope and pushes /ui/[id]; an unknown
-  // ref warns and toasts — never throws (a stale link must not break the
-  // screen). Same stable-once-behind-a-ref seam as switch_language.
-  const navigateRef = useRef<(params: Record<string, unknown>) => void>(
-    () => {},
-  );
-  useEffect(() => {
-    navigateRef.current = (params) => {
-      if (isStreaming) return;
-      const ok = runNavigate(params, {
-        entries: history,
-        scope: screenScope(activeEntry),
-        surface: "editor",
-        navigate: (route) => router.push(route),
-      });
+  // Screen navigation (061, decision 4): registered INSIDE the provider by
+  // NavigateHandler (061-3) — it needs the state snapshot to deref $item
+  // path params, which a handlers-prop closure outside the provider has no
+  // access to. This seam only owns the playground's toast on a failed ref.
+  const navigateResult = useCallback(
+    (ok: boolean) => {
       if (!ok) toast.error(t("playground.navigateUnknown"));
-    };
-  });
+    },
+    [t],
+  );
   const handlers = useMemo(
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
-      [NAVIGATE_ACTION]: (params: Record<string, unknown>) =>
-        navigateRef.current(params),
     }),
     [],
   );
@@ -1254,6 +1269,19 @@ export function Playground({ initialRef }: PlaygroundProps) {
     updateEntry(updated);
   };
 
+  // The record-id toggle's write path (061-3, §C): same undoable commit as
+  // the target select. `setNavigateRecordParam` returns the spec untouched
+  // for a no-op (already-on / nothing-to-clear), so no spurious revision.
+  const handleNavigateRecordChange = (paramKey: string | null) => {
+    if (!displayedSpec || !selectedKey || !routeEntry || isStreaming) return;
+    const element = displayedSpec.elements[selectedKey];
+    if (!element) return;
+    const next = setNavigateRecordParam(displayedSpec, selectedKey, paramKey);
+    if (next === displayedSpec) return;
+    const updated = commitRevision(routeEntry, next, navigateRevisionLabel());
+    updateEntry(updated);
+  };
+
   // Structural edits are local deterministic ops — same commit path as prop
   // edits (undoable revisions), with an explicit selection target so focus
   // follows the operation (insert→new, remove→parent, move→stay).
@@ -1710,6 +1738,17 @@ export function Playground({ initialRef }: PlaygroundProps) {
           namespace={activeEntry?.id ?? LOCAL_DATA_NAMESPACE}
         />
       )}
+      {/* Navigate (061-3): registered inside the provider so it can deref
+          $item path params against the live snapshot. The editor's route
+          form ignores the project namespace, so no `projects` here. */}
+      <NavigateHandler
+        surface="editor"
+        entries={() => history}
+        scope={() => screenScope(activeEntry)}
+        navigate={(route) => router.push(route)}
+        guard={() => !isStreaming}
+        onResult={navigateResult}
+      />
       <div
         data-canvas
         className="dot-grid relative flex h-[100dvh] w-full flex-col overflow-hidden md:flex-row"
@@ -1952,6 +1991,7 @@ export function Playground({ initialRef }: PlaygroundProps) {
             onConditionChange={handleConditionChange}
             screens={siblingScreens}
             onNavigateChange={handleNavigateChange}
+            onRecordChange={handleNavigateRecordChange}
             onAction={handleAction}
             onInsert={handleInsert}
             onRemove={handleRemove}

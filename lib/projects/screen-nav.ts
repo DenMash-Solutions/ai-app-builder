@@ -25,10 +25,20 @@
  * Failure is loud-but-safe (decision 4): `console.warn` everywhere, and a
  * `false` return the editor turns into a toast — a stale ref never throws.
  */
-import { getActiveProjectId } from "./projects";
+import { getByPath } from "@json-render/core";
+import { getActiveProjectId, type Project } from "./projects";
+import {
+  buildRoutePath,
+  projectHomeScreenId,
+  routePatternParams,
+  specRoutePattern,
+} from "./screen-routes";
 
-/** The declared catalog action (params: `{ screen: <ref> }`). */
+/** The declared catalog action (params: `{ screen: <ref>, … }`). */
 export const NAVIGATE_ACTION = "navigate";
+
+/** The one param that names the target; every other param is a route value. */
+const SCREEN_KEY = "screen";
 
 /** Which surface is resolving — decides the route form it can push. */
 export type ScreenSurface = "editor" | "preview" | "live";
@@ -41,20 +51,31 @@ export interface ScreenTarget {
   id: string;
   slug?: string | undefined;
   name: string;
+  /** Which project's route namespace the screen sits in (061-3). */
+  projectId?: string | undefined;
+  /** The screen's spec — carries the top-level `route` pattern. */
+  spec?: unknown;
 }
 
-/** Structural shape of a history entry as far as navigation cares. */
+/**
+ * Structural shape of a history entry as far as navigation cares — the
+ * entry itself (plus the ordering hint the home-screen rule reads).
+ */
 export interface ScreenSource extends ScreenTarget {
-  projectId?: string | undefined;
+  createdAt?: number | undefined;
 }
 
 /**
  * The `{ref, name}` pair the prompt lists and the editor tile offers — `ref`
  * is the screen id (stable; resolution falls back to slug/name anyway).
+ * `route` (061-3) is the target's spec-level route pattern — the tile reads
+ * it to offer the "send record id" toggle when the pattern declares a
+ * placeholder; the prompt block ignores it.
  */
 export interface ScreenListing {
   ref: string;
   name: string;
+  route?: string | null;
 }
 
 /** Filter entries down to the screens a ref may resolve to. */
@@ -121,7 +142,28 @@ export function screenScope(
 export function toScreenListings(
   screens: readonly ScreenTarget[],
 ): ScreenListing[] {
-  return screens.map((screen) => ({ ref: screen.id, name: screen.name }));
+  return screens.map((screen) => ({
+    ref: screen.id,
+    name: screen.name,
+    route: specRoutePattern(screen.spec),
+  }));
+}
+
+/**
+ * The record param a `navigate` target expects (061-3, §C): the FIRST
+ * `{placeholder}` of the selected screen's route pattern, or null when the
+ * target declares no pattern (the "send record id" toggle then has nothing
+ * to write). One derivation shared by the tile (show/hide + the key it
+ * writes) and the edit panel (the element's current state for that key).
+ */
+export function recordRouteParam(
+  screens: readonly ScreenListing[],
+  ref: string | null,
+): string | null {
+  if (ref === null) return null;
+  const target = screens.find((screen) => screen.ref === ref);
+  if (!target?.route) return null;
+  return routePatternParams(target.route)[0] ?? null;
 }
 
 export interface NavigateContext {
@@ -130,32 +172,119 @@ export interface NavigateContext {
   surface: ScreenSurface;
   /** Required for `preview`/`live` (`/{locale}/{slug}`), ignored by the editor. */
   locale?: string;
+  /**
+   * Projects for the route namespace (061-3, decision 9) — editor and
+   * preview pass them; `live` stays flat (published rows carry no projectId,
+   * multi-screen publishing is F18).
+   */
+  projects?: readonly Project[];
+  /**
+   * Live state for deref: the renderer pre-resolves `{"$item": "id"}` params
+   * to the record's ABSOLUTE state path (same as `data_mutate`, see
+   * `resolveRecordId`) — a `/`-leading string is read against this snapshot.
+   */
+  state?: Record<string, unknown>;
   /** Injected push — the editor uses the i18n router, public surfaces raw. */
   navigate: (route: string) => void;
 }
 
 /**
- * Run a `navigate` binding: resolve `params.screen` inside the scope and
- * push its route. Returns whether it navigated — `false` means the ref (or
- * the route) could not be resolved; the caller warns via this function and
- * the editor adds a toast (decision 4).
+ * Resolve one navigate param: `/`-leading strings are dereferenced against
+ * the state snapshot (the `$item` path the renderer emitted), everything
+ * else passes through. No snapshot → the path is unresolvable (`undefined`),
+ * which the route build treats as a missing param.
+ */
+function resolveNavParam(
+  value: unknown,
+  state: Record<string, unknown> | undefined,
+): unknown {
+  if (typeof value === "string" && value.startsWith("/")) {
+    return state ? getByPath(state, value) : undefined;
+  }
+  return value;
+}
+
+/**
+ * The route for a resolved screen + params (decision 9):
+ *
+ * - editor → `/ui/<ref>[/<built>]` (its optional catch-all carries params
+ *   for any screen, project or not),
+ * - preview, target in a project → `/{locale}/{project-slug}` + built path
+ *   when the target's `route` pattern builds (the target's own slug is
+ *   skipped — the pattern names the route); otherwise the bare namespace:
+ *   the home screen serves the bare segment, every other screen its slug,
+ * - preview, no project → today's `/{locale}/{slug}` (+ built path when a
+ *   pattern exists).
+ *
+ * Params that cannot build (no pattern, missing/unresolvable value) are
+ * **dropped with a warning** and the bare route is pushed — loud but safe.
+ */
+function buildNavigateRoute(
+  target: ScreenTarget,
+  params: Record<string, unknown>,
+  context: NavigateContext,
+): string | null {
+  const wanted = Object.keys(params).length > 0;
+  const pattern = specRoutePattern(target.spec);
+  const built =
+    wanted && pattern !== null ? buildRoutePath(pattern, params) : null;
+  if (wanted && built === null) {
+    console.warn(
+      `[navigate] screen ${target.id}: params ${JSON.stringify(params)} ` +
+        `do not build against route ${JSON.stringify(pattern)} — ` +
+        `navigating without them`,
+    );
+  }
+
+  if (context.surface === "editor") {
+    return built !== null ? `/ui/${target.id}/${built}` : `/ui/${target.id}`;
+  }
+
+  const { locale } = context;
+  if (typeof locale !== "string" || locale === "") return null;
+
+  const project =
+    context.projects?.find((candidate) => candidate.id === target.projectId) ??
+    null;
+  if (project === null) {
+    const base = `/${locale}/${target.slug ?? target.id}`;
+    return built !== null ? `${base}/${built}` : base;
+  }
+  if (built !== null) return `/${locale}/${project.slug}/${built}`;
+  const homeId = projectHomeScreenId(project, context.entries);
+  if (target.id === homeId) return `/${locale}/${project.slug}`;
+  return `/${locale}/${project.slug}/${target.slug ?? target.id}`;
+}
+
+/**
+ * Run a `navigate` binding: resolve `params.screen` inside the scope, deref
+ * every extra param against the state snapshot and push the route the target
+ * implies (project namespace + params when available — {@link buildNavigateRoute}).
+ * Returns whether it navigated — `false` means the ref (or the route) could
+ * not be resolved; the caller warns via this function and the editor adds a
+ * toast (decision 4).
  */
 export function runNavigate(
   params: Record<string, unknown>,
   context: NavigateContext,
 ): boolean {
   const target = resolveScreenRef(
-    params.screen,
+    params[SCREEN_KEY],
     screensInScope(context.entries, context.scope),
   );
   if (target === null) {
     console.warn(
-      `[navigate] no screen matches ref ${JSON.stringify(params.screen)} ` +
+      `[navigate] no screen matches ref ${JSON.stringify(params[SCREEN_KEY])} ` +
         `in scope ${JSON.stringify(context.scope)} — the link may be stale`,
     );
     return false;
   }
-  const route = screenRoute(target, context.surface, context.locale);
+  const routeParams: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key === SCREEN_KEY) continue;
+    routeParams[key] = resolveNavParam(value, context.state);
+  }
+  const route = buildNavigateRoute(target, routeParams, context);
   if (route === null) {
     console.warn(
       `[navigate] screen ${target.id} has no route on ${context.surface} ` +

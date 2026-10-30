@@ -23,6 +23,15 @@ export const ACTIVE_PROJECT_STORAGE_KEY = "genui-active-project";
 export interface Project {
   id: string;
   name: string;
+  /**
+   * URL namespace segment (plan 061-3, decision 9): `/{locale}/{slug}` is
+   * this project's route root — the home screen serves the bare segment and
+   * in-project routes (`/pokedex/4`) resolve below it. Derived from the name
+   * (NFD + diacritics stripped, "Pokédex" → "pokedex"), unique-ified within
+   * the store, re-derived on rename. Device-local like the rest of the
+   * entity (F17 would sync it).
+   */
+  slug: string;
   createdAt: number;
   /** Last rename — the timestamp grouping headers sort/refresh on. */
   updatedAt: number;
@@ -42,10 +51,68 @@ function isValidProject(value: unknown): value is Project {
   );
 }
 
-/** Drop anything that doesn't parse as a project — corrupt entries never reach the UI. */
+/**
+ * The URL segment for a project name: NFD-normalized (so "Pokédex" →
+ * "pokedex"), lowercased, non-alphanumerics collapsed to `-`, trimmed.
+ * Unsluggable names collapse to `project` — a slug is never empty.
+ */
+export function slugifyProjectName(name: string): string {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug === "" ? "project" : slug;
+}
+
+/**
+ * Make a slug collision-free within the store: `pokedex`, `pokedex-2`,
+ * `pokedex-3`… — the project being renamed keeps its own slug (`ignoreId`),
+ * so an unchanged name never bumps itself.
+ */
+function uniqueSlug(
+  wanted: string,
+  projects: readonly Project[],
+  ignoreId?: string,
+): string {
+  const taken = new Set(
+    projects.filter((project) => project.id !== ignoreId).map((p) => p.slug),
+  );
+  if (!taken.has(wanted)) return wanted;
+  let suffix = 2;
+  while (taken.has(`${wanted}-${suffix}`)) suffix += 1;
+  return `${wanted}-${suffix}`;
+}
+
+/**
+ * Drop anything that doesn't parse as a project — corrupt entries never
+ * reach the UI — and backfill the route slug: a stored pre-061-3 project has
+ * none (derived here from its name, unique-ified across the batch).
+ */
 function sanitize(raw: unknown): Project[] {
   if (!Array.isArray(raw)) return EMPTY;
-  return raw.filter(isValidProject);
+  const seen: Project[] = [];
+  return raw.filter(isValidProject).map((stored) => {
+    const project = stored as Project & { slug?: unknown };
+    const wanted =
+      typeof project.slug === "string" && project.slug !== ""
+        ? project.slug
+        : slugifyProjectName(project.name);
+    const slug = uniqueSlug(wanted, seen);
+    const next: Project = {
+      id: project.id,
+      name: project.name,
+      createdAt: project.createdAt,
+      updatedAt:
+        typeof project.updatedAt === "number"
+          ? project.updatedAt
+          : project.createdAt,
+      slug,
+    };
+    seen.push(next);
+    return next;
+  });
 }
 
 function readStored(): Project[] {
@@ -96,6 +163,12 @@ function loadActive(): string | null {
 /** Client snapshot for `useSyncExternalStore`. */
 export function getProjects(): Project[] {
   return load();
+}
+
+/** The project whose route namespace is `slug` — preview-route resolution. */
+export function projectBySlug(slug: string): Project | null {
+  if (slug === "") return null;
+  return load().find((project) => project.slug === slug) ?? null;
 }
 
 /** Server snapshot — the client re-renders with the stored projects after hydration. */
@@ -206,19 +279,26 @@ export function createProject(name: string): Project | null {
   const trimmed = name.trim();
   if (trimmed === "") return null;
   const now = Date.now();
+  const existing = load();
   const project: Project = {
     id: crypto.randomUUID(),
     name: trimmed,
+    slug: uniqueSlug(slugifyProjectName(trimmed), existing),
     createdAt: now,
     updatedAt: now,
   };
-  cache = [...load(), project];
+  cache = [...existing, project];
   persist();
   setActiveProjectId(project.id);
   return project;
 }
 
-/** Rename a project. Empty names, unchanged names and unknown ids are no-ops. */
+/**
+ * Rename a project — the slug is **re-derived** from the new name (061-3:
+ * the URL namespace follows the project), unique-ified against the others so
+ * a rename can never steal a live namespace. Empty names, unchanged names
+ * and unknown ids are no-ops.
+ */
 export function renameProject(id: string, name: string): void {
   const trimmed = name.trim();
   const projects = load();
@@ -226,7 +306,12 @@ export function renameProject(id: string, name: string): void {
   if (trimmed === "" || !target || target.name === trimmed) return;
   cache = projects.map((project) =>
     project.id === id
-      ? { ...project, name: trimmed, updatedAt: Date.now() }
+      ? {
+          ...project,
+          name: trimmed,
+          slug: uniqueSlug(slugifyProjectName(trimmed), projects, id),
+          updatedAt: Date.now(),
+        }
       : project,
   );
   persist();

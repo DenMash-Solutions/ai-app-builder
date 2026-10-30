@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import PreviewPage from "./preview-client";
+import PreviewPage from "../preview-client";
 import { getPublishedPageBySlug } from "@/lib/publish/featured";
 import { servingArtifact } from "@/lib/publish/artifacts";
 import { canonicalizeTag } from "@/lib/i18n/spec-languages";
@@ -48,11 +48,23 @@ export async function generateMetadata({
 export default async function SlugPage({
   params,
 }: {
-  params: Promise<{ locale: string; slug: string }>;
+  params: Promise<{ locale: string; slug: string; route?: string[] }>;
 }) {
-  const { locale, slug } = await params;
+  const { locale, slug, route } = await params;
   if (canonicalizeTag(locale) === null) notFound();
   const published = await getPublishedPageBySlug(slug);
   const artifact = published ? servingArtifact(published, locale) : null;
-  return <PreviewPage published={published} bakedCss={artifact?.css ?? null} />;
+  // 061-3 (§A): the catch-all carries the post-slug path — the flat screen
+  // route's own `route` pattern (`/en/{slug}/{id}`) or a project namespace
+  // (`/en/{project-slug}/…`). `null` = bare slug (today's shape). Resolution
+  // is client-side: local entries and projects are device-local, so the
+  // server can't decide a path — it only hands the segments over.
+  const routePath = route && route.length > 0 ? route.join("/") : null;
+  return (
+    <PreviewPage
+      published={published}
+      bakedCss={artifact?.css ?? null}
+      routePath={routePath}
+    />
+  );
 }

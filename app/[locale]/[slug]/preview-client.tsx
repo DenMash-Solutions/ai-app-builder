@@ -2,6 +2,7 @@
 
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { QueryLoader } from "@/components/data-sources/query-loader";
+import { NavigateHandler } from "@/components/projects/navigate-handler";
 import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import { appDirectives } from "@/lib/computed/directives";
@@ -26,11 +27,15 @@ import {
   specUrlSync,
   urlSearchAfterStateChange,
 } from "@/lib/playground/url-sync";
+import { getProjects, projectBySlug } from "@/lib/projects/projects";
+import { screenScope } from "@/lib/projects/screen-nav";
 import {
-  NAVIGATE_ACTION,
-  runNavigate,
-  screenScope,
-} from "@/lib/projects/screen-nav";
+  matchRoutePattern,
+  overlayPathState,
+  projectHomeScreenId,
+  resolveProjectRoute,
+  specRoutePattern,
+} from "@/lib/projects/screen-routes";
 import type { LivePageData } from "@/lib/publish/featured";
 import { localizeSpec } from "@/lib/specs/localize";
 import {
@@ -77,21 +82,78 @@ function ThemeHtmlSync() {
 export default function PreviewPage({
   published,
   bakedCss,
+  routePath,
 }: {
   published: LivePageData | null;
   /** Publish-baked stylesheet for the published spec — kills the FOUC. */
   bakedCss?: string | null;
+  /**
+   * Post-slug path from the `[[...route]]` catch-all (`"4"`, `"settings"`),
+   * null when bare. Resolved client-side below — entries and projects are
+   * device-local, so the server can only hand the segments over (061-3 §A).
+   */
+  routePath?: string | null;
 }) {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
   const t = useTranslations();
   const locale = useLocale();
-  const entry = useSyncExternalStore<HistoryEntry | null | undefined>(
+  const history = useSyncExternalStore<HistoryEntry[] | undefined>(
     subscribeHistory,
-    () => getHistory().find((candidate) => candidate.slug === slug) ?? null,
+    getHistory,
     // Server snapshot = pending (history is localStorage-only).
     () => undefined,
   );
+  const localEntry =
+    history?.find((candidate) => candidate.slug === slug) ?? null;
+
+  // Resolution (061-3, §A): what serves /{locale}/{slug}[/{route}]?
+  //  1. the local entry by slug — with a path, its own spec-level `route`
+  //     pattern must match it (flat entry paths are a real shape: they are
+  //     what buildNavigateRoute pushes for project-less targets),
+  //  2. else the project namespace — bare serves the home screen (oldest
+  //     member), a path resolves in-project (exact slug, then pattern),
+  //  3. else the published projection, BARE ONLY: projects are device-local
+  //     and publishing a namespace is follow-up F18, so a path under an
+  //     unknown namespace is a 404, not a fallback.
+  // A path nothing claims (or a project with no members) gates as not-found —
+  // never a wrong screen, which would seed the wrong state.
+  let entry: HistoryEntry | null | undefined = undefined; // undefined = pending
+  let pathParams: Record<string, string> | null = null;
+  let unmatched = false;
+  if (history !== undefined) {
+    entry = localEntry;
+    const project = localEntry ? null : projectBySlug(slug);
+    if (routePath) {
+      const pattern = localEntry ? specRoutePattern(localEntry.spec) : null;
+      const flat =
+        localEntry && pattern ? matchRoutePattern(pattern, routePath) : null;
+      const match =
+        flat !== null
+          ? { screen: localEntry, params: flat }
+          : localEntry
+            ? null
+            : project
+              ? resolveProjectRoute(project, history, routePath)
+              : null;
+      if (match && match.screen) {
+        entry = match.screen;
+        pathParams = match.params;
+      } else {
+        unmatched = true;
+        entry = null;
+      }
+    } else if (!localEntry && project) {
+      const homeId = projectHomeScreenId(project, history);
+      const home =
+        homeId === null ? null : (history.find((c) => c.id === homeId) ?? null);
+      if (home) entry = home;
+      else {
+        unmatched = true;
+        entry = null;
+      }
+    }
+  }
 
   const spec = entry?.spec ?? published?.spec ?? null;
 
@@ -125,32 +187,12 @@ export default function PreviewPage({
       router.push(`/${tag}/${slug}`);
     };
   });
-  // Screen navigation (061, decision 4): resolves the ref against this
-  // device's screens in the entry's project scope and pushes
-  // /{locale}/{slug}. A visitor's browser holds no history, so an unknown
-  // ref there warns and no-ops — never throws. Same stable-once ref seam.
-  const navigateRef = useRef<(params: Record<string, unknown>) => void>(
-    () => {},
-  );
-  useEffect(() => {
-    navigateRef.current = (params) => {
-      runNavigate(params, {
-        entries: getHistory(),
-        scope: screenScope(entry),
-        surface: "preview",
-        locale,
-        navigate: (route) => router.push(route),
-      });
-    };
-  });
   const handlers = useMemo(
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
       [SWITCH_THEME_ACTION]: (params: Record<string, unknown>) =>
         themeRef.current(params),
-      [NAVIGATE_ACTION]: (params: Record<string, unknown>) =>
-        navigateRef.current(params),
     }),
     [],
   );
@@ -171,7 +213,11 @@ export default function PreviewPage({
     };
   });
 
-  if (entry === undefined && !published) {
+  // Pending gate: the server knows no history. A bare published slug can
+  // render straight away (unchanged); a PATH waits — only the client can
+  // tell whether a local entry or project claims it, and a premature 404
+  // here would set a real status the client can't undo.
+  if (entry === undefined && (routePath || !published)) {
     return (
       <main className="dot-grid flex h-[100dvh] w-full items-center justify-center">
         <p className="text-sm text-muted-foreground">{t("uiRoute.loading")}</p>
@@ -179,7 +225,7 @@ export default function PreviewPage({
     );
   }
 
-  if (entry === null && !published) {
+  if (unmatched || (entry === null && !published)) {
     return (
       <main className="dot-grid flex h-[100dvh] w-full items-center justify-center px-6">
         <div className="w-full max-w-md space-y-4 text-center">
@@ -226,10 +272,14 @@ export default function PreviewPage({
   // keys overlay the seed so the first paged read already runs at the linked
   // page. Client-only: window is absent during SSR (the seed renders there
   // and the overlay joins on hydration) — same guard as the canvas.
-  const seedState =
+  // Path params (061-3) overlay LAST — the URL path wins over the query —
+  // and unlike the window-guarded urlSync overlay they also apply during SSR.
+  const seedState = overlayPathState(
     typeof window === "undefined"
       ? state
-      : overlayUrlState(state, window.location.search, specUrlSync(spec));
+      : overlayUrlState(state, window.location.search, specUrlSync(spec)),
+    pathParams,
+  );
   const localized = localizeSpec(spec, seedState);
 
   // The state-write fallback (decision 13): specs that predate the declared
@@ -302,6 +352,20 @@ export default function PreviewPage({
                   scopes this design's records — owner preview and published
                   visitor share one per-browser store for the same design. */}
       <QueryLoader spec={spec} namespace={slug} />
+      {/* Screen navigation (061, decision 4 + 061-3): resolves the ref
+                  against this device's screens in the entry's project scope
+                  and pushes /{locale}/{project-slug}[/{route}]. A visitor's
+                  browser holds no history, so an unknown ref there warns and
+                  no-ops — never throws. Registered inside the provider so it
+                  can deref $item path params against the live snapshot. */}
+      <NavigateHandler
+        surface="preview"
+        entries={() => getHistory()}
+        scope={() => screenScope(entry)}
+        locale={locale}
+        projects={getProjects()}
+        navigate={(route) => router.push(route)}
+      />
       {/* Bare surface: no background, chrome, or layout padding — the
                 spec renders as-is; only the floating pill sits on top. */}
       <ThemeHtmlSync />

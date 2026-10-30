@@ -20,6 +20,7 @@ import {
   getEditableFields,
   getClassSuggestions,
   navigateBindingOf,
+  navigateRecordParamOf,
   resolveInstanceScope,
 } from "@/lib/editor";
 import type {
@@ -27,6 +28,7 @@ import type {
   InstanceChain,
   MoveDirection,
 } from "@/lib/editor";
+import { recordRouteParam } from "@/lib/projects/screen-nav";
 import type { ScreenListing } from "@/lib/projects/screen-nav";
 import { ActionTiles } from "./action-tiles";
 import { NavigateTile } from "./navigate-tile";
@@ -102,6 +104,11 @@ interface EditPanelProps {
   screens: readonly ScreenListing[];
   /** Writes (or clears, `ref = null`) the element's `navigate` binding. */
   onNavigateChange: (ref: string | null) => void;
+  /**
+   * Writes (or clears, `paramKey = null`) the record-id param on the
+   * element's `navigate` binding (061-3, §C).
+   */
+  onRecordChange: (paramKey: string | null) => void;
   onAction: (instruction: string, label: string) => void;
   onInsert: (parentKey: string, type: string) => void;
   onRemove: (key: string) => void;
@@ -141,6 +148,7 @@ export function EditPanel({
   onConditionChange,
   screens,
   onNavigateChange,
+  onRecordChange,
   onAction,
   onInsert,
   onRemove,
@@ -176,6 +184,17 @@ export function EditPanel({
   }, []);
   const fields = getEditableFields(componentPropsSchema(element.type));
   const crumbs = ancestors.slice(0, -1);
+
+  // The navigate tile's "send record id" state (061-3, §C): the first
+  // placeholder of the selected target's route pattern, and whether this
+  // element's binding already sends the record id for it.
+  const currentNavigateRef = navigateBindingOf(element);
+  const targetRecordParam = recordRouteParam(screens, currentNavigateRef);
+  const recordParam =
+    targetRecordParam !== null &&
+    navigateRecordParamOf(element, targetRecordParam)
+      ? targetRecordParam
+      : null;
 
   // Instance-scoped editing: every field resolves against the picked chain —
   // bindings display (and write) the instance's state path, literals edit the
@@ -583,8 +602,10 @@ export function EditPanel({
             {PRESSABLE_TYPES.has(element.type) && (
               <NavigateTile
                 screens={screens}
-                currentRef={navigateBindingOf(element)}
+                currentRef={currentNavigateRef}
                 onChange={onNavigateChange}
+                recordParam={recordParam}
+                onRecordChange={onRecordChange}
               />
             )}
           </div>

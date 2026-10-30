@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  recordRouteParam,
   resolveScreenRef,
   runNavigate,
   screenRoute,
@@ -13,6 +14,7 @@ import {
   getProjects,
   removeProject,
   setActiveProjectId,
+  type Project,
 } from "./projects";
 
 const ENTRIES: ScreenSource[] = [
@@ -202,11 +204,241 @@ describe("runNavigate", () => {
 });
 
 describe("toScreenListings", () => {
-  test("maps screens to the {ref, name} pairs prompt and tile offer", () => {
+  test("maps screens to the pairs prompt and tile offer, with the route pattern", () => {
     expect(toScreenListings(screensInScope(ENTRIES, "p1"))).toEqual([
-      { ref: "aaa", name: "Alpha" },
-      { ref: "bbb", name: "Beta app" },
+      { ref: "aaa", name: "Alpha", route: null },
+      { ref: "bbb", name: "Beta app", route: null },
     ]);
+  });
+
+  test("carries the spec-level route pattern the record-id toggle reads", () => {
+    const listings = toScreenListings([
+      { id: "detail", name: "Detail", spec: { route: "{id}" } },
+      { id: "bare", name: "Bare", spec: { elements: {} } },
+    ]);
+
+    expect(listings.map((listing) => listing.route)).toEqual(["{id}", null]);
+  });
+});
+
+describe("recordRouteParam", () => {
+  const listings = toScreenListings([
+    { id: "detail", name: "Detail", spec: { route: "{id}" } },
+    { id: "flat", name: "Flat", spec: {} },
+  ]);
+
+  test("first placeholder of the selected target's pattern", () => {
+    expect(recordRouteParam(listings, "detail")).toBe("id");
+  });
+
+  test("null for no target, an unknown ref, or a target without a pattern", () => {
+    expect(recordRouteParam(listings, null)).toBeNull();
+    expect(recordRouteParam(listings, "missing")).toBeNull();
+    expect(recordRouteParam(listings, "flat")).toBeNull();
+  });
+});
+
+describe("runNavigate (061-3 params + project namespace)", () => {
+  let warnings: string[] = [];
+  let originalWarn: typeof console.warn;
+
+  beforeEach(() => {
+    warnings = [];
+    originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+  });
+
+  afterEach(() => {
+    console.warn = originalWarn;
+  });
+
+  const PROJECTS: Project[] = [
+    { id: "p1", name: "Pokédex", slug: "pokedex", createdAt: 1, updatedAt: 1 },
+  ];
+  const GRID: ScreenSource = {
+    id: "grid",
+    slug: "catalog",
+    name: "Catalog",
+    projectId: "p1",
+    createdAt: 1,
+  };
+  const DETAIL: ScreenSource = {
+    id: "detail",
+    slug: "pokemon-detail",
+    name: "Detail",
+    projectId: "p1",
+    createdAt: 2,
+    spec: { route: "{id}" },
+  };
+  const STATE = {
+    queries: { pokemonList: { data: [{ id: 1 }, { id: 4 }] } },
+  };
+
+  test("the editor appends the built path for any screen", () => {
+    const pushed: string[] = [];
+    const ok = runNavigate(
+      { screen: "detail", id: 4 },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "editor",
+        projects: PROJECTS,
+        navigate: (route) => pushed.push(route),
+      },
+    );
+
+    expect(ok).toBe(true);
+    expect(pushed).toEqual(["/ui/detail/4"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("$item path params deref against the state snapshot", () => {
+    const pushed: string[] = [];
+    const ok = runNavigate(
+      { screen: "detail", id: "/queries/pokemonList/data/1/id" },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "editor",
+        projects: PROJECTS,
+        state: STATE,
+        navigate: (route) => pushed.push(route),
+      },
+    );
+
+    expect(ok).toBe(true);
+    expect(pushed).toEqual(["/ui/detail/4"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("a project target with buildable params skips its screen slug", () => {
+    const pushed: string[] = [];
+    const ok = runNavigate(
+      { screen: "detail", id: 4 },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "preview",
+        locale: "en",
+        projects: PROJECTS,
+        navigate: (route) => pushed.push(route),
+      },
+    );
+
+    expect(ok).toBe(true);
+    expect(pushed).toEqual(["/en/pokedex/4"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("the home screen serves the bare namespace; siblings keep their slug", () => {
+    const pushed: string[] = [];
+    const navigate = (route: string) => pushed.push(route);
+    const base = {
+      entries: [GRID, DETAIL],
+      scope: "p1",
+      surface: "preview",
+      locale: "en",
+      projects: PROJECTS,
+      navigate,
+    } as const;
+
+    runNavigate({ screen: "grid" }, base);
+    runNavigate({ screen: "detail" }, base);
+
+    expect(pushed).toEqual(["/en/pokedex", "/en/pokedex/pokemon-detail"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("no project keeps the flat route (+ built path when a pattern exists)", () => {
+    const flat: ScreenSource = {
+      id: "flat",
+      slug: "flat-screen",
+      name: "Flat",
+      spec: { route: "{id}" },
+    };
+    const pushed: string[] = [];
+    const navigate = (route: string) => pushed.push(route);
+
+    runNavigate(
+      { screen: "flat", id: 9 },
+      {
+        entries: [flat],
+        scope: null,
+        surface: "preview",
+        locale: "en",
+        navigate,
+      },
+    );
+    runNavigate(
+      { screen: "flat" },
+      {
+        entries: [flat],
+        scope: null,
+        surface: "preview",
+        locale: "en",
+        navigate,
+      },
+    );
+
+    expect(pushed).toEqual(["/en/flat-screen/9", "/en/flat-screen"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("unbuildable params warn loudly and navigate bare", () => {
+    const pushed: string[] = [];
+    const navigate = (route: string) => pushed.push(route);
+
+    // Params to a screen with no route pattern.
+    runNavigate(
+      { screen: "grid", id: 4 },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "preview",
+        locale: "en",
+        projects: PROJECTS,
+        navigate,
+      },
+    );
+    // A path param that does not resolve against the snapshot.
+    runNavigate(
+      { screen: "detail", id: "/queries/pokemonList/data/9/id" },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "preview",
+        locale: "en",
+        projects: PROJECTS,
+        state: STATE,
+        navigate,
+      },
+    );
+
+    expect(pushed).toEqual(["/en/pokedex", "/en/pokedex/pokemon-detail"]);
+    expect(warnings.join(" ")).toContain("do not build");
+    expect(warnings).toHaveLength(2);
+  });
+
+  test("an unresolvable path param without a snapshot never leaks the path", () => {
+    const pushed: string[] = [];
+    const ok = runNavigate(
+      { screen: "detail", id: "/queries/list/data/0/id" },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "preview",
+        locale: "en",
+        projects: PROJECTS,
+        navigate: (route) => pushed.push(route),
+      },
+    );
+
+    expect(ok).toBe(true);
+    expect(pushed).toEqual(["/en/pokedex/pokemon-detail"]);
+    expect(pushed.join(" ")).not.toContain("/queries");
+    expect(warnings).toHaveLength(1);
   });
 });
 

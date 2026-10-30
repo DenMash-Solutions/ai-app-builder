@@ -354,7 +354,8 @@
       "title": "Navigate to screen",
       "none": "No navigation",
       "empty": "No sibling screens yet — generate another screen in this project to link to it.",
-      "missingTarget": "Missing screen ({ref})"
+      "missingTarget": "Missing screen ({ref})",
+      "sendRecordId": "Send record id ({param})"
     }
   },
   "historyDrawer": {

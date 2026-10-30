@@ -210,6 +210,82 @@ export function replaceNavigateBinding(
 }
 
 /**
+ * The record the "send id" toggle sends (061-3, §C): the pressed row's `id`
+ * field — the renderer pre-resolves `{"$item": "id"}` to an absolute state
+ * path at emit time (the same mechanism `data_mutate` ids ride).
+ */
+const RECORD_ID_FIELD = "id";
+
+/** Is this binding param the record-id expression? */
+function isRecordIdParam(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { $item?: unknown }).$item === RECORD_ID_FIELD
+  );
+}
+
+/**
+ * Does the element's `navigate` press binding already send the record id at
+ * `paramKey` (061-3, §C)? False when the element does not navigate — the
+ * toggle then reads OFF, which is how an absent binding should render.
+ */
+export function navigateRecordParamOf(
+  element: UIElement,
+  paramKey: string,
+): boolean {
+  for (const binding of pressBindings(element)) {
+    if (binding.action === NAVIGATE_ACTION) {
+      return isRecordIdParam(binding.params?.[paramKey]);
+    }
+  }
+  return false;
+}
+
+/**
+ * Write (`paramKey`) or clear (`paramKey = null`) the record-id param on the
+ * element's `navigate` press binding (061-3, §C) while preserving every
+ * other param on it (`screen` plus any extra route values) and sibling press
+ * bindings — same filtering contract as {@link replaceNavigateBinding}.
+ * Clearing drops every param carrying the record id, so it works after a
+ * retarget too. `spec` comes back unchanged for an unknown key, a missing
+ * binding or a no-op write — the caller uses that identity to skip a
+ * spurious revision.
+ */
+export function setNavigateRecordParam(
+  spec: Spec,
+  key: string,
+  paramKey: string | null,
+): Spec {
+  const element = spec.elements[key];
+  if (!element) return spec;
+  let changed = false;
+  const bindings = pressBindings(element).map((binding) => {
+    if (binding.action !== NAVIGATE_ACTION) return binding;
+    const params = { ...(binding.params ?? {}) };
+    if (paramKey === null) {
+      for (const name of Object.keys(params)) {
+        if (isRecordIdParam(params[name])) {
+          delete params[name];
+          changed = true;
+        }
+      }
+    } else if (!isRecordIdParam(params[paramKey])) {
+      params[paramKey] = { $item: RECORD_ID_FIELD };
+      changed = true;
+    }
+    return { ...binding, params };
+  });
+  if (!changed) return spec;
+  const on = { ...(element.on ?? {}) };
+  on.press = bindings.length === 1 ? bindings[0] : bindings;
+  return {
+    ...spec,
+    elements: { ...spec.elements, [key]: { ...element, on } },
+  };
+}
+
+/**
  * A prompt-scope target: element key plus the repeat chain of the picked
  * instance (null = template-level).
  */

@@ -9,6 +9,7 @@ import {
   freeformRevisionLabel,
   getEditableFields,
   navigateBindingOf,
+  navigateRecordParamOf,
   navigateRevisionLabel,
   promptRevisionLabel,
   propertyRevisionLabel,
@@ -17,6 +18,7 @@ import {
   replaceVisible,
   scopeInstruction,
   scopeTargetsInstruction,
+  setNavigateRecordParam,
 } from "./editor";
 
 function makeSpec(): Spec {
@@ -180,6 +182,72 @@ describe("navigate bindings (061)", () => {
 
   test("the revision label uses the action kind", () => {
     expect(navigateRevisionLabel()).toBe(`${REVISION_LABELS.action}:navigate`);
+  });
+
+  describe("record id param (061-3, §C)", () => {
+    test("reads the record id only at the param it was written to", () => {
+      const spec = replaceNavigateBinding(makeSpec(), "heading", "s1");
+      expect(navigateRecordParamOf(spec.elements.heading, "id")).toBe(false);
+
+      const on = setNavigateRecordParam(spec, "heading", "id");
+
+      expect(navigateRecordParamOf(on.elements.heading, "id")).toBe(true);
+      expect(navigateRecordParamOf(on.elements.heading, "slug")).toBe(false);
+      // The source spec is untouched (undo relies on it).
+      expect(navigateRecordParamOf(spec.elements.heading, "id")).toBe(false);
+    });
+
+    test("writing preserves the screen param and sibling press bindings", () => {
+      const spec = pressSpec([
+        { action: "data_mutate", params: { op: "create", resource: "notes" } },
+        { action: "navigate", params: { screen: "s1" } },
+      ]);
+
+      const next = setNavigateRecordParam(spec, "heading", "id");
+
+      expect(next.elements.heading.on?.press).toEqual([
+        { action: "data_mutate", params: { op: "create", resource: "notes" } },
+        { action: "navigate", params: { screen: "s1", id: { $item: "id" } } },
+      ]);
+      expect(navigateRecordParamOf(next.elements.heading, "id")).toBe(true);
+    });
+
+    test("clearing drops the record id and keeps the screen param", () => {
+      const bound = replaceNavigateBinding(makeSpec(), "heading", "s1");
+      const on = setNavigateRecordParam(bound, "heading", "id");
+
+      const off = setNavigateRecordParam(on, "heading", null);
+
+      expect(off.elements.heading.on?.press).toEqual({
+        action: "navigate",
+        params: { screen: "s1" },
+      });
+      expect(navigateRecordParamOf(off.elements.heading, "id")).toBe(false);
+    });
+
+    test("no-op writes return the same spec so no revision is committed", () => {
+      const bound = replaceNavigateBinding(makeSpec(), "heading", "s1");
+      const on = setNavigateRecordParam(bound, "heading", "id");
+      const off = setNavigateRecordParam(on, "heading", null);
+
+      expect(setNavigateRecordParam(on, "heading", "id")).toBe(on);
+      expect(setNavigateRecordParam(off, "heading", null)).toBe(off);
+      // Nothing to write or clear on an element that never navigates.
+      const plain = makeSpec();
+      expect(setNavigateRecordParam(plain, "heading", "id")).toBe(plain);
+    });
+
+    test("unknown keys and non-navigate bindings are left alone", () => {
+      const spec = replaceNavigateBinding(makeSpec(), "heading", "s1");
+      expect(setNavigateRecordParam(spec, "missing", "id")).toBe(spec);
+
+      const other = pressSpec({
+        action: "data_mutate",
+        params: { op: "create" },
+      });
+      expect(setNavigateRecordParam(other, "heading", "id")).toBe(other);
+      expect(navigateRecordParamOf(other.elements.heading, "id")).toBe(false);
+    });
   });
 });
 

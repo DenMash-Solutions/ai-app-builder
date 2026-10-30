@@ -2,7 +2,11 @@ import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Spec } from "@json-render/core";
 import { addEntry, createEntry, getHistory, removeEntry } from "@/lib/history";
 import type { HistoryEntry } from "@/lib/history";
-import { ACTIVE_PROJECT_STORAGE_KEY, PROJECT_STORAGE_KEY } from "./projects";
+import {
+  ACTIVE_PROJECT_STORAGE_KEY,
+  PROJECT_STORAGE_KEY,
+  slugifyProjectName,
+} from "./projects";
 
 type ProjectsModule = typeof import("./projects");
 
@@ -209,5 +213,58 @@ describe("project store", () => {
     expect(JSON.parse(local.getItem(PROJECT_STORAGE_KEY) ?? "[]")).toHaveLength(
       1,
     );
+  });
+
+  test("slugifyProjectName strips diacritics, collapses junk, never empties", () => {
+    expect(slugifyProjectName("Pokédex")).toBe("pokedex");
+    expect(slugifyProjectName("  Pokédex App v2!! ")).toBe("pokedex-app-v2");
+    expect(slugifyProjectName("Ñoño & Co")).toBe("nono-co");
+    expect(slugifyProjectName("")).toBe("project");
+    expect(slugifyProjectName("???")).toBe("project");
+  });
+
+  test("a legacy record backfills its slug from the name; rename re-derives it", async () => {
+    const local = storage();
+    local.setItem(
+      PROJECT_STORAGE_KEY,
+      JSON.stringify([
+        { id: "legacy", name: "Pokédex app v2", createdAt: 1, updatedAt: 1 },
+      ]),
+    );
+
+    const slugSpecifier = "./projects.ts?slug";
+    const fresh = (await import(slugSpecifier)) as ProjectsModule;
+
+    expect(fresh.getProjects()[0].slug).toBe("pokedex-app-v2");
+    expect(fresh.projectBySlug("pokedex-app-v2")?.id).toBe("legacy");
+    expect(fresh.projectBySlug("")).toBeNull();
+    expect(fresh.projectBySlug("ghost")).toBeNull();
+
+    // The namespace follows the project rename (decision 9).
+    fresh.renameProject("legacy", "Pokédex");
+    expect(fresh.getProjects()[0].slug).toBe("pokedex");
+    expect(fresh.projectBySlug("pokedex")?.id).toBe("legacy");
+  });
+
+  test("colliding names get unique slugs — create and rename never steal a namespace", () => {
+    const first = store.createProject("Pokédex");
+    const second = store.createProject("Pokedex");
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    const a = first as NonNullable<typeof first>;
+    const b = second as NonNullable<typeof second>;
+
+    expect(a.slug).toBe("pokedex");
+    expect(b.slug).toBe("pokedex-2");
+
+    // Renaming b to a colliding name keeps it on its (already unique) slug.
+    store.renameProject(b.id, "Pokédex");
+    expect(
+      store.getProjects().find((project) => project.id === b.id)?.slug,
+    ).toBe("pokedex-2");
+
+    const third = store.createProject("Pokédex");
+    expect(third).not.toBeNull();
+    expect((third as NonNullable<typeof third>).slug).toBe("pokedex-3");
   });
 });

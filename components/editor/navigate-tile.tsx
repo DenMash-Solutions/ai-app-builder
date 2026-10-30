@@ -2,6 +2,7 @@
 
 import { Compass } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -9,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { recordRouteParam } from "@/lib/projects/screen-nav";
 import type { ScreenListing } from "@/lib/projects/screen-nav";
 
 /**
@@ -24,6 +26,14 @@ export interface NavigateTileProps {
   /** The element's current `navigate` ref (null = no binding). */
   currentRef: string | null;
   onChange: (ref: string | null) => void;
+  /**
+   * The route param the binding currently sends the record id for (061-3,
+   * §C) — null = off. Derived in the edit panel from the same
+   * `recordRouteParam` the tile uses to decide whether to offer the toggle.
+   */
+  recordParam: string | null;
+  /** Writes (`paramKey`) or clears (`null`) the record-id param. */
+  onRecordChange: (paramKey: string | null) => void;
 }
 
 /**
@@ -37,10 +47,16 @@ export function NavigateTile({
   screens,
   currentRef,
   onChange,
+  recordParam,
+  onRecordChange,
 }: NavigateTileProps) {
   const t = useTranslations();
   const stale =
     currentRef !== null && !screens.some((screen) => screen.ref === currentRef);
+  // Only a target declaring a route pattern with a placeholder can carry a
+  // record id — without one there is no param to write, so the toggle stays
+  // hidden rather than offering a no-op (061-3, §C).
+  const recordParamKey = recordRouteParam(screens, currentRef);
   const options = stale
     ? [
         {
@@ -85,6 +101,20 @@ export function NavigateTile({
         <p className="text-[11px] leading-snug text-zinc-500">
           {t("editor.navigate.empty")}
         </p>
+      )}
+      {recordParamKey !== null && (
+        <label className="flex cursor-pointer items-start gap-2">
+          <Checkbox
+            checked={recordParam !== null}
+            onCheckedChange={(checked) =>
+              onRecordChange(checked === true ? recordParamKey : null)
+            }
+            className="mt-0.5"
+          />
+          <span className="text-[11px] leading-snug text-zinc-400">
+            {t("editor.navigate.sendRecordId", { param: recordParamKey })}
+          </span>
+        </label>
       )}
     </div>
   );

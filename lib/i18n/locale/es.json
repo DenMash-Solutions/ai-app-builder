@@ -354,7 +354,8 @@
       "title": "Navegar a otra pantalla",
       "none": "Sin navegación",
       "empty": "Aún no hay pantallas hermanas: genera otra pantalla en este proyecto para enlazarla.",
-      "missingTarget": "Pantalla ausente ({ref})"
+      "missingTarget": "Pantalla ausente ({ref})",
+      "sendRecordId": "Enviar el id del registro ({param})"
     }
   },
   "historyDrawer": {

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { QueryLoader } from "@/components/data-sources/query-loader";
+import { NavigateHandler } from "@/components/projects/navigate-handler";
 import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +27,6 @@ import { registry } from "@/lib/playground/registry";
 import { appDirectives } from "@/lib/computed/directives";
 import { getHistory } from "@/lib/history";
 import { fixupScrollLayout } from "@/lib/playground/scroll-layout-fixup";
-import { NAVIGATE_ACTION, runNavigate } from "@/lib/projects/screen-nav";
 import { localizeSpec } from "@/lib/specs/localize";
 import {
   SWITCH_THEME_ACTION,
@@ -92,31 +92,10 @@ export function LivePage({
       router.push(`/${tag}`);
     };
   });
-  // Screen navigation (061, decision 4): this published root carries no
-  // project context (`published_pages` rows hold no projectId), so the ref
-  // resolves against the device's own screens — an owner can jump between
-  // them, a visitor's empty history makes it a logged no-op. Warn-only
-  // failure on a public surface: never throw.
-  const navigateRef = useRef<(params: Record<string, unknown>) => void>(
-    () => {},
-  );
-  useEffect(() => {
-    navigateRef.current = (params) => {
-      runNavigate(params, {
-        entries: getHistory(),
-        scope: undefined,
-        surface: "live",
-        locale,
-        navigate: (route) => router.push(route),
-      });
-    };
-  });
   const handlers = useMemo(
     () => ({
       [SWITCH_LANGUAGE_ACTION]: (params: Record<string, unknown>) =>
         switchRef.current(params),
-      [NAVIGATE_ACTION]: (params: Record<string, unknown>) =>
-        navigateRef.current(params),
       // Public surface (decision D3): persist the visitor's theme decision
       // site-wide — it beats the spec default on every future visit.
       [SWITCH_THEME_ACTION]: (params: Record<string, unknown>) => {
@@ -169,6 +148,19 @@ export function LivePage({
                 root keeps its own namespace — its records never collide with a
                 published slug's. */}
         <QueryLoader spec={spec} namespace={LIVE_DATA_NAMESPACE} />
+        {/* Screen navigation (061, decision 4): this published root carries
+                no project context (`published_pages` rows hold no projectId),
+                so the ref resolves against the device's own screens — an owner
+                can jump between them, a visitor's empty history makes it a
+                logged no-op. Warn-only failure on a public surface: never
+                throws; registered inside the provider for the state snapshot. */}
+        <NavigateHandler
+          surface="live"
+          entries={() => getHistory()}
+          scope={() => undefined}
+          locale={locale}
+          navigate={(route) => router.push(route)}
+        />
         {/* Spec-driven theme: pre-paint applies the design's default only
                 when the visitor carries no stored decision (ThemeInit in the
                 layout applies one) — their toggle above then persists. */}
