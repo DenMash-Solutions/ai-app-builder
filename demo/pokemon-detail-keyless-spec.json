@@ -1,0 +1,751 @@
+{
+  "root": "detail-root",
+  "route": "{id}",
+  "state": { "id": 1, "tab": "about" },
+  "elements": {
+    "detail-root": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "w-full max-w-2xl mx-auto px-4 pb-12"
+      },
+      "watch": {
+        "/id": [
+          { "action": "data_read", "params": { "query": "pokemonDetail" } },
+          { "action": "data_read", "params": { "query": "speciesDetail" } }
+        ]
+      },
+      "children": ["detail-loading", "detail-error", "detail-content"]
+    },
+    "detail-loading": {
+      "type": "Text",
+      "props": { "text": "Loading Pokémon…", "className": "dex-loading" },
+      "visible": { "$state": "/queries/pokemonDetail/status", "eq": "loading" },
+      "children": []
+    },
+    "detail-error": {
+      "type": "Text",
+      "props": {
+        "text": "That Pokémon could not be loaded.",
+        "className": "dex-error"
+      },
+      "visible": { "$state": "/queries/pokemonDetail/status", "eq": "error" },
+      "children": []
+    },
+    "detail-content": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "none",
+        "className": "overflow-hidden rounded-3xl border bg-card shadow-sm"
+      },
+      "visible": [
+        { "$state": "/queries/pokemonDetail/status", "eq": "success" },
+        { "$state": "/queries/speciesDetail/status", "eq": "success" }
+      ],
+      "children": ["detail-hero", "detail-sheet"]
+    },
+    "detail-hero": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": {
+          "$cond": {
+            "$state": "/queries/pokemonDetail/data/0/types/0/type/name",
+            "eq": "grass"
+          },
+          "$then": "rounded-t-3xl bg-emerald-500 text-white p-6",
+          "$else": {
+            "$cond": {
+              "$state": "/queries/pokemonDetail/data/0/types/0/type/name",
+              "eq": "fire"
+            },
+            "$then": "rounded-t-3xl bg-rose-500 text-white p-6",
+            "$else": {
+              "$cond": {
+                "$state": "/queries/pokemonDetail/data/0/types/0/type/name",
+                "eq": "water"
+              },
+              "$then": "rounded-t-3xl bg-sky-500 text-white p-6",
+              "$else": "rounded-t-3xl bg-zinc-700 text-white p-6"
+            }
+          }
+        }
+      },
+      "children": [
+        "detail-back",
+        "detail-title-row",
+        "detail-types",
+        "detail-art"
+      ]
+    },
+    "detail-back": {
+      "type": "Button",
+      "props": {
+        "label": "Back",
+        "leadingIcon": "arrow-left",
+        "className": "self-start bg-white/20 text-white border-transparent hover:bg-white/30"
+      },
+      "on": {
+        "press": {
+          "action": "navigate",
+          "params": { "screen": "pokedex-grid" }
+        }
+      },
+      "children": []
+    },
+    "detail-title-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-name", "detail-num"]
+    },
+    "detail-name": {
+      "type": "Heading",
+      "props": {
+        "level": "h1",
+        "text": {
+          "$capitalize": { "$state": "/queries/pokemonDetail/data/0/name" }
+        },
+        "className": "text-white"
+      },
+      "children": []
+    },
+    "detail-num": {
+      "type": "Badge",
+      "props": {
+        "text": {
+          "$concat": ["#", { "$state": "/queries/pokemonDetail/data/0/id" }]
+        },
+        "variant": "secondary",
+        "className": "bg-white/20 text-white border-transparent tabular-nums"
+      },
+      "children": []
+    },
+    "detail-types": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex-wrap"
+      },
+      "repeat": {
+        "statePath": "/queries/pokemonDetail/data/0/types"
+      },
+      "children": ["detail-type-chip"]
+    },
+    "detail-type-chip": {
+      "type": "Badge",
+      "props": {
+        "text": { "$capitalize": { "$item": "type/name" } },
+        "variant": "secondary",
+        "className": "bg-white/20 text-white border-transparent uppercase"
+      },
+      "children": []
+    },
+    "detail-art": {
+      "type": "Image",
+      "props": {
+        "src": {
+          "$state": "/queries/pokemonDetail/data/0/sprites/other/official-artwork/front_default"
+        },
+        "alt": {
+          "$capitalize": { "$state": "/queries/pokemonDetail/data/0/name" }
+        },
+        "width": null,
+        "height": null,
+        "className": "block w-44 h-44 object-contain mx-auto"
+      },
+      "children": []
+    },
+    "detail-sheet": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "p-6"
+      },
+      "children": ["detail-tabs"]
+    },
+    "detail-tabs": {
+      "type": "Tabs",
+      "props": {
+        "tabs": [
+          { "label": "About", "value": "about" },
+          { "label": "Base Stats", "value": "stats" },
+          { "label": "Evolution", "value": "evolution" },
+          { "label": "Moves", "value": "moves" }
+        ],
+        "value": { "$bindState": "/tab" }
+      },
+      "children": [
+        "detail-panel-about",
+        "detail-panel-stats",
+        "detail-panel-evolution",
+        "detail-panel-moves"
+      ]
+    },
+    "detail-panel-about": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "lg", "className": "w-full" },
+      "visible": { "$state": "/tab", "eq": "about" },
+      "children": [
+        "detail-about-rows",
+        "detail-breeding-heading",
+        "detail-breeding-rows"
+      ]
+    },
+    "detail-about-rows": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md", "className": "w-full" },
+      "children": [
+        "detail-row-species",
+        "detail-row-height",
+        "detail-row-weight",
+        "detail-row-abilities"
+      ]
+    },
+    "detail-row-species": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-species-label", "detail-species-value"]
+    },
+    "detail-species-label": {
+      "type": "Text",
+      "props": {
+        "text": "Species",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-species-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$coalesce": [
+            {
+              "$first": {
+                "$map": {
+                  "$filter": {
+                    "$state": "/queries/speciesDetail/data/0/genera"
+                  },
+                  "field": "language.name",
+                  "op": "eq",
+                  "value": "en"
+                },
+                "field": "genus"
+              }
+            },
+            "—"
+          ]
+        },
+        "className": "text-right font-medium"
+      },
+      "children": []
+    },
+    "detail-row-height": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-height-label", "detail-height-value"]
+    },
+    "detail-height-label": {
+      "type": "Text",
+      "props": {
+        "text": "Height",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-height-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            {
+              "$math": "divide",
+              "a": { "$state": "/queries/pokemonDetail/data/0/height" },
+              "b": 10
+            },
+            " m"
+          ]
+        },
+        "className": "text-right font-medium tabular-nums"
+      },
+      "children": []
+    },
+    "detail-row-weight": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-weight-label", "detail-weight-value"]
+    },
+    "detail-weight-label": {
+      "type": "Text",
+      "props": {
+        "text": "Weight",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-weight-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            {
+              "$math": "divide",
+              "a": { "$state": "/queries/pokemonDetail/data/0/weight" },
+              "b": 10
+            },
+            " kg"
+          ]
+        },
+        "className": "text-right font-medium tabular-nums"
+      },
+      "children": []
+    },
+    "detail-row-abilities": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-abilities-label", "detail-ability-list"]
+    },
+    "detail-abilities-label": {
+      "type": "Text",
+      "props": {
+        "text": "Abilities",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-ability-list": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex-wrap justify-end"
+      },
+      "repeat": { "statePath": "/queries/pokemonDetail/data/0/abilities" },
+      "children": ["detail-ability-chip"]
+    },
+    "detail-ability-chip": {
+      "type": "Badge",
+      "props": {
+        "text": { "$capitalize": { "$item": "ability/name" } },
+        "variant": "secondary"
+      },
+      "children": []
+    },
+    "detail-breeding-heading": {
+      "type": "Text",
+      "props": {
+        "text": "Breeding",
+        "className": "text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-breeding-rows": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md", "className": "w-full" },
+      "children": ["detail-row-gender", "detail-row-eggs", "detail-row-cycle"]
+    },
+    "detail-row-gender": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-gender-label", "detail-gender-value"]
+    },
+    "detail-gender-label": {
+      "type": "Text",
+      "props": {
+        "text": "Gender",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-gender-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$cond": {
+            "$state": "/queries/speciesDetail/data/0/gender_rate",
+            "eq": -1
+          },
+          "$then": "Genderless",
+          "$else": {
+            "$concat": [
+              "♂ ",
+              {
+                "$math": "subtract",
+                "a": 100,
+                "b": {
+                  "$math": "multiply",
+                  "a": {
+                    "$state": "/queries/speciesDetail/data/0/gender_rate"
+                  },
+                  "b": 12.5
+                }
+              },
+              "%   ♀ ",
+              {
+                "$math": "multiply",
+                "a": {
+                  "$state": "/queries/speciesDetail/data/0/gender_rate"
+                },
+                "b": 12.5
+              },
+              "%"
+            ]
+          }
+        },
+        "className": "text-right font-medium tabular-nums"
+      },
+      "children": []
+    },
+    "detail-row-eggs": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-eggs-label", "detail-egg-list"]
+    },
+    "detail-eggs-label": {
+      "type": "Text",
+      "props": {
+        "text": "Egg Groups",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-egg-list": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex-wrap justify-end"
+      },
+      "repeat": { "statePath": "/queries/speciesDetail/data/0/egg_groups" },
+      "children": ["detail-egg-chip"]
+    },
+    "detail-egg-chip": {
+      "type": "Badge",
+      "props": {
+        "text": { "$capitalize": { "$item": "name" } },
+        "variant": "secondary"
+      },
+      "children": []
+    },
+    "detail-row-cycle": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["detail-cycle-label", "detail-cycle-value"]
+    },
+    "detail-cycle-label": {
+      "type": "Text",
+      "props": {
+        "text": "Egg Cycles",
+        "className": "shrink-0 w-28 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-cycle-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            {
+              "$math": "add",
+              "a": { "$state": "/queries/speciesDetail/data/0/hatch_counter" },
+              "b": 1
+            }
+          ]
+        },
+        "className": "text-right font-medium tabular-nums"
+      },
+      "children": []
+    },
+    "detail-panel-stats": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md", "className": "w-full" },
+      "visible": { "$state": "/tab", "eq": "stats" },
+      "children": [
+        "detail-stats-list",
+        "detail-total-row",
+        "detail-defenses-heading",
+        "detail-defenses-note"
+      ]
+    },
+    "detail-stats-list": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm", "className": "w-full" },
+      "repeat": { "statePath": "/queries/pokemonDetail/data/0/stats" },
+      "children": ["detail-stat-row"]
+    },
+    "detail-stat-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "className": "w-full"
+      },
+      "children": [
+        "detail-stat-label",
+        "detail-stat-track",
+        "detail-stat-value"
+      ]
+    },
+    "detail-stat-label": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$capitalize": {
+            "$replace": {
+              "$replace": {
+                "$replace": { "$item": "stat/name" },
+                "find": "special-attack",
+                "replacement": "Sp. Atk"
+              },
+              "find": "special-defense",
+              "replacement": "Sp. Def"
+            },
+            "find": "hp",
+            "replacement": "HP"
+          }
+        },
+        "className": "w-24 shrink-0 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-stat-track": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "className": "h-2 flex-1 overflow-hidden rounded-full bg-muted"
+      },
+      "children": ["detail-stat-fill"]
+    },
+    "detail-stat-fill": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "className": {
+          "$cond": { "$item": "base_stat", "gte": 50 },
+          "$then": "h-full rounded-full bg-emerald-500",
+          "$else": "h-full rounded-full bg-rose-500"
+        },
+        "style": {
+          "width": {
+            "$concat": [
+              {
+                "$math": "min",
+                "a": { "$item": "base_stat" },
+                "b": 100
+              },
+              "%"
+            ]
+          }
+        }
+      },
+      "children": []
+    },
+    "detail-stat-value": {
+      "type": "Text",
+      "props": {
+        "text": { "$concat": [{ "$item": "base_stat" }] },
+        "className": "w-10 text-right text-sm font-medium tabular-nums"
+      },
+      "children": []
+    },
+    "detail-total-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full border-t border-border pt-3"
+      },
+      "children": ["detail-total-label", "detail-total-value"]
+    },
+    "detail-total-label": {
+      "type": "Text",
+      "props": { "text": "Total", "className": "font-semibold" },
+      "children": []
+    },
+    "detail-total-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            {
+              "$agg": "sum",
+              "items": { "$state": "/queries/pokemonDetail/data/0/stats" },
+              "field": "base_stat"
+            }
+          ]
+        },
+        "className": "font-semibold tabular-nums"
+      },
+      "children": []
+    },
+    "detail-defenses-heading": {
+      "type": "Text",
+      "props": {
+        "text": "Type defenses",
+        "className": "text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-defenses-note": {
+      "type": "Text",
+      "props": {
+        "text": "Effectiveness multipliers need a type-chart dataset, which this keyless demo does not load.",
+        "className": "text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-panel-evolution": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md", "className": "w-full" },
+      "visible": { "$state": "/tab", "eq": "evolution" },
+      "children": ["detail-evo-from", "detail-evo-none", "detail-evo-note"]
+    },
+    "detail-evo-from": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            "Evolves from ",
+            {
+              "$capitalize": {
+                "$state": "/queries/speciesDetail/data/0/evolves_from_species/name"
+              }
+            }
+          ]
+        },
+        "className": "font-medium"
+      },
+      "visible": {
+        "$state": "/queries/speciesDetail/data/0/evolves_from_species"
+      },
+      "children": []
+    },
+    "detail-evo-none": {
+      "type": "Text",
+      "props": { "text": "No prior evolution.", "className": "font-medium" },
+      "visible": {
+        "$state": "/queries/speciesDetail/data/0/evolves_from_species",
+        "not": true
+      },
+      "children": []
+    },
+    "detail-evo-note": {
+      "type": "Text",
+      "props": {
+        "text": "Only the immediate pre-evolution is reachable from this keyless read; full chains come from the evolution-chain endpoint.",
+        "className": "text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "detail-panel-moves": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex-wrap w-full"
+      },
+      "visible": { "$state": "/tab", "eq": "moves" },
+      "repeat": { "statePath": "/queries/pokemonDetail/data/0/moves" },
+      "children": ["detail-move-chip"]
+    },
+    "detail-move-chip": {
+      "type": "Badge",
+      "props": {
+        "text": {
+          "$capitalize": {
+            "$replace": { "$item": "move/name" },
+            "find": "-",
+            "replacement": " "
+          }
+        },
+        "variant": "secondary"
+      },
+      "children": []
+    }
+  },
+  "dataSources": {
+    "pokedex": {
+      "provider": "api",
+      "config": { "baseUrl": "https://pokeapi.co/api/v2" }
+    }
+  },
+  "resources": {
+    "pokemon": {
+      "dataSource": "pokedex",
+      "collection": "pokemon",
+      "schema": { "name": "string" }
+    },
+    "pokemonSpecies": {
+      "dataSource": "pokedex",
+      "collection": "pokemon-species",
+      "schema": { "name": "string" }
+    }
+  },
+  "queries": {
+    "pokemonDetail": {
+      "resource": "pokemon",
+      "operation": "get",
+      "params": { "id": { "$state": "/id" } }
+    },
+    "speciesDetail": {
+      "resource": "pokemonSpecies",
+      "operation": "get",
+      "params": { "id": { "$state": "/id" } }
+    }
+  }
+}

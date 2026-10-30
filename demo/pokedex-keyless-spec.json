@@ -1,0 +1,284 @@
+{
+  "root": "dex-root",
+  "state": { "page": 0, "limit": 12 },
+  "urlSync": ["page", "limit"],
+  "elements": {
+    "dex-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "lg" },
+      "watch": {
+        "/page": {
+          "action": "data_read",
+          "params": { "query": "pokedexList" }
+        }
+      },
+      "children": [
+        "dex-heading",
+        "dex-note",
+        "dex-count",
+        "dex-loading",
+        "dex-error",
+        "dex-empty",
+        "dex-grid",
+        "dex-footer"
+      ]
+    },
+    "dex-heading": {
+      "type": "Heading",
+      "props": {
+        "text": "Pokédex — keyless list straight from PokeAPI",
+        "level": "h1"
+      },
+      "children": []
+    },
+    "dex-note": {
+      "type": "Text",
+      "props": {
+        "text": "No key and no proxy: one paged list read straight from https://pokeapi.co/api/v2 (page/limit bound to state → ?offset=…&limit=…), then the adapter fans out one GET /pokemon/{id} per row through the same public API. Next/Prev move /page and a watcher re-runs the query; the URL mirrors the page, so ?page=2&limit=12 is a shareable deep link. Open a Pokémon with its Details button — the press navigates to the detail screen with that row's id.",
+        "className": "dex-note"
+      },
+      "children": []
+    },
+    "dex-count": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$computed": "pageLabel",
+          "args": {
+            "page": { "$state": "/page" },
+            "maxPage": { "$state": "/queries/pokedexList/maxPage" }
+          }
+        }
+      },
+      "children": []
+    },
+    "dex-loading": {
+      "type": "Text",
+      "props": { "text": "Loading the dex…", "className": "dex-loading" },
+      "visible": { "$state": "/queries/pokedexList/status", "eq": "loading" },
+      "children": []
+    },
+    "dex-error": {
+      "type": "Text",
+      "props": {
+        "text": "The dex is unreachable right now.",
+        "className": "dex-error"
+      },
+      "visible": { "$state": "/queries/pokedexList/status", "eq": "error" },
+      "children": []
+    },
+    "dex-empty": {
+      "type": "Text",
+      "props": { "text": "No Pokémon in the dex.", "className": "dex-empty" },
+      "visible": [
+        { "$state": "/queries/pokedexList/count", "eq": 0 },
+        { "$state": "/queries/pokedexList/status", "eq": "success" }
+      ],
+      "children": []
+    },
+    "dex-grid": {
+      "type": "Grid",
+      "props": { "columns": 3, "gap": "md", "className": "grid-cols-2" },
+      "repeat": { "statePath": "/queries/pokedexList/data", "key": "name" },
+      "children": ["dex-cell"]
+    },
+    "dex-footer": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["dex-prev", "dex-page-label", "dex-next"]
+    },
+    "dex-prev": {
+      "type": "Button",
+      "props": { "label": "Previous", "leadingIcon": "chevron-left" },
+      "visible": { "$state": "/page", "gt": 0 },
+      "on": {
+        "press": {
+          "action": "setState",
+          "params": {
+            "statePath": "/page",
+            "value": {
+              "$computed": "stepPage",
+              "args": {
+                "page": { "$state": "/page" },
+                "maxPage": { "$state": "/queries/pokedexList/maxPage" },
+                "delta": -1
+              }
+            }
+          }
+        }
+      },
+      "children": []
+    },
+    "dex-page-label": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$computed": "pageLabel",
+          "args": {
+            "page": { "$state": "/page" },
+            "maxPage": { "$state": "/queries/pokedexList/maxPage" }
+          }
+        },
+        "className": "dex-page-label tabular-nums"
+      },
+      "children": []
+    },
+    "dex-next": {
+      "type": "Button",
+      "props": { "label": "Next", "trailingIcon": "chevron-right" },
+      "visible": { "$state": "/queries/pokedexList/hasNext" },
+      "on": {
+        "press": {
+          "action": "setState",
+          "params": {
+            "statePath": "/page",
+            "value": {
+              "$computed": "stepPage",
+              "args": {
+                "page": { "$state": "/page" },
+                "maxPage": { "$state": "/queries/pokedexList/maxPage" },
+                "delta": 1
+              }
+            }
+          }
+        }
+      },
+      "children": []
+    },
+    "dex-cell": {
+      "type": "Card",
+      "props": {
+        "className": {
+          "$cond": { "$item": "types/0/type/name", "eq": "grass" },
+          "$then": "bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-900 h-full transition-shadow hover:shadow-md",
+          "$else": {
+            "$cond": { "$item": "types/0/type/name", "eq": "fire" },
+            "$then": "bg-rose-50 dark:bg-rose-950 border-rose-200 dark:border-rose-900 h-full transition-shadow hover:shadow-md",
+            "$else": {
+              "$cond": { "$item": "types/0/type/name", "eq": "water" },
+              "$then": "bg-sky-50 dark:bg-sky-950 border-sky-200 dark:border-sky-900 h-full transition-shadow hover:shadow-md",
+              "$else": {
+                "$cond": { "$item": "types/0/type/name", "eq": "bug" },
+                "$then": "bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-900 h-full transition-shadow hover:shadow-md",
+                "$else": {
+                  "$cond": { "$item": "types/0/type/name", "eq": "poison" },
+                  "$then": "bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-900 h-full transition-shadow hover:shadow-md",
+                  "$else": {
+                    "$cond": { "$item": "types/0/type/name", "eq": "flying" },
+                    "$then": "bg-indigo-50 dark:bg-indigo-950 border-indigo-200 dark:border-indigo-900 h-full transition-shadow hover:shadow-md",
+                    "$else": "bg-muted/40 border-border h-full transition-shadow hover:shadow-md"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "children": ["dex-row", "dex-details"]
+    },
+    "dex-details": {
+      "type": "Button",
+      "props": {
+        "label": "Details",
+        "trailingIcon": "chevron-right",
+        "className": "w-full"
+      },
+      "on": {
+        "press": {
+          "action": "navigate",
+          "params": {
+            "screen": "pokemon-detail",
+            "id": { "$item": "id" }
+          }
+        }
+      },
+      "children": []
+    },
+    "dex-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full"
+      },
+      "children": ["dex-info", "dex-art"]
+    },
+    "dex-info": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["dex-label", "dex-types"]
+    },
+    "dex-label": {
+      "type": "Text",
+      "props": {
+        "text": { "$capitalize": { "$item": "name" } },
+        "className": "dex-name font-semibold tracking-wide"
+      },
+      "children": []
+    },
+    "dex-types": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex-wrap"
+      },
+      "repeat": { "statePath": { "$item": "types" } },
+      "children": ["dex-chip"]
+    },
+    "dex-chip": {
+      "type": "Badge",
+      "props": { "text": { "$item": "type/name" }, "variant": "secondary" },
+      "children": []
+    },
+    "dex-art": {
+      "type": "Image",
+      "props": {
+        "src": {
+          "$item": "sprites/other/official-artwork/front_default"
+        },
+        "alt": { "$capitalize": { "$item": "name" } },
+        "width": null,
+        "height": null,
+        "className": "w-20 h-20 object-contain shrink-0"
+      },
+      "children": []
+    }
+  },
+  "dataSources": {
+    "pokedex": {
+      "provider": "api",
+      "config": {
+        "baseUrl": "https://pokeapi.co/api/v2",
+        "itemsPath": "/results",
+        "itemDetail": { "path": "/pokemon/{id}" }
+      }
+    }
+  },
+  "resources": {
+    "pokemon": {
+      "dataSource": "pokedex",
+      "collection": "pokemon",
+      "schema": { "name": "string", "url": "string" }
+    }
+  },
+  "queries": {
+    "pokedexList": {
+      "resource": "pokemon",
+      "operation": "list",
+      "params": {
+        "page": { "$state": "/page" },
+        "limit": { "$state": "/limit" }
+      },
+      "pagination": { "pageParam": "offset", "totalPath": "/count" }
+    }
+  }
+}
