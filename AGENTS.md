@@ -39,6 +39,11 @@ Before finishing any change: `bun run lint && bunx tsc --noEmit && bun run test`
 - `components/`, `lib/` — shared UI and utilities; create as needed and colocate feature code
 - `docs/plan/` — per-feature implementation plans (mandated by `.agents/rules/feature-plan.md`)
 
+## Git commits
+
+- Commit messages end at their last line: **never add AI attribution** — no `Generated with` line, no `Co-Authored-By`, no co-author trailers
+- Commit bodies are always a bullet list (subject, blank line, `-` bullets)
+
 ## Rules and lessons
 
 - Always-on rules load from `.agents/rules/` (wired via `instructions` in `opencode.json`)
