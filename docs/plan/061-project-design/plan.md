@@ -158,7 +158,7 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test` (061-3: 827 unit / 0 fail)
 - [ ] Unit: project store CRUD + hydration fallback; ref resolution order
       (id → slug → in-project name) incl. unknown ref; `projectId` survives the
       sync merge (`rowToEntry`/`applyRemoteEntry` never drop it); namespace/data
@@ -167,19 +167,36 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
       drawer → author/bind a `navigate` action → activating it routes to the
       sibling screen → shared record written on screen A is readable on screen B
       → reload keeps the grouping
-- [ ] e2e: existing suite stays green (127 tests; every entry without a
-      `projectId` must behave exactly as before)
+- [x] e2e: existing suite stays green (127 tests; every entry without a
+      `projectId` must behave exactly as before) — 127 passed (exit 0) with
+      `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` exported; a first run without them
+      failed 4 Supabase-provider tests that passed in isolation and in the
+      rerun (batch quota/race, lesson `e2e-auth-quota`)
 - [ ] Unit/e2e: `/session` values survive a screen change (seeded from the
       project store, written back on change) while screen-local state does not;
       the navigate action tile writes a ref and routes to the sibling
 - [ ] MCP spot-check per step (create/switch project, navigate live, shared data
       visible on both screens), console clean
-- [ ] 061-3: `/{locale}/{project-slug}` serves the home screen;
+- [x] 061-3: `/{locale}/{project-slug}` serves the home screen;
       `/{locale}/{project-slug}/{id}` seeds `/id` and the detail query fetches
       that record; a card click carries the per-card id (`$item`) and lands on
       the detail; editor `/ui/<ref>/<param>` mirrors it; screens without a
-      project/route behave exactly as before
-- [ ] i18n: en/es key sets identical for all new strings
+      project/route behave exactly as before — MCP (chrome-devtools, seeded
+      project "Pokédex"): bare → home, `/4` and `/999` render their id on the
+      same detail screen, in-project slug beats the pattern, unmatched path →
+      not-found gate, unknown namespace → not-found, flat `/en/detail/4`
+      seeds, editor `/ui/detail1/4` renders `4` while bare `/ui/detail1`
+      renders the spec default, card click → `/en/pokedex/25` → detail shows
+      `25`, console error-free. **Demo artifact (§3) done 2026-10-30** with the
+      hand-crafted PokéAPI specs: project "Pokédex" (slug `pokedex`, grid =
+      oldest member = home), bare `/en/pokedex` serves the grid, `/en/pokedex/4`
+      seeds `4` and the `get` fetches record 4, a card click →
+      `/en/pokedex/7` carries the `$item` id, Back → home, editor
+      `/ui/<ref>/4` mirrors, console clean. Entry slug is `pokedex-grid` — an
+      entry slug equal to the project slug would shadow the namespace (local-
+      entry-first resolution in `preview-client`)
+- [x] i18n: en/es key sets identical for all new strings (312 = 312,
+      `editor.navigate.sendRecordId` present in both)
 - [ ] No `progress.md` — plan.md + INDEX.md only
 
 ## Status log
@@ -190,4 +207,6 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 | 2026-10-29 | approved — clarifications answered per recommendation: local-only projects (Q1), project namespace + `/session` subtree (Q2), drawer grouping + top-bar switcher (Q3), publishing deferred to F18 (Q4), navigate tile ships in v1 (Q5) |
 | 2026-10-29 | 061-1 implemented — `lib/projects/projects.ts` store (+ active id), `HistoryEntry.projectId` (sync pull keeps the local grouping), history-drawer project groups with create/rename/switch/delete, top-bar `ProjectSwitcher` (pill + row), en/es `projects.*`; 760 unit / 127 e2e / i18n 306=306 / MCP spot-check (create, switch, rename via Enter, Escape cancels without closing the drawer, delete, mobile row) |
 | 2026-10-29 | **scope change (user-directed)** — the demo goal is a Pokédex detail screen linked from the grid cards with the record id: `navigate` gains params + a project route namespace (`/{locale}/{project-slug}`, `/{locale}/{project-slug}/{id}`), new step **061-3 = navigate params + project routes** (detail spec hand-crafted via JSON import; cards → same detail screen, per-card id; project renamed to "Pokédex"; locale prefix kept), shared data/state renumbered **061-4**. Design decisions #9 added; Q&A: locale `/en/...` ✓, rename ✓, 061-2 commits first ✓ |
+| 2026-10-29 | 061-3 implemented — preview `[[...route]]` catch-all (entry-pattern → project namespace → published-bare-only, unmatched path = not-found gate, `overlayPathState` seeding applied after the urlSync overlay), editor `[[...param]]` catch-all + `canvasState` seeding, `ScreenListing.route` + `recordRouteParam`, editor helpers `navigateRecordParamOf`/`setNavigateRecordParam` (no-op writes return the same spec), Navigate tile "send record id" toggle (shown only for a pattern with a placeholder, retarget resets it), en/es `editor.navigate.sendRecordId`; 827 unit / **127 e2e** / i18n 312=312 / MCP: home + pattern + exact-slug precedence + not-found gates + flat entry path + editor mirror + card click `/en/pokedex/25` → `25`, console clean. Known nit: after a *client-side* push the tab title shows the server metadata (the published row's name) instead of the local entry name; hard loads show the entry name (React-hoisted `<title>` wins there) |
 | 2026-10-29 | 061-2 implemented — catalog `navigate` action + `NAVIGATE_RULES`/`siblingScreensBlock` prompt pair, `lib/projects/screen-nav.ts` (scope + ref resolution + `runNavigate`), handlers on editor/preview/live, editor Navigate tile (`PRESSABLE_TYPES` gate, sibling select, `replaceNavigateBinding` preserves sibling press actions, stale-ref "Missing screen"), en/es `editor.navigate.*` + `playground.navigateUnknown`; 792 unit / i18n 311=311 / MCP: empty state on a 1-screen project, export→import sibling listed in the tile, binding written (`setState` sibling preserved), canvas click routes `/en/ui/b83b31fd…` → `/en/ui/d4c9fd10…`; console clean (known Radix aria-hidden warn + transient Supabase `ERR_ADDRESS_UNREACHABLE` poll) |
+| 2026-10-30 | demo artifacts (§3, user-driven UI work) built — project "Pokédex" (slug `pokedex`), both keyless PokéAPI specs re-imported into it (grid first → home/oldest), slugs `pokedex-grid`/`pokemon-detail`, detail Back ref retargeted (`pokedex-grid`; an entry slug equal to the project slug shadows the namespace in `preview-client` resolution); preview proof: bare `/en/pokedex` → grid, `/en/pokedex/4` → Charmander (record 4 fetched), Details → `/en/pokedex/7`, Back → home, editor `/ui/<ref>/4`, console clean; specs live in `demo/` |
