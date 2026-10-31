@@ -68,6 +68,57 @@ store first, then remote pull through the same LWW rule the entries use.
 `lib/history/sync.ts`, `lib/projects/projects.ts`, sync status UI,
 en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 
+## Tasks
+
+### 1. Schema, RLS and grants (db/)
+
+- [ ] `db/01_schema.sql` — `projects` table: client-generated uuid PK,
+      owner_id, name, slug, home_screen_id, status, `state jsonb` default
+      `{}`, timestamps, unique (owner_id, slug)
+- [ ] `db/03_rls.sql` — owner-only select/insert/update/delete, RLS enabled
+- [ ] `db/04_grants.sql` — `authenticated` DML only, revoke set as in the
+      file pattern
+- [ ] SQL shown to the user, then applied to the live project in one batch
+      (decision 6); service-client spot-check after apply
+
+### 2. Second sync loop (lib/history/sync.ts)
+
+- [ ] Row ↔ `Project` mappers beside `rowToEntry` / `entryToRow`
+- [ ] `startSync` parameterized over table + mapper so both loops share one
+      status dot and one `flushSync` path (decision 1)
+- [ ] Debounced push with `updatedAt` LWW tie-break; the newer row wins
+- [ ] Sync status UI covers both loops with a single indicator
+
+### 3. Local adoption (lib/projects/projects.ts)
+
+- [ ] First sign-in merge: local uuid rows upload as-is, remote rows pull
+      through the same LWW rule — no id remapping, so
+      `HistoryEntry.projectId` stays valid
+- [ ] Adoption-time slug collision under the same owner bumps via
+      `uniqueSlug`; both projects kept (decision 5)
+- [ ] Corrupt/partial remote rows sanitized on read (mirror the
+      `normalizeEntry` discipline)
+- [ ] Signed-out behavior stays byte-identical (061 contract)
+
+### 4. Reserved-slug fix
+
+- [ ] `createProject` and `renameProject` reject reserved segments with an
+      i18n error (en/es keys)
+- [ ] `uniqueSlug` consults `isReservedSlug` — slug `admin` can never be
+      claimed (fixes the shadowed-route bug that exists today)
+
+### 5. Tests and probes
+
+- [ ] Unit (`lib/projects/projects.test.ts`, `lib/history/sync.test.ts`):
+      adoption merge, LWW tie-break, reserved rejection at create and
+      rename, corrupt-row sanitization
+- [ ] e2e two contexts: create in A, same account in B sees the same id and
+      grouping — context B reuses the dedicated storage state, never a fresh
+      anon signup (lesson `e2e-auth-quota`)
+- [ ] RLS probe: cross-owner reads return nothing for a signed-in client;
+      signed-out reads nothing
+- [ ] `e2e/project-session.spec.ts` stays green; full gate
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`

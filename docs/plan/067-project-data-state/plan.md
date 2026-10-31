@@ -62,6 +62,46 @@ this plan if that decision is overturned.
 `lib/playground/` branch-mirror handling, prompt rules block, en/es keys,
 unit + e2e specs.
 
+## Tasks
+
+### 1. Scope guard
+
+- [ ] Confirm 062 decision 2 is still UPHELD before writing any code — if
+      overturned, rewrite this plan first (conditional scope)
+
+### 2. State scopes documented and tested
+
+- [ ] Document the three scopes where the editor can state them (en/es
+      keys): project/shared `/session`, screen-local, resource data
+- [ ] Keep `/session` ephemeral-small; durable records (cart, orders) go to
+      a resource (decision 2)
+
+### 3. Cross-screen data and lifecycle
+
+- [ ] End-to-end proof that screen A writes and screen B reads through
+      `genui-data:{projectId}:` / `genui_records.app_id`
+- [ ] Project deletion purges `genui-data:{projectId}:` records and matching
+      `genui_records` rows while its screens survive — purge added to
+      `lib/projects/projects.ts` (decision 4)
+- [ ] Namespace-isolation regression test: two projects, same resource name,
+      no cross-reads (decision 3)
+
+### 4. Authoring-time validation and branches
+
+- [ ] Provider capability validation copy in `lib/data-sources/` surfaced at
+      authoring time (a resource that cannot refresh says so in the editor)
+- [ ] Loading / error / empty / pending branch mirrors across a screen switch
+      (`lib/playground/`) plus the prompt rules block
+
+### 5. Tests
+
+- [ ] Unit: namespace isolation, purge on delete, branch mirror shapes
+- [ ] e2e: record written on screen A readable on screen B; two projects
+      never see each other's records; delete project → records gone,
+      screens kept
+- [ ] Publish path still classifies data-bearing screens (bake coverage);
+      full gate
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`

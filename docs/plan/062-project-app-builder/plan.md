@@ -43,6 +43,23 @@ under this plan itself.**
 | Component templates copy a component | Implemented (weaker than assumed) | plan 060: visitor-global localStorage, inert `{rootKey, elements}` subtree, no versions/owner/visibility |
 | Feature numbers 062-065 | Do not exist | only chat-defined; claimed by this roadmap (062-067) per `feature-plan.md` numbering |
 
+## Source-document deviations (re-reviewed 2026-10-31)
+
+The source of this roadmap is an external "Comprehensive Architecture and
+Implementation Plan". It was checked against the repo again after Phase 0;
+where it differs from this repo's plans, **the repo plans win**:
+
+| Source-document item | Verdict here |
+| --- | --- |
+| Feature IDs: "062 re-import", "063 usernames", "064 publishing", "065 membership" | **ID collision — never apply those numbers here.** Repo numbering is authoritative: 062 umbrella, 063 re-import (implemented), 064 database projects, 065 workspace, 066 catalog, 067 data/state, 068 usernames, 069 publishing, 070 demo. Source "NEW-1"/"NEW-2" = 065, "NEW-3"/"NEW-4" = 066, "NEW-5" = 067, "NEW-6" = 069, "NEW-7" (integrations) deferred, "NEW-8" = 070 |
+| "Data-source configurations belong to projects" + a `ProjectDataSource` table (sections 3.5, 4.7) | **Overridden** — blocking decision 2 stands: declarations stay per spec, the project namespace shares the rows; a `ProjectDataSource` table reverses a recorded 061 rejection. Plan 067 is written for the upheld option |
+| `HistoryEntry.projectId: string \| null` (section 2) | Actual shape is optional `projectId?: string` — audit table above |
+| "F17 database-backed projects already registered" (section 2) | Was an open follow-up until plan 064 claimed it — audit table above |
+| "Linked UI editing" in the source's old 064/065 definitions | Already replaced by plan 066's version-pinned installs + fork-on-edit |
+
+Everything else (domain model, phase order, acceptance criteria) is either
+reflected in the plans above or explicitly rejected in their design decisions.
+
 ## Blocking decisions (approve together with this plan)
 
 1. **Route namespace registry.** One precedence for the shared

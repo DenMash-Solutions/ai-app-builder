@@ -69,6 +69,35 @@ existing single-UI flow still works.
 `demo/` specs, `e2e/ecommerce.spec.ts`, catalog seeds, README section,
 en/es copy if any new UI is needed for the script.
 
+## Tasks
+
+### 1. Seed assets (demo/)
+
+- [ ] 7 screen specs seeded from the keyless Pokédex patterns (route
+      params, navigate, shared session — decision 1)
+- [ ] 6 component catalog assets spanning at least two versions
+- [ ] 4 keyless data fixtures: Products, Customers, Cart, Orders
+      (decision 2)
+- [ ] README/docs section describing how to replay the demo
+
+### 2. The 15 scenarios as e2e (`e2e/ecommerce.spec.ts`)
+
+- [ ] Scenarios 1-7: create project, generate screens, install a catalog
+      version, reuse it in a second project, publish v2 with installations
+      unchanged, fork in A leaving B intact, connect shared data
+- [ ] Scenarios 8-9: navigate between screens; dynamic product route
+- [ ] Scenarios 10-13: publish, access live app, update with routing and
+      persistence, handle change redirects the old URL
+- [ ] Scenarios 14-15: second project unaffected throughout; anonymous
+      visitor sees published pages only
+- [ ] Scripted MCP spot-check run alongside and logged
+
+### 3. Acceptance
+
+- [ ] All 15 scenarios automated or scripted, exit 0
+- [ ] Full gate (format, lint, tsc, unit, build, e2e); console clean except
+      the known Radix warning; i18n key parity intact
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`

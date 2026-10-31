@@ -66,6 +66,57 @@ and fork-on-edit.
 `lib/editor/templates.ts` (+tests), new `lib/catalog/`, catalog UI panel,
 `components/playground/` insert seams, en/es keys, `e2e/` catalog spec.
 
+## Tasks
+
+### 1. Schema and immutability (db/)
+
+- [ ] `catalog_assets` migration (id, owner_id, name, description,
+      type screen|component, visibility, latest_version_id, timestamps) +
+      RLS per file pattern
+- [ ] `catalog_asset_versions` (asset_id, monotonic version, spec,
+      changelog, created_at) with unique(asset, version) mirroring
+      `page_versions`
+- [ ] DB-enforced version immutability — trigger or column permission
+      (decision 3) — with a rejection test at that layer
+- [ ] Install rows: source asset id + version id pinned; ownership copied
+      to the installing project
+
+### 2. Catalog library (lib/catalog/)
+
+- [ ] Asset and version CRUD on the existing client/seam patterns
+- [ ] Publish-new-version flow: keep old version, insert immutable version,
+      bump `latest_version_id`, optional changelog
+- [ ] Lazy seed of the `genui-component-templates` localStorage library into
+      catalog rows without duplicates (decision 5)
+
+### 3. Install, update, fork
+
+- [ ] Install = version-pinned snapshot copy: new `uis` row for screens,
+      expanded subtree for components (decision 1)
+- [ ] Explicit update flow: installed vs latest version, confirmation,
+      rollback to a previously installed version
+- [ ] Fork-on-edit as one RPC/transaction: read version → create copy →
+      initial revision → swap reference (decision 4), concurrency-safe
+- [ ] Insert seam in `components/playground/`: expansion at install with
+      fresh keys + `data-template-id` provenance (062 decision 3)
+
+### 4. Catalog UI
+
+- [ ] Panel reusing the existing template UI: search, filters (all/mine/
+      public/private, screens/components), owner, latest version, preview
+- [ ] Visibility toggle whose change never invalidates installations
+
+### 5. Tests
+
+- [ ] Unit: version monotonicity, immutability rejected at the DB layer,
+      install pinning survives a new latest version, fork gets independent
+      identity and revision 0
+- [ ] e2e: two projects install v1 → v2 published → both still render v1;
+      fork in A leaves B unchanged; private install denied (service-client
+      assertion)
+- [ ] Signed-out local template library still works; migration seeds without
+      duplicates; full gate
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`

@@ -52,6 +52,41 @@ components, new `app/[locale]/user/[username]/ui/`, `lib/slug.ts`,
 `lib/i18n/routing.ts`, `proxy.ts` (verify, change only if required),
 availability endpoint, en/es keys.
 
+## Tasks
+
+### 1. Schema and reserved segments (db/)
+
+- [ ] Migration: `profiles.username` lowercase, unique index, check against
+      `SLUG_PATTERN`, never a reserved segment; existing-user backfill
+      strategy = prompt until claimed, no silent auto-claim (decision 1)
+- [ ] `user` added to BOTH `RESERVED_SLUGS` (`lib/slug.ts`) and
+      `APP_SEGMENTS` (`lib/i18n/routing.ts`) — updating one without the
+      other misroutes `proxy.ts`
+- [ ] RLS: minimal public read of profiles (id + username columns only)
+
+### 2. Claim flow
+
+- [ ] Signup requires a username for new users (signup component)
+- [ ] Existing users are prompted until they claim (login/app surface)
+- [ ] Availability endpoint — advisory only, the DB constraint is the truth
+      (decision 3)
+- [ ] en/es copy for the claim UI and the profile page
+
+### 3. Public profile route
+
+- [ ] `app/[locale]/user/[username]/ui/` lists only that owner's
+      `published_pages` rows — drafts and local entries never render
+- [ ] Unknown username 404s; no editor-only data in the payload
+
+### 4. Tests
+
+- [ ] Unit: normalization, reserved rejection, pattern enforcement
+- [ ] e2e: duplicate claim rejected server-side; profile lists only
+      published UIs and 404s on drafts; deep-link regressions for existing
+      app segments plus the new `/user/...` cases
+- [ ] Proxy spot-check: bare, two-segment and three-segment paths still
+      resolve; full gate
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`

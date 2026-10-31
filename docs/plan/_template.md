@@ -21,6 +21,17 @@
 
 1. {Decision} — rejected: {alternative}, because {reason}
 
+## Tasks
+
+{Group by workstream, one checkbox per reviewable unit of work, ordered by
+dependency. Tick a box in the same turn the work lands — this section is the
+progress tracker. Derive tasks from Scope + Design decisions + Files so
+nothing floats; leave proof-runs to Verification.}
+
+### {Workstream — anchored paths}
+
+- [ ] {task}
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test && bun run build && bun run test:e2e`

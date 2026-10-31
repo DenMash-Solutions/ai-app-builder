@@ -62,6 +62,59 @@ registry module (new `lib/routes/`), `lib/publish/*`, `proxy.ts` if
 required, publish UI, `app/[locale]/[slug]/[[...route]]` resolution,
 en/es keys, e2e publish specs.
 
+## Tasks
+
+### 1. Schema (db/)
+
+- [ ] Migration: `project.handle`, `published_entry_points`
+      (project_id, screen_id, route, unique per project+route), redirect
+      rows; handle uniqueness shared with existing `published_pages` slugs
+      so a claim can never collide (decision 2)
+- [ ] RLS + grants per the file pattern
+- [ ] Featured-pointer story for projects (`site_settings.featured_ui_id`
+      is screen-based today)
+
+### 2. Namespace registry (lib/routes/)
+
+- [ ] One registry module shared by preview and live implementing 062
+      decision 1 precedence: app segments > `/user` > project handles >
+      published slugs > local entry slugs
+- [ ] Precedence unit matrix covering every claimant pair, ties included
+- [ ] Claim paths consult the registry (reserved + already-taken checks)
+
+### 3. Claim, change, redirect
+
+- [ ] Handle claim on publish: atomic, lowercase, reserved-checked,
+      separate from the name-derived `Project.slug`
+- [ ] Handle change: reserve new → update routing → old handle becomes a
+      redirect row; an active redirect blocks re-claim (decision 4);
+      retention policy recorded in this plan when implemented
+- [ ] Unpublish is atomic across routes via `project.status`
+      (decision 6)
+
+### 4. Project runtime and validation
+
+- [ ] `app/[locale]/[slug]/[[...route]]` resolution: handle → route →
+      screen spec → existing `bakeHtmlByLanguage` path; dynamic params seed
+      state through `overlayPathState` exactly like preview
+- [ ] Publish validation checklist: home screen set, every route resolves,
+      data configs valid, no dangling references
+- [ ] Per-screen zero-JS `content` contract preserved (056 F2)
+
+### 5. Cache and writers
+
+- [ ] Every new writer invalidates through the shared tag helper
+      (decision 5; lesson `cache-invalidation-writers`)
+
+### 6. Tests
+
+- [ ] Unit: registry precedence matrix, atomic claim, redirect
+      exclusivity, dynamic route resolution
+- [ ] e2e: project publishes → home, static, dynamic and 404 routes resolve
+      live; a second project is unaffected; handle change redirects the old
+      URL; a pre-existing published slug still serves
+- [ ] Cache revalidation observable in the e2e log; full gate + build
+
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
