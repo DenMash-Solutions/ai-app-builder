@@ -68,6 +68,6 @@ row in the same turn as any status change** (rule:
 | 058 | [component-states-editor](058-component-states-editor/plan.md) | implemented | 2026-10-26 |
 | 059 | [device-preview](059-device-preview/plan.md) | implemented | 2026-10-27 |
 | 060 | [component-templates](060-component-templates/plan.md) | implemented | 2026-10-28 |
-| 061 | [project-design](061-project-design/plan.md) | approved | 2026-10-29 |
+| 061 | [project-design](061-project-design/plan.md) | implemented | 2026-10-30 |
 
-_61 plans: 56 implemented · 2 approved (`033`, `061`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._
+_61 plans: 57 implemented · 1 approved (`033`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._

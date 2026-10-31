@@ -1,6 +1,6 @@
 # Project Design (Multi-UI System) — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-29
 
 ## Goal
@@ -99,7 +99,16 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
    store additionally holds a `state` object that is merged into each screen's
    initial state under `/session` and written back on change (debounced), so
    screen-local state (form drafts, `/page`) stays per screen while
-   `/session/cart` etc. survives navigation. Decided Q2 (2026-10-29). —
+   `/session/cart` etc. survives navigation. Decided Q2 (2026-10-29).
+   **Mechanism revised 2026-10-30 (061-4 as-built, Next 16 `<Activity>`)**:
+   seeds **omit** `session` (`omitSessionState`) — a render-time store read
+   applied after a fresher write lands would re-add a stale value (proved by
+   the e2e race) — and `<SessionSync>` is the sole bridge: a pre-paint
+   layout-effect store→state pull (mount / screen change / Activity re-show +
+   a store subscription for writes landing elsewhere), a declared-first
+   debounce that arms only local changes (echo guard), and a stamp-guarded
+   hide-flush (`setSessionState` rejects any stamp not strictly newer than
+   the last accepted write). —
    rejected: project-level data block declarations (blocks move off the spec),
    because it touches generation, validation and the renderer path — the
    namespace alone already shares the rows; rejected: one `StateProvider` across
@@ -158,25 +167,46 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 
 ## Verification
 
-- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test` (061-3: 827 unit / 0 fail)
-- [ ] Unit: project store CRUD + hydration fallback; ref resolution order
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test` (061-4: 839 unit / 0 fail)
+- [x] Unit: project store CRUD + hydration fallback; ref resolution order
       (id → slug → in-project name) incl. unknown ref; `projectId` survives the
       sync merge (`rowToEntry`/`applyRemoteEntry` never drop it); namespace/data
-      merge behavior for A3
-- [ ] e2e: create a project → generate 2 screens into it → group visible in the
+      merge behavior for A3 — all green; 061-4 added `session-state.test.ts`
+      (`omitSessionState`, `dataNamespaceFor`), project-store session tests
+      (write-through + persistence, seed-echo write-count no-op, junk-state
+      hydration, `createProjectEntry` stamping) and a recency test ("stale
+      stamps are rejected — only strictly newer writes land")
+- [x] e2e: create a project → generate 2 screens into it → group visible in the
       drawer → author/bind a `navigate` action → activating it routes to the
       sibling screen → shared record written on screen A is readable on screen B
-      → reload keeps the grouping
-- [x] e2e: existing suite stays green (127 tests; every entry without a
+      → reload keeps the grouping — `e2e/project-session.spec.ts` (switcher
+      creates the project; mocked generation + JSON import seed the 2 screens;
+      drawer groups both with `projectId`; the generated `navigate` binding
+      routes A→B; B reads the `/session` token and the
+      `genui-data:{projectId}:` record while screen-local `/draft` does not
+      cross; bump→back inside the debounce window converges on the newer value;
+      reload keeps grouping + selection)
+- [x] e2e: existing suite stays green (every entry without a
       `projectId` must behave exactly as before) — 127 passed (exit 0) with
       `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` exported; a first run without them
       failed 4 Supabase-provider tests that passed in isolation and in the
-      rerun (batch quota/race, lesson `e2e-auth-quota`)
-- [ ] Unit/e2e: `/session` values survive a screen change (seeded from the
+      rerun (batch quota/race, lesson `e2e-auth-quota`); **re-run after 061-4
+      (2026-10-30): 128 passed / exit 0** (127 + the new spec)
+- [x] Unit/e2e: `/session` values survive a screen change (seeded from the
       project store, written back on change) while screen-local state does not;
-      the navigate action tile writes a ref and routes to the sibling
-- [ ] MCP spot-check per step (create/switch project, navigate live, shared data
-      visible on both screens), console clean
+      the navigate action tile writes a ref and routes to the sibling — the
+      e2e covers the session/local split and both directions of the bridge; the
+      tile's ref-writing was verified in 061-2 (MCP: binding written, canvas
+      click routes)
+- [x] MCP spot-check per step (create/switch project, navigate live, shared data
+      visible on both screens), console clean — 061-4 (chrome-devtools, seeded
+      project "Spot Sync"): Save on A lands `{token: shared-42}` in the project
+      store, `Add note` writes `genui-data:spot-proj:notes`, navigate routes
+      `/en/ui/spot-a` → `/en/ui/spot-b`, B reads the shared token and the
+      `spot-note` record (count 1), bump→back inside the debounce window leaves
+      BOTH the restored screen and the store at `b-v2` (visibility-scoped reads
+      — the hidden prerendered route twin renders a second copy, plan 059 T1),
+      console 0 errors / 0 warnings
 - [x] 061-3: `/{locale}/{project-slug}` serves the home screen;
       `/{locale}/{project-slug}/{id}` seeds `/id` and the detail query fetches
       that record; a card click carries the per-card id (`$item`) and lands on
@@ -197,7 +227,7 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
       entry-first resolution in `preview-client`)
 - [x] i18n: en/es key sets identical for all new strings (312 = 312,
       `editor.navigate.sendRecordId` present in both)
-- [ ] No `progress.md` — plan.md + INDEX.md only
+- [x] No `progress.md` — plan.md + INDEX.md only
 
 ## Status log
 
@@ -210,3 +240,4 @@ A1–A3 exist, per the 2026-10-27 roadmap decision.
 | 2026-10-29 | 061-3 implemented — preview `[[...route]]` catch-all (entry-pattern → project namespace → published-bare-only, unmatched path = not-found gate, `overlayPathState` seeding applied after the urlSync overlay), editor `[[...param]]` catch-all + `canvasState` seeding, `ScreenListing.route` + `recordRouteParam`, editor helpers `navigateRecordParamOf`/`setNavigateRecordParam` (no-op writes return the same spec), Navigate tile "send record id" toggle (shown only for a pattern with a placeholder, retarget resets it), en/es `editor.navigate.sendRecordId`; 827 unit / **127 e2e** / i18n 312=312 / MCP: home + pattern + exact-slug precedence + not-found gates + flat entry path + editor mirror + card click `/en/pokedex/25` → `25`, console clean. Known nit: after a *client-side* push the tab title shows the server metadata (the published row's name) instead of the local entry name; hard loads show the entry name (React-hoisted `<title>` wins there) |
 | 2026-10-29 | 061-2 implemented — catalog `navigate` action + `NAVIGATE_RULES`/`siblingScreensBlock` prompt pair, `lib/projects/screen-nav.ts` (scope + ref resolution + `runNavigate`), handlers on editor/preview/live, editor Navigate tile (`PRESSABLE_TYPES` gate, sibling select, `replaceNavigateBinding` preserves sibling press actions, stale-ref "Missing screen"), en/es `editor.navigate.*` + `playground.navigateUnknown`; 792 unit / i18n 311=311 / MCP: empty state on a 1-screen project, export→import sibling listed in the tile, binding written (`setState` sibling preserved), canvas click routes `/en/ui/b83b31fd…` → `/en/ui/d4c9fd10…`; console clean (known Radix aria-hidden warn + transient Supabase `ERR_ADDRESS_UNREACHABLE` poll) |
 | 2026-10-30 | demo artifacts (§3, user-driven UI work) built — project "Pokédex" (slug `pokedex`), both keyless PokéAPI specs re-imported into it (grid first → home/oldest), slugs `pokedex-grid`/`pokemon-detail`, detail Back ref retargeted (`pokedex-grid`; an entry slug equal to the project slug shadows the namespace in `preview-client` resolution); preview proof: bare `/en/pokedex` → grid, `/en/pokedex/4` → Charmander (record 4 fetched), Details → `/en/pokedex/7`, Back → home, editor `/ui/<ref>/4`, console clean; specs live in `demo/` |
+| 2026-10-30 | **061-4 implemented — shared data/state (A3)**: `QueryLoader namespace = projectId` (project screens' records share `genui-data:{projectId}:{collection}`), both creation seams stamp `createProjectEntry(prompt, spec)` with the active project, `<SessionSync>` is the SOLE `/session` bridge (pre-paint layout-effect store→state pull on mount/screen-change/Activity-re-show + a store subscription; declared-first 300 ms debounce arming only local changes; stamp-guarded hide-flush), seeds omit `session` (`omitSessionState` replaces `mergeSessionState`) so a late-applied render snapshot can never re-add a stale value, `setSessionState(id, next, stamp)` rejects any write not strictly newer than the last accepted (realm monotonic clock; cross-tab baseline reset on the `storage` event), `NAVIGATE_RULES` teaches `/session/<key>` as the shared subtree. **Next 16 `<Activity>` discovery (plan 059 T1 re-confirmed)**: routes stay mounted `display:none`, effect cleanups run on hide / effects re-run on show, and a hidden prerendered route twin renders a second copy — a rapid bump→back raced stale flushes and seeds three e2e failures before the redesign (labeled instance trace root-caused it). Verification: format+lint+tsc+**839 unit / 0 fail**; `e2e/project-session.spec.ts` green; **full suite 128 passed / exit 0** (127 + 1, `E2E_USER_*` exported); MCP spot-check (chrome-devtools, seeded project "Spot Sync"): Save → store write-through, `genui-data:spot-proj:notes` record, navigate `/en/ui/spot-a` → `/en/ui/spot-b`, B reads shared token + `spot-note` (count 1), bump→back leaves restored screen AND store at `b-v2`, console 0 errors / 0 warnings |
