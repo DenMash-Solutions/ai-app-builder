@@ -108,7 +108,6 @@ import {
   canUndo,
   clearHistory,
   commitRevision,
-  createEntry,
   getHistory,
   getServerHistory,
   redoRevision,
@@ -117,7 +116,11 @@ import {
   undoRevision,
   updateEntry,
 } from "@/lib/history";
-import { getActiveProjectId } from "@/lib/projects/projects";
+import { createProjectEntry } from "@/lib/projects/projects";
+import {
+  dataNamespaceFor,
+  omitSessionState,
+} from "@/lib/projects/session-state";
 import { languageName } from "@/lib/i18n/languages";
 import {
   SWITCH_LANGUAGE_ACTION,
@@ -131,6 +134,7 @@ import { specsEqual } from "@/lib/utils";
 import { registry } from "@/lib/playground/registry";
 import { QueryLoader } from "@/components/data-sources/query-loader";
 import { NavigateHandler } from "@/components/projects/navigate-handler";
+import { SessionSync } from "@/components/projects/session-sync";
 import {
   describeDataIssues,
   validateDataSources,
@@ -559,11 +563,7 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     }
 
     if (op.kind === PENDING_OP_KINDS.generate) {
-      const entry = createEntry(
-        op.prompt,
-        boundSpec,
-        getActiveProjectId() ?? undefined,
-      );
+      const entry = createProjectEntry(op.prompt, boundSpec);
       addEntry(entry);
       // The URL owns the active UI: the landing streams the generation,
       // then the committed entry takes over at /ui/[id] (the destination
@@ -668,15 +668,25 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
       SPEC_STATE_KEYS.locale in merged
         ? { ...merged, [SPEC_STATE_KEYS.locale]: contentLang }
         : merged;
+    // Shared /session (061-4, A3): project screens seed WITHOUT `session` —
+    // the provider's initialState diff then deletes the key on every screen
+    // change and <SessionSync> pulls the live store value back pre-paint.
+    // A render-time store read here could be applied late under Next 16's
+    // <Activity> (plan 059: routes stay mounted), re-adding a STALE session
+    // after a fresher write landed — the e2e proved that race. No project →
+    // the spec's own session defaults stay untouched.
+    const withSession = activeEntry?.projectId
+      ? omitSessionState(seeded)
+      : seeded;
     // Deep-link in (052, D9): declared urlSync keys overlay the seed
     // BEFORE the canvas mounts — the first paged read already runs at the
     // linked page. Client-only: window is absent during SSR (the seed
     // renders there and the overlay joins on hydration).
     const withUrl =
       typeof window === "undefined"
-        ? seeded
+        ? withSession
         : overlayUrlState(
-            seeded,
+            withSession,
             window.location.search,
             specUrlSync(displayedSpec),
           );
@@ -691,7 +701,7 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
         ? matchRoutePattern(pattern, routeParamPath)
         : null,
     );
-  }, [displayedSpec, contentLang, routeParamPath]);
+  }, [displayedSpec, contentLang, routeParamPath, activeEntry?.projectId]);
   // The design's own switcher writes state.locale at runtime — treat that as
   // a content-language selection so canvas and pill always agree (the pill's
   // onChange does the same in reverse). Only real tags the spec carries
@@ -1012,11 +1022,7 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
   // is on canvas.
   const handleImportSpec = (importedSpec: Spec) => {
     const { spec: normalized } = normalizeSpecCopy(importedSpec);
-    const entry = createEntry(
-      t("playground.importedEntry"),
-      normalized,
-      getActiveProjectId() ?? undefined,
-    );
+    const entry = createProjectEntry(t("playground.importedEntry"), normalized);
     addEntry(entry);
     setHistoryOpen(false);
     router.push(`/ui/${entry.id}`);
@@ -1729,14 +1735,24 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     >
       {/* Data sources runtime (docs/plan/043-data-sources, D6/D8): mirrors
                   declared queries into /queries and registers data_mutate. The
-                  namespace is the entry id, so each design's records live under
-                  their own localStorage keys; a not-yet-committed stream on the
-                  landing page shares the "local" scope. */}
+                  namespace is the project id for project screens (061-4 — every
+                  member screen shares one record store) and the entry id
+                  otherwise; a not-yet-committed stream on the landing page
+                  shares the "local" scope. */}
       {displayedSpec && (
         <QueryLoader
           spec={displayedSpec}
-          namespace={activeEntry?.id ?? LOCAL_DATA_NAMESPACE}
+          namespace={dataNamespaceFor(
+            activeEntry,
+            activeEntry?.id ?? LOCAL_DATA_NAMESPACE,
+          )}
         />
+      )}
+      {/* Shared /session write-through (061-4): mirrors state.session into
+          the project store, debounced and flushed on unmount. No project →
+          no-op, so screen-local state never leaks across screens. */}
+      {displayedSpec && activeEntry?.projectId && (
+        <SessionSync projectId={activeEntry.projectId} />
       )}
       {/* Navigate (061-3): registered inside the provider so it can deref
           $item path params against the live snapshot. The editor's route

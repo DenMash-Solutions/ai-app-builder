@@ -3,6 +3,7 @@
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { QueryLoader } from "@/components/data-sources/query-loader";
 import { NavigateHandler } from "@/components/projects/navigate-handler";
+import { SessionSync } from "@/components/projects/session-sync";
 import { SpecThemeInit } from "@/components/spec-theme-init";
 import { Button } from "@/components/ui/button";
 import { appDirectives } from "@/lib/computed/directives";
@@ -29,6 +30,10 @@ import {
 } from "@/lib/playground/url-sync";
 import { getProjects, projectBySlug } from "@/lib/projects/projects";
 import { screenScope } from "@/lib/projects/screen-nav";
+import {
+  dataNamespaceFor,
+  omitSessionState,
+} from "@/lib/projects/session-state";
 import {
   matchRoutePattern,
   overlayPathState,
@@ -274,10 +279,18 @@ export default function PreviewPage({
   // and the overlay joins on hydration) — same guard as the canvas.
   // Path params (061-3) overlay LAST — the URL path wins over the query —
   // and unlike the window-guarded urlSync overlay they also apply during SSR.
+  // Shared /session (061-4, A3): project screens seed WITHOUT `session` —
+  // the provider's initialState diff deletes the key on every screen change
+  // and <SessionSync> pulls the live store value back pre-paint. A
+  // render-time store read could be applied late under Next 16's <Activity>
+  // (plan 059), re-adding a stale session (the e2e-proven race); SSR renders
+  // without session either way (same hydration behavior as the old
+  // client-only merge). No project → the seed is untouched.
+  const withSession = entry?.projectId ? omitSessionState(state) : state;
   const seedState = overlayPathState(
     typeof window === "undefined"
-      ? state
-      : overlayUrlState(state, window.location.search, specUrlSync(spec)),
+      ? withSession
+      : overlayUrlState(withSession, window.location.search, specUrlSync(spec)),
     pathParams,
   );
   const localized = localizeSpec(spec, seedState);
@@ -348,10 +361,16 @@ export default function PreviewPage({
       functions={PLAYGROUND_FUNCTIONS}
       directives={appDirectives}
     >
-      {/* Data sources runtime (docs/plan/043-data-sources, D6/D8): the slug
-                  scopes this design's records — owner preview and published
-                  visitor share one per-browser store for the same design. */}
-      <QueryLoader spec={spec} namespace={slug} />
+      {/* Data sources runtime (docs/plan/043-data-sources, D6/D8): the
+                  project id for project screens (061-4 — owner preview then
+                  shares the project's records with the editor) and the slug
+                  otherwise, which keeps D6's per-design isolation: owner
+                  preview and published visitors share one per-browser store. */}
+      <QueryLoader spec={spec} namespace={dataNamespaceFor(entry, slug)} />
+      {/* Shared /session write-through (061-4): mirrors state.session into
+          the project store, debounced and flushed on unmount. No project →
+          no-op, so screen-local state never leaks across screens. */}
+      {entry?.projectId && <SessionSync projectId={entry.projectId} />}
       {/* Screen navigation (061, decision 4 + 061-3): resolves the ref
                   against this device's screens in the entry's project scope
                   and pushes /{locale}/{project-slug}[/{route}]. A visitor's

@@ -34,6 +34,7 @@ A spec can jump to a sibling screen of the same project with the declared \`navi
 - Use a ref exactly as listed (a screen id). Never write a path, never invent a ref, never bind navigate without a listed target.
 - Bind only to user-triggered events (a button or icon's press) — never to load/change, and never on a non-interactive element.
 - In edit mode keep every other binding as-is; you may retarget an existing navigate's params.screen to a listed ref, or drop the binding if its target is gone.
+- Shared values live under \`/session\`: every sibling screen seeds the SAME subtree, so write it with {"action": "setState", "params": {"statePath": "/session/<key>", "value": <value>}} and read it with { "$state": "/session/<key>"}. Keep screen-local state (drafts, pagination, open dialogs) outside \`/session\` — it resets on every screen change.
 `;
 
 /**

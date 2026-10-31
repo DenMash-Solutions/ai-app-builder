@@ -76,6 +76,8 @@ export interface StoredEntry {
   spec: StoredSpec;
   revisions?: { label: string; createdAt: number; spec: StoredSpec }[];
   head?: number;
+  /** Project grouping (061 A1) — absent for legacy/unprojected entries. */
+  projectId?: string;
 }
 
 export async function readHistoryStorage(page: Page): Promise<StoredEntry[]> {

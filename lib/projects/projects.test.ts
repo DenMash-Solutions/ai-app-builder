@@ -267,4 +267,183 @@ describe("project store", () => {
     expect(third).not.toBeNull();
     expect((third as NonNullable<typeof third>).slug).toBe("pokedex-3");
   });
+
+  test("getSessionState reads the shared value and misses null/unknown ids", () => {
+    expect(store.getSessionState(null)).toBeUndefined();
+    expect(store.getSessionState(undefined)).toBeUndefined();
+    expect(store.getSessionState("ghost")).toBeUndefined();
+
+    const project = store.createProject("Shared");
+    expect(project).not.toBeNull();
+    const created = project as NonNullable<typeof project>;
+    // Fresh projects start with an empty (but present) session object.
+    expect(store.getSessionState(created.id)).toEqual({});
+  });
+
+  test("setSessionState writes objects through, persists them, and ignores everything else", () => {
+    const project = store.createProject("Shared");
+    expect(project).not.toBeNull();
+    const created = project as NonNullable<typeof project>;
+
+    store.setSessionState(
+      created.id,
+      { token: "shared-42", count: 2 },
+      store.stampSessionValue(),
+    );
+    expect(store.getSessionState(created.id)).toEqual({
+      token: "shared-42",
+      count: 2,
+    });
+    const stored = JSON.parse(ls().getItem(PROJECT_STORAGE_KEY) ?? "[]") as {
+      id: string;
+      state?: unknown;
+    }[];
+    expect(stored.find((entry) => entry.id === created.id)?.state).toEqual({
+      token: "shared-42",
+      count: 2,
+    });
+
+    // Object-shaped by design: arrays and primitives never persist.
+    store.setSessionState(created.id, ["array"], store.stampSessionValue());
+    store.setSessionState(created.id, "scalar", store.stampSessionValue());
+    store.setSessionState(created.id, null, store.stampSessionValue());
+    store.setSessionState(created.id, undefined, store.stampSessionValue());
+    expect(store.getSessionState(created.id)).toEqual({
+      token: "shared-42",
+      count: 2,
+    });
+
+    // Unknown ids are a no-op.
+    store.setSessionState("ghost", { x: 1 }, store.stampSessionValue());
+    expect(store.getProjects()).toHaveLength(1);
+  });
+
+  test("rewriting identical session content writes nothing (the post-mount seed echo)", () => {
+    const project = store.createProject("Echo");
+    expect(project).not.toBeNull();
+    const created = project as NonNullable<typeof project>;
+    store.setSessionState(
+      created.id,
+      { token: "shared-42" },
+      store.stampSessionValue(),
+    );
+
+    const local = storage();
+    const original = local.setItem;
+    const countWritesWhile = (run: () => void): number => {
+      let writes = 0;
+      local.setItem = function (this: Storage, key: string, value: string) {
+        writes += 1;
+        original.call(this, key, value);
+      };
+      try {
+        run();
+      } finally {
+        local.setItem = original;
+      }
+      return writes;
+    };
+
+    // Same content (stringify equality, how it round-trips through storage).
+    expect(
+      countWritesWhile(() => {
+        store.setSessionState(
+          created.id,
+          { token: "shared-42" },
+          store.stampSessionValue(),
+        );
+      }),
+    ).toBe(0);
+    // A real change writes exactly once.
+    expect(
+      countWritesWhile(() => {
+        store.setSessionState(
+          created.id,
+          { token: "changed" },
+          store.stampSessionValue(),
+        );
+      }),
+    ).toBe(1);
+    expect(store.getSessionState(created.id)).toEqual({ token: "changed" });
+  });
+
+  test("stale stamps are rejected — only strictly newer writes land (061-4 Activity race)", () => {
+    const project = store.createProject("Recency");
+    expect(project).not.toBeNull();
+    const created = project as NonNullable<typeof project>;
+
+    const first = store.stampSessionValue();
+    expect(store.setSessionState(created.id, { token: "a" }, first)).toBe(true);
+    const second = store.stampSessionValue();
+    expect(store.setSessionState(created.id, { token: "b" }, second)).toBe(
+      true,
+    );
+
+    // A stale hidden instance flushing the OLD value with its OLD stamp:
+    // rejected whatever its content — the store keeps the fresher value.
+    expect(store.setSessionState(created.id, { token: "a" }, first)).toBe(
+      false,
+    );
+    expect(store.getSessionState(created.id)).toEqual({ token: "b" });
+
+    // Equal stamps never overwrite; a genuinely newer one regains the store.
+    expect(store.setSessionState(created.id, { token: "c" }, second)).toBe(
+      false,
+    );
+    const third = store.stampSessionValue();
+    expect(store.setSessionState(created.id, { token: "c" }, third)).toBe(true);
+    expect(store.getSessionState(created.id)).toEqual({ token: "c" });
+  });
+
+  test("a stored project without (or with junk) shared state backfills to {}", async () => {
+    const local = storage();
+    local.setItem(
+      PROJECT_STORAGE_KEY,
+      JSON.stringify([
+        { id: "legacy", name: "Pre-061-4", createdAt: 1, updatedAt: 1 },
+        {
+          id: "junk",
+          name: "Junk state",
+          createdAt: 2,
+          updatedAt: 2,
+          state: ["array"],
+        },
+        {
+          id: "scalar",
+          name: "Scalar state",
+          createdAt: 3,
+          updatedAt: 3,
+          state: "nope",
+        },
+      ]),
+    );
+
+    const sessionSpecifier = "./projects.ts?session-hydration";
+    const fresh = (await import(sessionSpecifier)) as ProjectsModule;
+
+    expect(fresh.getProjects().map((candidate) => candidate.state)).toEqual([
+      {},
+      {},
+      {},
+    ]);
+    // And the backfilled shape is writable like any other project.
+    fresh.setSessionState("legacy", { token: "t" }, fresh.stampSessionValue());
+    expect(fresh.getSessionState("legacy")).toEqual({ token: "t" });
+  });
+
+  test("createProjectEntry stamps the active project (generation and import seam)", () => {
+    store.setActiveProjectId(null);
+    const loose = store.createProjectEntry("Loose screen", makeSpec("v0"));
+    expect(loose.projectId).toBeUndefined();
+
+    const project = store.createProject("Grouped");
+    expect(project).not.toBeNull();
+    const created = project as NonNullable<typeof project>;
+    const grouped = store.createProjectEntry("Grouped screen", makeSpec("v1"));
+    expect(grouped.projectId).toBe(created.id);
+
+    // The history store is shared across test files — clean up both.
+    removeEntry(loose.id);
+    removeEntry(grouped.id);
+  });
 });

@@ -18,6 +18,7 @@ const PROJECT: Project = {
   slug: "pokedex",
   createdAt: 1,
   updatedAt: 1,
+  state: {},
 };
 
 function entry(init: {

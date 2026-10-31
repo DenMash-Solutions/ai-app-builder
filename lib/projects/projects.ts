@@ -15,7 +15,12 @@
  * session).
  */
 
-import { clearProjectFromEntries } from "@/lib/history";
+import {
+  clearProjectFromEntries,
+  createEntry,
+  type HistoryEntry,
+} from "@/lib/history";
+import type { Spec } from "@json-render/core";
 
 export const PROJECT_STORAGE_KEY = "genui-projects";
 export const ACTIVE_PROJECT_STORAGE_KEY = "genui-active-project";
@@ -35,6 +40,14 @@ export interface Project {
   createdAt: number;
   /** Last rename — the timestamp grouping headers sort/refresh on. */
   updatedAt: number;
+  /**
+   * Shared `/session` value (061-4, A3 decision 5): seeded into every
+   * member screen's initial state under the `session` key and written
+   * through (debounced) by `<SessionSync>`, so a value set on one screen is
+   * readable on the next. Screen-local state (drafts, pagination, open
+   * dialogs) never lives here. Backfilled to `{}` for stored projects.
+   */
+  state: Record<string, unknown>;
 }
 
 const EMPTY: Project[] = [];
@@ -49,6 +62,15 @@ function isValidProject(value: unknown): value is Project {
     candidate.name.trim() !== "" &&
     typeof candidate.createdAt === "number"
   );
+}
+
+/**
+ * The shared `/session` value must be a plain JSON object to be stored —
+ * a spec that writes a non-object to `session` never persists (061 A3:
+ * write-through is object-shaped by design).
+ */
+function isSessionState(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -109,6 +131,8 @@ function sanitize(raw: unknown): Project[] {
           ? project.updatedAt
           : project.createdAt,
       slug,
+      // Older stored projects (pre-061-4) carry no shared state.
+      state: isSessionState(project.state) ? project.state : {},
     };
     seen.push(next);
     return next;
@@ -136,6 +160,27 @@ function readStoredActive(): string | null {
 
 const listeners = new Set<() => void>();
 const activeListeners = new Set<() => void>();
+
+/**
+ * Shared-session write recency (061-4, Activity races): every value carries
+ * a stamp from this realm-wide monotonic clock, and the store remembers the
+ * stamp of the last accepted value per project — a write is rejected when
+ * its stamp is not strictly newer, so a stale hidden instance's late flush
+ * can never overwrite a fresher value regardless of arrival order.
+ *
+ * Session-only (not persisted): a reload starts a fresh clock, and the
+ * in-memory baseline resets with it. Cross-tab writes land through the
+ * `storage` event below and reset the baseline to "now" (their own stamps
+ * are unknowable here — conservative for v1, local-only projects).
+ */
+let sessionClock = 0;
+const acceptedSessionStamps = new Map<string, number>();
+
+/** Stamp a shared-session VALUE at the moment it is created. */
+export function stampSessionValue(): number {
+  sessionClock += 1;
+  return sessionClock;
+}
 
 let cache: Project[] | null = null;
 let activeCache: string | null = null;
@@ -241,6 +286,11 @@ function persistActive(): void {
 function handleStorageEvent(event: StorageEvent): void {
   if (event.key === PROJECT_STORAGE_KEY || event.key === null) {
     cache = typeof window === "undefined" ? EMPTY : readStored();
+    // Cross-tab: the remote content's own stamps are unknowable here, so
+    // accept it as "just landed" — future local writes must be newer.
+    for (const project of cache) {
+      acceptedSessionStamps.set(project.id, sessionClock);
+    }
     notify();
   }
   if (event.key === ACTIVE_PROJECT_STORAGE_KEY || event.key === null) {
@@ -286,6 +336,7 @@ export function createProject(name: string): Project | null {
     slug: uniqueSlug(slugifyProjectName(trimmed), existing),
     createdAt: now,
     updatedAt: now,
+    state: {},
   };
   cache = [...existing, project];
   persist();
@@ -338,4 +389,56 @@ export function setActiveProjectId(id: string | null): void {
   activeCache = id;
   activeLoaded = true;
   persistActive();
+}
+
+/**
+ * The shared `/session` value for a project — `undefined` when the id is
+ * null/unknown (no project, SSR, dangling id). The seed side of 061 A3:
+ * surfaces merge this under the `session` key before mounting.
+ */
+export function getSessionState(
+  id: string | null | undefined,
+): Record<string, unknown> | undefined {
+  if (!id) return undefined;
+  return load().find((project) => project.id === id)?.state;
+}
+
+/**
+ * The write-through side of 061 A3: replaces the project's shared `/session`
+ * value. No-ops on unknown ids, on non-object values (the session subtree is
+ * an object by design), on content identical to what is stored (the seed
+ * echo after mount writes nothing), and on stamps that are not strictly
+ * newer than the last accepted write (stale-writer guard above). `updatedAt`
+ * stays rename-owned. Stringify equality matches how the value round-trips
+ * through localStorage. Returns whether the write landed.
+ */
+export function setSessionState(
+  id: string,
+  next: unknown,
+  stamp: number,
+): boolean {
+  if (!isSessionState(next)) return false;
+  const projects = load();
+  const index = projects.findIndex((project) => project.id === id);
+  if (index === -1) return false;
+  if (JSON.stringify(projects[index].state) === JSON.stringify(next))
+    return false;
+  const accepted = acceptedSessionStamps.get(id) ?? 0;
+  if (stamp <= accepted) return false;
+  acceptedSessionStamps.set(id, stamp);
+  cache = projects.map((project, i) =>
+    i === index ? { ...project, state: next } : project,
+  );
+  persist();
+  return true;
+}
+
+/**
+ * Create a history entry stamped with the **active** project (061 A3): both
+ * creation seams — generation and JSON import — route through here, so
+ * "screens are born into the project you are working in" is one testable
+ * rule instead of two call sites that can drift.
+ */
+export function createProjectEntry(prompt: string, spec: Spec): HistoryEntry {
+  return createEntry(prompt, spec, getActiveProjectId() ?? undefined);
 }

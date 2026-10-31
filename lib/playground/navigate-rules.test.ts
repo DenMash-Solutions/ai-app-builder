@@ -19,6 +19,14 @@ describe("NAVIGATE_RULES", () => {
     expect(NAVIGATE_RULES).toContain("Never write a path");
     expect(NAVIGATE_RULES).toContain("edit mode");
   });
+
+  test("teaches /session as the shared subtree (061-4, A3)", () => {
+    expect(NAVIGATE_RULES).toContain("/session/<key>");
+    expect(NAVIGATE_RULES).toContain('"action": "setState"');
+    expect(NAVIGATE_RULES).toContain('"$state": "/session/<key>"');
+    expect(NAVIGATE_RULES).toContain("screen-local state");
+    expect(NAVIGATE_RULES).toContain("resets on every screen change");
+  });
 });
 
 describe("parseScreens", () => {

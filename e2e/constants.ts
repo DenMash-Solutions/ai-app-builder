@@ -77,6 +77,13 @@ export const ACTIONS = {
 
 export const SWITCHER_LABELS = LOCALE_LABELS;
 
+/** Top-bar project switcher copy (plan 061 A1). */
+export const PROJECTS = {
+  switcher: en.projects.switch,
+  create: en.projects.create,
+  namePlaceholder: en.projects.createPlaceholder,
+} as const;
+
 export const RENAME = {
   open: en.rename.title,
   name: en.rename.name,

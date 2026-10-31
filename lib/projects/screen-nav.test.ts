@@ -255,7 +255,14 @@ describe("runNavigate (061-3 params + project namespace)", () => {
   });
 
   const PROJECTS: Project[] = [
-    { id: "p1", name: "Pokédex", slug: "pokedex", createdAt: 1, updatedAt: 1 },
+    {
+      id: "p1",
+      name: "Pokédex",
+      slug: "pokedex",
+      createdAt: 1,
+      updatedAt: 1,
+      state: {},
+    },
   ];
   const GRID: ScreenSource = {
     id: "grid",
