@@ -18,6 +18,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { JsonImportButton } from "@/components/playground/json-import-button";
+import { JsonUpdateButton } from "@/components/playground/json-update-button";
 import { GoLiveDialog } from "@/components/publish/go-live-dialog";
 import { PublishActions } from "@/components/publish/publish-actions";
 import type { HistoryEntry } from "@/lib/history";
@@ -49,6 +50,8 @@ interface HistoryDrawerProps {
   onDelete: (id: string) => void;
   onClear: () => void;
   onImportJson: (spec: Spec) => void;
+  /** Plan 063: re-import into an existing screen (confirmed in the dialog). */
+  onUpdateJson: (targetId: string, spec: Spec) => void;
 }
 
 /** One project's group of screens — `project: null` is the legacy bucket. */
@@ -66,6 +69,7 @@ export function HistoryDrawer({
   onDelete,
   onClear,
   onImportJson,
+  onUpdateJson,
 }: HistoryDrawerProps) {
   const t = useTranslations();
   const locale = useLocale();
@@ -358,6 +362,10 @@ export function HistoryDrawer({
                                   entry={entry}
                                   published={publishedMap[entry.id] ?? null}
                                   onGoLive={() => setGoLiveEntry(entry)}
+                                />
+                                <JsonUpdateButton
+                                  entry={entry}
+                                  onUpdate={onUpdateJson}
                                 />
                                 <Button
                                   type="button"

@@ -423,6 +423,13 @@ export const JSON_IO = {
   importedEntry: en.playground.importedEntry,
   dialogTitle: en.playground.jsonDialogTitle,
   importConfirm: en.playground.jsonImport,
+  updateConfirm: en.playground.jsonUpdate,
+  updateDialogTitle: en.playground.jsonUpdateDialogTitle,
+  confirmTitle: en.playground.jsonConfirmTitle,
+  confirmAction: en.playground.jsonConfirmAction,
+  /** Per-row update button — title makes every history row uniquely named. */
+  entryUpdate: (title: string): string =>
+    en.playground.jsonUpdateEntry.replace("{title}", title),
   cancel: en.playground.jsonCancel,
   invalidJson: en.playground.jsonInvalidJson,
   copied: en.playground.jsonCopied,

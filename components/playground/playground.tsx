@@ -108,10 +108,12 @@ import {
   canUndo,
   clearHistory,
   commitRevision,
+  REVISION_LABELS,
   getHistory,
   getServerHistory,
   redoRevision,
   removeEntry,
+  replaceEntrySpec,
   subscribeHistory,
   undoRevision,
   updateEntry,
@@ -1026,6 +1028,21 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     addEntry(entry);
     setHistoryOpen(false);
     router.push(`/ui/${entry.id}`);
+  };
+
+  // Plan 063: re-import replaces an existing screen's spec through the
+  // revision stack — identity, slug and project membership stay put and the
+  // previous content stays reachable with undo.
+  const handleUpdateSpec = (targetId: string, importedSpec: Spec) => {
+    const { spec: normalized } = normalizeSpecCopy(importedSpec);
+    const updated = replaceEntrySpec(
+      targetId,
+      normalized,
+      REVISION_LABELS.import,
+    );
+    if (!updated) return;
+    setHistoryOpen(false);
+    if (activeEntry?.id !== targetId) router.push(`/ui/${targetId}`);
   };
 
   const handleDelete = (id: string) => {
@@ -2041,6 +2058,7 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
           onDelete={handleDelete}
           onClear={handleClear}
           onImportJson={handleImportSpec}
+          onUpdateJson={handleUpdateSpec}
         />
       </div>
     </JSONUIProvider>

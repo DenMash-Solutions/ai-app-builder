@@ -9,6 +9,7 @@ const EMPTY_HISTORY: HistoryEntry[] = [];
 
 export const REVISION_LABELS = {
   generate: "generate",
+  import: "import",
   prompt: "prompt",
   property: "property",
   action: "action",
@@ -285,6 +286,25 @@ export function commitRevision(
 }
 
 /**
+ * Replace an entry's spec through the revision stack (plan 063): identity,
+ * name, slug and project membership stay untouched, the new content is
+ * appended as a revision so the previous one stays undoable, and the write is
+ * stamped by `updateEntry` — the LWW timestamp account sync compares.
+ * Returns `null` when the id is unknown (the caller keeps the dialog open).
+ */
+export function replaceEntrySpec(
+  id: string,
+  spec: Spec,
+  label: string,
+): HistoryEntry | null {
+  const entry = getHistory().find((candidate) => candidate.id === id);
+  if (!entry) return null;
+  const next = commitRevision(entry, spec, label);
+  updateEntry(next);
+  return next;
+}
+
+/***
  * Checks the head out one revision older, returning the entry with that
  * revision's spec. Returns the entry unchanged when there is nothing to undo.
  */

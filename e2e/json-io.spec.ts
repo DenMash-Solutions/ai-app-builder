@@ -168,3 +168,112 @@ test.describe("json import/export", () => {
     expect(copied).toContain("Padded item 0");
   });
 });
+
+const UPDATED_SPEC = {
+  ...IMPORTED_SPEC,
+  elements: {
+    ...IMPORTED_SPEC.elements,
+    title: {
+      type: "Heading",
+      props: { text: "Updated works" },
+    },
+  },
+};
+
+test.describe("json re-import (update)", () => {
+  test("the row's Update from JSON action replaces that screen in place: identity kept, one revision added, previous content still stored", async ({
+    page,
+  }) => {
+    await page.goto(PATHS.ui);
+    await page.waitForLoadState("networkidle");
+
+    const drawer = page.locator(SLOTS.drawer).filter({ visible: true });
+    const dialog = page.locator(SLOTS.dialog).filter({ visible: true });
+
+    // Seed one screen through the existing create path.
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName() })
+      .filter({ visible: true })
+      .click();
+    const importButton = drawer
+      .getByRole(ROLE.button, { name: JSON_IO.import })
+      .filter({ visible: true });
+    await importButton.click();
+    const textarea = page
+      .getByRole(ROLE.textbox, { name: JSON_IO.dialogTitle })
+      .filter({ visible: true });
+    await textarea.fill(JSON.stringify(IMPORTED_SPEC));
+    await dialog
+      .getByRole(ROLE.button, { name: JSON_IO.importConfirm, exact: true })
+      .filter({ visible: true })
+      .click();
+    await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+    const screenUrl = page.url();
+    await expect(
+      page
+        .getByRole(ROLE.heading, { name: "Imported works" })
+        .filter({ visible: true }),
+    ).toBeVisible();
+    expect(await readHistoryStorage(page)).toHaveLength(1);
+
+    // The update action lives on the history row, not in the import dialog.
+    await page
+      .getByRole(ROLE.button, { name: historyButtonName(1) })
+      .filter({ visible: true })
+      .click();
+    await expect(drawer).toBeVisible();
+    await drawer
+      .getByRole(ROLE.button, {
+        name: JSON_IO.entryUpdate(JSON_IO.importedEntry),
+        exact: true,
+      })
+      .filter({ visible: true })
+      .click();
+    await expect(dialog).toBeVisible();
+    await page
+      .getByRole(ROLE.textbox, { name: JSON_IO.updateDialogTitle })
+      .filter({ visible: true })
+      .fill(JSON.stringify(UPDATED_SPEC));
+    await dialog
+      .getByRole(ROLE.button, { name: JSON_IO.updateConfirm, exact: true })
+      .filter({ visible: true })
+      .click();
+
+    // Confirmation step: target name and slug are shown before any write.
+    await expect(
+      dialog
+        .getByRole(ROLE.heading, { name: JSON_IO.confirmTitle })
+        .filter({ visible: true }),
+    ).toBeVisible();
+    const seeded = await readHistoryStorage(page);
+    expect(seeded).toHaveLength(1);
+    await expect(
+      dialog.getByText(JSON_IO.importedEntry).filter({ visible: true }),
+    ).toHaveCount(1);
+    await expect(
+      dialog.getByText(seeded[0].slug).filter({ visible: true }),
+    ).toHaveCount(1);
+    await dialog
+      .getByRole(ROLE.button, { name: JSON_IO.confirmAction, exact: true })
+      .filter({ visible: true })
+      .click();
+    await expect(dialog).toBeHidden();
+
+    // Same identity (URL untouched), one entry, one revision added.
+    expect(page.url()).toBe(screenUrl);
+    const stored = await readHistoryStorage(page);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].revisions).toHaveLength(2);
+    expect(stored[0].head).toBe(1);
+    expect(stored[0].revisions?.[1].label).toBe("import");
+    expect(JSON.stringify(stored[0].spec)).toContain("Updated works");
+    expect(JSON.stringify(stored[0].revisions?.[0].spec)).toContain(
+      "Imported works",
+    );
+    await expect(
+      page
+        .getByRole(ROLE.heading, { name: "Updated works" })
+        .filter({ visible: true }),
+    ).toBeVisible();
+  });
+});

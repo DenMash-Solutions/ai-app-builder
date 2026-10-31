@@ -31,10 +31,11 @@ interface JsonImportButtonProps {
 
 /**
  * History-drawer footer: opens the paste dialog and hands the validated spec
- * to `onImport`. Export lives on each history row (HistoryDrawer) — a second
- * footer Export would copy the same bytes as the active entry's row button,
- * because the canvas spec always mirrors the active entry. Dialog state and
- * i18n are self-contained.
+ * to `onImport` — create only; replacing an existing screen lives on its own
+ * history row (`JsonUpdateButton`, plan 063). Export lives on each history
+ * row (HistoryDrawer) — a second footer Export would copy the same bytes as
+ * the active entry's row button, because the canvas spec always mirrors the
+ * active entry. Dialog state and i18n are self-contained.
  */
 export function JsonImportButton({ onImport }: JsonImportButtonProps) {
   const t = useTranslations();

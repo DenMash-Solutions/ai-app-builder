@@ -12,6 +12,7 @@ import {
   getHistory,
   normalizeEntry,
   redoRevision,
+  replaceEntrySpec,
   undoRevision,
   updateEntry,
 } from "./history";
@@ -294,5 +295,56 @@ describe("updatedAt (LWW timestamp for account sync)", () => {
     expect(stored.name).toBe("renamed");
     expect(stored.updatedAt).toBeGreaterThan(1234);
     clearHistory();
+  });
+});
+
+describe("replaceEntrySpec", () => {
+  test("appends one revision and keeps identity, slug and project", () => {
+    clearHistory();
+    const entry = createEntry("draw a dashboard", makeSpec("v0"), "proj-1");
+    addEntry(entry);
+    const before = getHistory()[0];
+
+    const updated = replaceEntrySpec(
+      entry.id,
+      makeSpec("v1"),
+      REVISION_LABELS.import,
+    );
+
+    expect(updated).not.toBeNull();
+    const stored = getHistory()[0];
+    expect(stored.id).toBe(entry.id);
+    expect(stored.name).toBe(entry.name);
+    expect(stored.slug).toBe(entry.slug);
+    expect(stored.projectId).toBe("proj-1");
+    expect(stored.revisions.length).toBe(before.revisions.length + 1);
+    expect(stored.head).toBe(stored.revisions.length - 1);
+    expect(stored.revisions.at(-1)?.label).toBe(REVISION_LABELS.import);
+    expect(stored.revisions[0].label).toBe(REVISION_LABELS.generate);
+    expect(JSON.stringify(stored.spec)).toContain("v1");
+    expect(stored.updatedAt).toBeGreaterThanOrEqual(before.updatedAt);
+  });
+
+  test("the replaced content is undoable back to the previous spec", () => {
+    clearHistory();
+    const entry = createEntry("screen", makeSpec("v0"));
+    addEntry(entry);
+
+    replaceEntrySpec(entry.id, makeSpec("v1"), REVISION_LABELS.import);
+    const stored = getHistory()[0];
+
+    expect(canUndo(stored)).toBe(true);
+    expect(JSON.stringify(undoRevision(stored).spec)).toContain("v0");
+  });
+
+  test("an unknown target returns null and leaves history untouched", () => {
+    clearHistory();
+    addEntry(createEntry("screen", makeSpec("v0")));
+    const before = getHistory();
+
+    expect(
+      replaceEntrySpec("missing-id", makeSpec("v1"), REVISION_LABELS.import),
+    ).toBeNull();
+    expect(getHistory()).toEqual(before);
   });
 });
