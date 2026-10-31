@@ -1,6 +1,6 @@
 # Database-backed Projects (closes F17)
 
-**Status:** draft
+**Status:** approved
 **Date:** 2026-10-31
 
 ## Goal
@@ -48,6 +48,13 @@ infrastructure instead of adding a parallel persistence system.
 5. Conflict policy for an adoption-time slug collision under the same owner:
    bump via the existing unique-slug helper, keep both projects — rejected:
    dropping either side, because both hold local work.
+6. SQL home is the canonical `db/0*.sql` set only — rejected: mirroring the
+   DDL into `supabase/migrations/0002`, because the CLI is not initialized
+   (no `config.toml`, no npm script) and a second copy would drift from
+   `db/README.md`'s "matches live state" promise; `0001_genui_records.sql`
+   stays a historical artifact. The migration is applied to the live project
+   additively (table + RLS + grants in one batch, SQL reviewed before
+   execution) because no local stack exists and e2e runs against live.
 
 ## Migration
 
@@ -57,7 +64,7 @@ store first, then remote pull through the same LWW rule the entries use.
 
 ## Files
 
-`db/01_schema.sql` (or `04_projects.sql`), `db/03_rls.sql`,
+`db/01_schema.sql`, `db/03_rls.sql`, `db/04_grants.sql`,
 `lib/history/sync.ts`, `lib/projects/projects.ts`, sync status UI,
 en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 
@@ -78,3 +85,4 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 | Date | Event |
 | ---- | ----- |
 | 2026-10-31 | plan drafted (F17 claimed here) |
+| 2026-10-31 | approved — decisions confirmed by the user: SQL home = `db/0*.sql` canonical only (design decision 6), migration applied to the live Supabase project (additive, RLS + grants in one batch, SQL shown before execution); plan 062 closed as implemented in the same turn |

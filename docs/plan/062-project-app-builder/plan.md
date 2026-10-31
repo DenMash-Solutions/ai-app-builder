@@ -1,6 +1,6 @@
 # Project and Application Builder — Umbrella Roadmap + Architecture Audit
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-31
 
 ## Goal
@@ -122,11 +122,16 @@ API lane (050) covers v1.
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Every source-document claim mapped to implemented/partial/missing
-- [ ] The four decisions above explicitly approved or amended
-- [ ] INDEX row added and kept in the same turn as this file
-- [ ] Each child plan approved before its code (implementation-protocol Step 0)
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+      — green in the session that closed 063 (842 unit / 0 fail, 129 e2e)
+- [x] Every source-document claim mapped to implemented/partial/missing
+      (audit table above)
+- [x] The four decisions above explicitly approved or amended — accepted as
+      recommended (2026-10-31)
+- [x] INDEX row added and kept in the same turn as this file
+- [x] Each child plan approved before its code — in force: 063 approved then
+      implemented, 064 approved 2026-10-31 before any of its code; 065-070
+      must follow the same gate
 
 ## Status log
 
@@ -134,3 +139,4 @@ API lane (050) covers v1.
 | ---- | ----- |
 | 2026-10-31 | plan drafted (Phase 0 audit against the source document; lessons + json-render skill loaded first) |
 | 2026-10-31 | approved — the four blocking decisions accepted as recommended: namespace registry precedence, 061 Q2 upheld (per-spec data declarations), expansion-at-install component embedding, local-first memberships + project_screens |
+| 2026-10-31 | implemented — docs-only umbrella delivered: audit mapped, four decisions approved, migration/compat strategy and dependency graph recorded; verification chain green in-session (842 unit / 0 fail, 129 e2e); 063 done, 064 approved as the first child |
