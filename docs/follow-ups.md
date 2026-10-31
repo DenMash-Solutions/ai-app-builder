@@ -4,8 +4,8 @@
 > by a new plan. When a follow-up gets a plan, move it to the plan's `NNN` link below and
 > mark it ✅ claimed. Source plans are always `docs/plan/{NNN}-*/plan.md`.
 >
-> Last reviewed: 2026-10-30 (plan 061 implemented — F15 closed, A4 remainder
-> registered as F19; F17/F18 remain open)
+> Last reviewed: 2026-10-31 (plans 062-070 drafted — F17 claimed by plan 064,
+> F18 claimed by plan 069; F15 closed / F19 registered 2026-10-30)
 
 ## 🔴 Open — needs a plan
 
@@ -13,14 +13,19 @@
 |---|-----------|--------|-------|
 | F19 | **A4 flow canvas** — React Flow board of a project's screen artboards (arrange/connect screens of one multi-UI) | 061 out-of-scope, F15 deferral 2026-10-27 | **Unblocked 2026-10-30**: the deferral condition "A1–A3 exist" is met (061 implemented A1 organization, A2 navigate, A3 shared data/state) |
 | F16 | **Portal container for spec-driven overlays** — `@json-render/shadcn` renders Dialog/Select/Popover/Tooltip via `Portal(…)` (10 call sites) and Radix resolves `container = globalThis.document.body`, so these mount **outside** the 059 device frame (mispositioned popper). Needs upstream `container`/portal-context support or a registry-level wrapper | 059 R6 finding 2026-10-27 | Known v1 limitation; blocked on `@json-render/shadcn` extensibility |
-| F17 | **Cross-device project sync** — supabase `projects` table + RLS + a second LWW sync loop so project grouping follows the account (061 kept projects local-only per F14 precedent) | 061 Q1 descope 2026-10-29 | Needs `projects` migration + sync merge alongside `uis` |
-| F18 | **Multi-screen publishing** — one project publishes as a site with per-screen routes, cross-page `navigate` links, `APP_SEGMENTS`/proxy work and a featured pointer story (061 leaves publish per-screen) | 061 Q4 descope 2026-10-29 | Own plan: routing + publish artifacts + e2e |
 | F1 | **Theme hydration mismatch** — `ThemeSwitcher` sun/moon `aria-label`/icon: stored preference applied while SSR commits the spec default → hydration failure; **3 hydration errors still in every dev log**. `spec-theme` e2e only covers fresh visitors (no stored decision) so it never fires | 055 finding 9, descoped "record for later" (user decision 2026-10-25); re-observed in 057's build log | Small fix, currently pollutes every dev-log scan |
 | F2 | **Design-page history race** — generation navigates to `/en/ui/{id}` before the history entry exists → "UI not found" → canvas reset **loses the whole generation** | 053, descoped as "candidate 054" — **054 never picked it up** | Unclaimed bug |
 | F3 | **`/api/tailwind` hardening** — persistent/disk cache, concurrency dedupe, missing-only diffs, rate limiting | 057, "separate plan after this one" | Endpoint untouched by 057 |
 | F4 | **Partial Prefetching adoption** (`partialPrefetching: true`) | 056, "its own follow-up after adoption completes" | Prerequisite (056) met; skill installed: `.agents/skills/next-partial-prefetching-adoption/` |
 | F5 | **Static-shell optimizer pass** (`next-cache-components-optimizer`) | 056, "pure optimization after adoption" | Prerequisite met; skill `next-cache-components-optimizer` available |
 | F6 | **`instant()` e2e regression tests** | 056, "decide at the check-in if wanted" | Open decision for the user |
+
+## 🟡 Claimed — has a plan, not implemented
+
+| # | Follow-up | Claimed by |
+|---|-----------|------------|
+| F17 | **Cross-device project sync** — supabase `projects` table + RLS + a second LWW sync loop so project grouping follows the account (061 kept projects local-only per F14 precedent) | plan 064 (draft 2026-10-31) |
+| F18 | **Multi-screen publishing** — one project publishes as a site with per-screen routes, cross-page `navigate` links, `APP_SEGMENTS`/proxy work and a featured pointer story (061 leaves publish per-screen) | plan 069 (draft 2026-10-31) |
 
 ## 🟡 Lower priority / conditional
 
