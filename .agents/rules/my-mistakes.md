@@ -170,6 +170,18 @@
 **Lesson Reference**: `.agents/lessons/radix-escape-capture.md`
 **Prevention**: Escape cancel-scoping for Radix → `onEscapeKeyDown(event) => event.preventDefault()` on the content (Radix checks `defaultPrevented` before `onDismiss`); any library listener on `document`/`window` or in capture phase is unreachable from React's `stopPropagation` — ask which phase/node a handler is registered on before assuming propagation can block it
 
+### 29. Counting/Locating DOM Nodes in E2E Without Visibility Scoping (NEW)
+
+**Problem**: the 061-4 e2e reported `LOCAL-LEAK` count 1 and two `.session-token` nodes after a screen switch — read as a real state leak plus a duplicate render; both were hidden `<Activity>` copies (Next 16 keeps the previous route `display:none`, and can prerender a hidden twin of the destination), which raw `getByText`/`querySelector`/counts happily match — the same class plan 059 T1 already fixed once for canvas counts
+**Lesson Reference**: `.agents/lessons/next-activity-state.md`
+**Prevention**: every raw locator/count in e2e → `.filter({ visible: true })` (710 existing usages = house style); prefer `getByRole` (the a11y tree excludes hidden content = Activity-proof); role + `exact: true` for headings because the prompt input/mirror embeds the same copy; before concluding "leak/duplicate", ask whether a hidden route copy is matching
+
+### 30. Designing a Fix From an Unlabeled Multi-Instance Trace (NEW)
+
+**Problem**: the session-race trace interleaved two `SessionSync` instances with no IDs; I inferred "which twin did what", told the user versioning alone would fix it, and the challenge "are you sure?" was warranted — a labeled trace (instance seq + route per entry) showed the stale value came from a *late-applied seed* plus a revert path versioning alone would not heal, forcing a redesign (seeds omit the bridged key + stamp guard)
+**Lesson Reference**: `.agents/lessons/next-activity-state.md`
+**Prevention**: before designing a fix for an interleaved log → tag every entry (stable instance id + route/phase) and re-run; separate PROVEN observations from the inferred narrative when answering; if the fix depends on an ordering you have not observed, instrument first and say so
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -313,6 +325,9 @@ When I see these → STOP and check lessons:
 - **NEW**: e2e flake at a valid URL, intermittent, no code change → did a *harness* write bypass tag invalidation? (`cache-invalidation-writers.md`, mistake #26)
 - **NEW**: Data-source tests fail "…are unavailable" → `auth_logs` 429 probe before any adapter/RLS debugging; mid-marathon failures = quota burn (`e2e-auth-quota.md`, mistake #27)
 - **NEW**: About to write `event.stopPropagation()` to cancel a library's Escape/dismiss → it may be capture-phase on `document` (React can't reach it) → `onEscapeKeyDown` + `preventDefault` (`radix-escape-capture.md`, mistake #28)
+- **NEW**: e2e counts/finds a leak, duplicate, or stray node after navigation → hidden `<Activity>` route copies are in the document — visibility-scope (`filter({visible:true})`), `getByRole` first (`next-activity-state.md`, mistake #29)
+- **NEW**: About to design a fix from a log interleaving multiple component instances → tag each entry (instance id + route/phase) first; untagged = inference, not proof (`next-activity-state.md`, mistake #30)
+- **NEW**: `evaluate_script` returned `undefined` from a body that returns a string → `format:'script'` only parses a `() => …` (never calls it, zero side effects) — use `format:'function'` and assert the returned value (mistake #24)
 
 ## ⚡ Quick Recovery Commands
 

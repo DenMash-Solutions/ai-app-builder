@@ -56,6 +56,18 @@ const ACTION_BUTTON_CLASS = "gap-1 px-2 text-xs";
 - **Dispatch → query in the same synchronous block races React** (plan 059) — firing a synthetic event (`dispatchEvent`) and immediately `querySelector`-ing for its rendered output reads the DOM *before* React flushes; the miss looks like "the fix didn't work". `await` a tick (`sleep(100)` or two rAFs) between stimulus and read.
 - **A probe result can carry an earlier phase's fingerprint** — the badge that "appeared after the switch" measured `390×4610` (the *pre*-switch frame): state left over from the previous dispatch, not proof the current step worked. Phase-tag probes (reset first, or assert a value that can only come from the current step).
 
+### 4. `format` decides whether the probe runs at all
+
+- `format: "script"` evaluates the source as a **script**: pasting a `() => { … }`
+  there only *defines* an anonymous function — it is never called, the call
+  returns `undefined`, and **nothing inside executes** (a localStorage "seed"
+  silently didn't exist; the run "succeeded" with zero effect)
+- `format: "function"` wraps and **calls** the source (supports args) — use it
+  for `() => …` bodies
+- Sanity-check the returned value against what the body is supposed to produce —
+  `undefined` from a body that returns a string means the probe never ran
+  (same family as mistake #24: an unexercised path is not a pass)
+
 ## Verification
 
 - Element screenshot in **both** themes (toggle theme, re-shoot) — a dark island must stay dark
@@ -79,3 +91,5 @@ const ACTION_BUTTON_CLASS = "gap-1 px-2 text-xs";
 - A check behaves as if never installed → is a previous `initScript` still armed?
 - Probe fires an event then reads the DOM synchronously → wait a tick, React hasn't flushed
 - Probe "proof" matches the PREVIOUS state's dimensions/content → stale phase; reset and re-tag
+- `evaluate_script` returned `undefined` from a body that returns a string → it parsed as a script, not a function; wrong `format`, nothing ran (mistake #24)
+- Log interleaves several component instances with no IDs → tag (instance + route/phase) before reasoning about order (`next-activity-state.md`)
