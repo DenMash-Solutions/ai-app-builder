@@ -22,6 +22,7 @@ import {
   createEntry,
   type HistoryEntry,
 } from "@/lib/history";
+import { isReservedSlug } from "@/lib/slug";
 import type { Spec } from "@json-render/core";
 
 export const PROJECT_STORAGE_KEY = "genui-projects";
@@ -98,6 +99,11 @@ export function slugifyProjectName(name: string): string {
  * so an unchanged name never bumps itself. `extraTaken` adds slugs owned by
  * OTHER sources (remote rows, 064) to the avoided set — a bumped suffix must
  * satisfy the DB's `unique (owner_id, slug)`, not just the local store.
+ *
+ * Reserved segments are never claimable (064): `admin` is shadowed by the
+ * admin route, so the suffix loop skips both taken AND reserved candidates —
+ * which also heals a stored/adopted legacy `admin` row to `admin-2` through
+ * the sanitizer, adoption and reconcile paths.
  */
 function uniqueSlug(
   wanted: string,
@@ -109,10 +115,24 @@ function uniqueSlug(
     projects.filter((project) => project.id !== ignoreId).map((p) => p.slug),
   );
   for (const slug of extraTaken) taken.add(slug);
-  if (!taken.has(wanted)) return wanted;
+  const isFree = (slug: string): boolean =>
+    !taken.has(slug) && !isReservedSlug(slug);
+  if (isFree(wanted)) return wanted;
   let suffix = 2;
-  while (taken.has(`${wanted}-${suffix}`)) suffix += 1;
+  while (!isFree(`${wanted}-${suffix}`)) suffix += 1;
   return `${wanted}-${suffix}`;
+}
+
+/**
+ * The rejection reason a project NAME earns at create/rename time, or null
+ * when it is acceptable (064) — the UI-facing predicate: callers check it
+ * BEFORE writing so a reserved name shows an i18n error and keeps the input
+ * open, while the store rejects the same names as defense in depth. Only the
+ * derived slug matters: the name is free text, but a name whose slug lands on
+ * a reserved segment is rejected rather than silently re-suffixed.
+ */
+export function projectNameError(name: string): "reserved" | null {
+  return isReservedSlug(slugifyProjectName(name)) ? "reserved" : null;
 }
 
 /**
@@ -335,11 +355,13 @@ function releaseStorageListener(): void {
 
 /**
  * Creates a project and **activates it** (creating means working in it).
- * Empty names are rejected (`null`, no-op).
+ * Empty names and names whose slug lands on a reserved segment (`admin`,
+ * `ui`, `login`, `signup` — 064) are rejected (`null`, no-op); the UI shows
+ * the reason through `projectNameError` before it ever gets here.
  */
 export function createProject(name: string): Project | null {
   const trimmed = name.trim();
-  if (trimmed === "") return null;
+  if (trimmed === "" || projectNameError(trimmed) !== null) return null;
   const now = Date.now();
   const existing = load();
   const project: Project = {
@@ -359,14 +381,15 @@ export function createProject(name: string): Project | null {
 /**
  * Rename a project — the slug is **re-derived** from the new name (061-3:
  * the URL namespace follows the project), unique-ified against the others so
- * a rename can never steal a live namespace. Empty names, unchanged names
- * and unknown ids are no-ops.
+ * a rename can never steal a live namespace. Empty names, unchanged names,
+ * unknown ids and reserved-segment names (064) are no-ops.
  */
 export function renameProject(id: string, name: string): void {
   const trimmed = name.trim();
   const projects = load();
   const target = projects.find((project) => project.id === id);
   if (trimmed === "" || !target || target.name === trimmed) return;
+  if (projectNameError(trimmed) !== null) return;
   cache = projects.map((project) =>
     project.id === id
       ? {

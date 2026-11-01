@@ -388,7 +388,8 @@
     "createPlaceholder": "Nombre del proyecto",
     "rename": "Renombrar proyecto",
     "delete": "Eliminar proyecto",
-    "switch": "Cambiar de proyecto"
+    "switch": "Cambiar de proyecto",
+    "reserved": "Esa dirección está reservada: elige otro nombre"
   },
   "localeSwitcher": {
     "label": "Idioma"

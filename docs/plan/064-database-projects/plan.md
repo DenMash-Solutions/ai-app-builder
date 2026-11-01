@@ -133,10 +133,15 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 
 ### 4. Reserved-slug fix
 
-- [ ] `createProject` and `renameProject` reject reserved segments with an
-      i18n error (en/es keys)
-- [ ] `uniqueSlug` consults `isReservedSlug` — slug `admin` can never be
-      claimed (fixes the shadowed-route bug that exists today)
+- [x] `createProject` and `renameProject` reject reserved segments with an
+      i18n error (en/es keys) — exported `projectNameError` predicate
+      (callers toast `projects.reserved` and keep the input open), store
+      rejects as defense in depth; reserved validation stays app-side (no DB
+      copy of the reserved list)
+- [x] `uniqueSlug` consults `isReservedSlug` — slug `admin` can never be
+      claimed (fixes the shadowed-route bug that exists today); the suffix
+      loop skips reserved candidates too, so stored/adopted legacy `admin`
+      rows heal to `admin-2` through sanitize/adoption/reconcile
 
 ### 5. Tests and probes
 

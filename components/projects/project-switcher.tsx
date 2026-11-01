@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 import { Check, Folder, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
   getProjects,
   getServerActiveProjectId,
   getServerProjects,
+  projectNameError,
   setActiveProjectId,
   subscribeActiveProject,
   subscribeProjects,
@@ -54,6 +56,11 @@ export function ProjectSwitcher({
   const label = active?.name ?? t("projects.none");
 
   const handleCreate = (name: string): void => {
+    // Reserved names toast the reason and keep the input open (064).
+    if (projectNameError(name) !== null) {
+      toast.error(t("projects.reserved"));
+      return;
+    }
     if (createProject(name) === null) return;
     setCreating(false);
     setOpen(false);

@@ -32,6 +32,7 @@ import {
   getProjects,
   getServerActiveProjectId,
   getServerProjects,
+  projectNameError,
   removeProject,
   renameProject,
   setActiveProjectId,
@@ -146,6 +147,11 @@ export function HistoryDrawer({
   };
 
   const commitCreateProject = (): void => {
+    // Reserved names toast the reason and keep the input open (064).
+    if (projectNameError(projectDraft) !== null) {
+      toast.error(t("projects.reserved"));
+      return;
+    }
     // Empty names leave the input open so the visitor can type something.
     if (createProject(projectDraft) === null) return;
     setCreatingProject(false);
@@ -172,7 +178,13 @@ export function HistoryDrawer({
   };
 
   const commitRename = (): void => {
-    if (renamingId !== null) renameProject(renamingId, renameDraft);
+    if (renamingId === null) return;
+    // Reserved names toast the reason and keep the inline edit open (064).
+    if (projectNameError(renameDraft) !== null) {
+      toast.error(t("projects.reserved"));
+      return;
+    }
+    renameProject(renamingId, renameDraft);
     setRenamingId(null);
   };
 

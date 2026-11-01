@@ -561,4 +561,73 @@ describe("project store", () => {
     ).toBe(betaUpdatedAt);
     expect(after.map((candidate) => candidate.slug)).toContain("alpha-3");
   });
+
+  test("createProject rejects names whose slug is reserved (064)", () => {
+    for (const name of ["admin", "  Admin  ", "ui", "login", "SIGNUP"]) {
+      expect(store.createProject(name)).toBeNull();
+    }
+    expect(store.getProjects()).toHaveLength(0);
+    expect(ls().getItem(PROJECT_STORAGE_KEY)).toBeNull();
+
+    // "Sign Up" slugifies to "sign-up" — a near-miss that stays allowed.
+    const near = store.createProject("Sign Up");
+    expect(near?.slug).toBe("sign-up");
+  });
+
+  test("renameProject rejects reserved names and keeps the project intact (064)", () => {
+    const project = store.createProject("Pokedex") as Project;
+    store.renameProject(project.id, "Admin");
+    store.renameProject(project.id, "ui");
+
+    const current = store.getProjects().find((c) => c.id === project.id);
+    expect(current?.name).toBe("Pokedex");
+    expect(current?.slug).toBe("pokedex");
+
+    // A non-reserved rename still re-derives the slug as before.
+    store.renameProject(project.id, "Sign Up");
+    expect(store.getProjects().find((c) => c.id === project.id)?.slug).toBe(
+      "sign-up",
+    );
+  });
+
+  test("projectNameError flags exactly the reserved segments (064)", () => {
+    expect(store.projectNameError("admin")).toBe("reserved");
+    expect(store.projectNameError("  Admin  ")).toBe("reserved");
+    expect(store.projectNameError("LogIn")).toBe("reserved");
+    // Near-misses that merely start with a reserved word are fine: their
+    // slugs ("admin-ui", "log-in") are not reserved.
+    expect(store.projectNameError("Admin UI")).toBeNull();
+    expect(store.projectNameError("Log In")).toBeNull();
+    expect(store.projectNameError("Pokédex")).toBeNull();
+  });
+
+  test("a stored reserved slug heals through the sanitizer (064)", async () => {
+    ls().setItem(
+      PROJECT_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "innocent",
+          name: "Innocent",
+          slug: "admin-2",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "legacy-admin",
+          name: "Admin",
+          slug: "admin",
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ]),
+    );
+
+    const specifier = "./projects.ts?reserved-heal";
+    const fresh = (await import(specifier)) as ProjectsModule;
+    const slugs = fresh.getProjects().map((candidate) => candidate.slug);
+    expect(slugs).toContain("admin-2"); // the innocent holder keeps its slug
+    expect(slugs).toContain("admin-3"); // the reserved one bumps past it
+    expect(slugs).not.toContain("admin");
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
 });
