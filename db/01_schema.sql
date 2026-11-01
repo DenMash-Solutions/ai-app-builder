@@ -75,9 +75,12 @@ create table if not exists public.site_settings (
 -- `updated_at` is stamped app-side by the sync writer (same as uis) and is
 -- the LWW tie-break. Reserved segments are checked in code at create and
 -- rename (lib/slug.ts isReservedSlug) — the reserved list lives in
--- lib/slug.ts and a DB copy would drift. home_screen_id gains a membership
--- check when project_screens lands (plan 065); ON DELETE SET NULL leaves the
--- project without a root entry point rather than dangling.
+-- lib/slug.ts and a DB copy would drift. home_screen_id membership is
+-- validated APP-SIDE (plan 065 decision 10; supersedes the original plan to
+-- add a DB check): the projects and project_screens sync loops are
+-- independent, and a cross-loop FK/trigger would fail whole-project pushes
+-- transiently while the membership row is still in flight. ON DELETE SET
+-- NULL leaves the project without a root entry point rather than dangling.
 create table if not exists public.projects (
   id             uuid primary key,
   owner_id       uuid not null references auth.users (id) on delete cascade,
@@ -91,4 +94,31 @@ create table if not exists public.projects (
   constraint projects_slug_check check (char_length(slug) between 1 and 64),
   constraint projects_status_check check (status in ('draft', 'published', 'archived')),
   constraint projects_owner_id_slug_key unique (owner_id, slug)
+);
+
+-- ── project_screens ─────────────────────────────────────────────────────────
+-- Plan 065: project membership — which screens belong to a project, with an
+-- optional configured route and a stable position. Local-first like uis and
+-- projects: the PK deliberately has NO default — ids are client-generated
+-- uuids. `owner_id` is denormalized from the project (065 decision 8): the
+-- generic sync loop's slim read and F7 ownership guard read it off every
+-- row, and RLS policies filter on it directly. `route` is the `{param}`
+-- pattern (null = the screen matches by exact slug only); unique per
+-- project so a duplicate route is rejected at authoring time (decision 7) —
+-- Postgres treats NULLs as distinct, so many route-less members coexist.
+-- `position` orders members for deterministic matching ties (decision 6).
+-- Single-owner invariant (decision 4): the WITH CHECK policies verify the
+-- membership's owner owns BOTH the project and the screen (F2/F3 shape).
+create table if not exists public.project_screens (
+  id         uuid primary key,
+  owner_id   uuid not null references auth.users (id) on delete cascade,
+  project_id uuid not null references public.projects (id) on delete cascade,
+  screen_id  uuid not null references public.uis (id) on delete cascade,
+  route      text,
+  position   integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint project_screens_route_check check (route is null or char_length(route) between 1 and 128),
+  constraint project_screens_project_id_screen_id_key unique (project_id, screen_id),
+  constraint project_screens_project_id_route_key unique (project_id, route)
 );

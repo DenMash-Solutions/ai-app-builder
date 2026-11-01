@@ -160,3 +160,54 @@ create policy projects_delete_owner_or_admin
   on public.projects for delete
   to authenticated
   using ((owner_id = auth.uid()) or is_admin());
+
+-- ── project_screens (plan 065) ─────────────────────────────────────────────
+-- Owner-only like projects; the single-owner invariant (decision 4) is
+-- enforced in the WITH CHECK clauses with the F2/F3 existence shape: a write
+-- only lands when the row's owner owns BOTH the project and the screen —
+-- membership across owners is impossible even via crafted REST calls.
+
+drop policy if exists project_screens_select_owner_or_admin on public.project_screens;
+create policy project_screens_select_owner_or_admin
+  on public.project_screens for select
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin());
+
+drop policy if exists project_screens_insert_own on public.project_screens;
+create policy project_screens_insert_own
+  on public.project_screens for insert
+  to authenticated
+  with check (
+    owner_id = auth.uid()
+    and exists (
+      select 1 from public.projects p
+      where p.id = project_id and p.owner_id = auth.uid()
+    )
+    and exists (
+      select 1 from public.uis u
+      where u.id = screen_id and u.owner_id = auth.uid()
+    )
+  );
+
+drop policy if exists project_screens_update_owner on public.project_screens;
+create policy project_screens_update_owner
+  on public.project_screens for update
+  to authenticated
+  using (owner_id = auth.uid())
+  with check (
+    owner_id = auth.uid()
+    and exists (
+      select 1 from public.projects p
+      where p.id = project_id and p.owner_id = auth.uid()
+    )
+    and exists (
+      select 1 from public.uis u
+      where u.id = screen_id and u.owner_id = auth.uid()
+    )
+  );
+
+drop policy if exists project_screens_delete_owner on public.project_screens;
+create policy project_screens_delete_owner
+  on public.project_screens for delete
+  to authenticated
+  using (owner_id = auth.uid());

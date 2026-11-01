@@ -59,6 +59,21 @@ explicit home screen.
    working, tested code.
 7. Duplicate routes are rejected at authoring time (unique(project, route))
    rather than resolved silently at runtime.
+8. Membership rows carry `owner_id` + `created_at`/`updated_at` (denormalized
+   from the project) — the generic sync contract's slim read and F7 guard
+   require `owner_id` on every row; rejected: deriving owner via join,
+   because the sync loop's slim column read never joins.
+9. Cross-device duplicate route: the local row's **route is cleared**
+   (membership kept, re-stamped) at push time via `reconcileProjectRoutes`
+   — rejected: letting the constraint fail the push (one violating row
+   poisons the whole membership upsert batch → every membership stalls),
+   rejected: suffixing (`settings-2`), because a route is a URL contract,
+   not a name.
+10. `projects.home_screen_id` membership is validated app-side, not by a DB
+    trigger/FK — rejected: composite FK `(project_id, home_screen_id) →
+    project_screens`, because the two sync loops are independent and a
+    cross-loop dependency fails whole-project pushes transiently (amends the
+    064 schema comment that promised a DB check).
 
 ## Files
 
@@ -72,13 +87,21 @@ explicit home screen.
 
 ### 1. Membership store and schema
 
-- [ ] `db/` migration: `project_screens` (project_id, screen_id, route,
-      position, created_at; unique per project+screen and project+route; FKs,
-      owner-only RLS) plus the `project.homeScreenId` column
-- [ ] `lib/projects/memberships.ts` module store (projects.ts pattern):
-      local-first, sync when signed in (decision 2)
-- [ ] Backfill: existing `projectId` pointers become membership rows;
-      dangling ids keep the "no project" bucket (062 migration note)
+- [x] `db/` migration: `project_screens` (id, owner_id, project_id,
+      screen_id, route, position, created_at, updated_at — decisions 8;
+      unique per project+screen and project+route; FKs, owner-only RLS with
+      project+screen ownership `WITH CHECK`); `project.homeScreenId` already
+      exists (064) — membership check app-side per decision 10 — applied
+      live as `20261101000000_add_project_screens_rls_grants`; 7 behavioral
+      probes green (cross-owner insert 403, reads invisible, delete no-op,
+      anon 0, table cleaned)
+- [x] `lib/projects/memberships.ts` module store (projects.ts pattern):
+      local-first, sync when signed in (decision 2) — sanitizer restores the
+      two uniqueness invariants (dup pair dropped, dup route cleared not
+      dropped), 9 unit tests green
+- [x] Backfill: existing `projectId` pointers become membership rows (on
+      first client read, chronological positions, idempotent); dangling ids
+      keep the "no project" bucket (062 migration note)
 
 ### 2. Operations (add / copy / move / remove / rename)
 

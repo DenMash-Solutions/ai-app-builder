@@ -46,6 +46,10 @@ All five tables have RLS enabled; no views exist in `public`; no `public.*` tabl
 | `projects` | `projects_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` |
 | `projects` | `projects_update_owner_or_admin` | UPDATE | authenticated | `owner_id = auth.uid() or is_admin()` | `owner_id = auth.uid()` ← F7 shape (no ownership takeover) |
 | `projects` | `projects_delete_owner_or_admin` | DELETE | authenticated | `owner_id = auth.uid() or is_admin()` | — |
+| `project_screens` | `project_screens_select_owner_or_admin` | SELECT | authenticated | `owner_id = auth.uid() or is_admin()` | — |
+| `project_screens` | `project_screens_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` **and** ui-ownership `exists (...)` ← single-owner invariant (065 decision 4) |
+| `project_screens` | `project_screens_update_owner` | UPDATE | authenticated | `owner_id = auth.uid()` ← F7 shape (no ownership takeover) | same double `exists (...)` as INSERT |
+| `project_screens` | `project_screens_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
 
 `profiles` has no INSERT/UPDATE/DELETE policy at all → **privilege escalation via `UPDATE profiles SET role='admin'` is impossible** (battery: 0 rows). Signups get their row from the `handle_new_user` trigger.
 
@@ -59,7 +63,7 @@ All five tables have RLS enabled; no views exist in `public`; no `public.*` tabl
 
 ### Grants (post-fix)
 
-`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all six tables (RLS filters rows). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
+`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all tables in `public` (RLS filters rows) — the `db/` set is 7 tables (`genui_records` is applied separately and also carries RLS + 4 policies). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
 
 ## Findings
 
