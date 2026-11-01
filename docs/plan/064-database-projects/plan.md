@@ -29,6 +29,11 @@ infrastructure instead of adding a parallel persistence system.
 - Realtime channels — debounce + LWW only, like `uis`
 - Global handle claims (069) and membership sync (065)
 - Renaming/reordering semantics beyond what the store already does
+- Cross-device delete propagation — a project deleted on device A can be
+  re-upserted by device B's next push; this is the pre-existing `uis`
+  semantic (pull never deletes) that 064 inherits rather than diverging from
+  (noted 2026-10-31; a tombstone/delete-transfer design would be its own
+  plan touching both loops)
 
 ## Design decisions
 
@@ -55,6 +60,14 @@ infrastructure instead of adding a parallel persistence system.
    stays a historical artifact. The migration is applied to the live project
    additively (table + RLS + grants in one batch, SQL reviewed before
    execution) because no local stack exists and e2e runs against live.
+7. Accepted session-state writes bump the project's `updatedAt` (recorded
+   2026-10-31 while implementing decision 2): `/session` syncs under plain
+   LWW and the merge compares timestamps, so a state change that didn't move
+   the stamp would be invisible to the other device's pull. This supersedes
+   061's "updatedAt stays rename-owned" comment — rejected: a separate state
+   version column, because decision 2 explicitly keeps plain LWW and stamp
+   semantics don't cross realms. The identical-content seed echo still
+   returns early (no bump, no push churn).
 
 ## Migration
 
@@ -87,22 +100,36 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 
 ### 2. Second sync loop (lib/history/sync.ts)
 
-- [ ] Row ↔ `Project` mappers beside `rowToEntry` / `entryToRow`
-- [ ] `startSync` parameterized over table + mapper so both loops share one
-      status dot and one `flushSync` path (decision 1)
-- [ ] Debounced push with `updatedAt` LWW tie-break; the newer row wins
-- [ ] Sync status UI covers both loops with a single indicator
+- [x] Row ↔ `Project` mappers beside `rowToEntry` / `entryToRow`
+      (`rowToProject` sanitizes through `sanitizeProjects`; `projectToRow`
+      omits `status`/`home_screen_id` so PostgREST never clobbers them)
+- [x] `startSync` parameterized over table + mapper so both loops share one
+      status dot and one `flushSync` path (decision 1) — generic
+      `startTableSync` + `entriesSyncSpec`/`projectsSyncSpec`; status
+      aggregates per-loop states, `flushSync` runs every registered flush;
+      `SyncEngine` starts and stops both
+- [x] Debounced push with `updatedAt` LWW tie-break; the newer row wins
+      (remote-newer / local-newer unit tests both directions)
+- [x] Sync status UI covers both loops with a single indicator — no UI edit
+      needed: the dot and nudge consume the shared module status, which now
+      aggregates both loops
 
 ### 3. Local adoption (lib/projects/projects.ts)
 
-- [ ] First sign-in merge: local uuid rows upload as-is, remote rows pull
+- [x] First sign-in merge: local uuid rows upload as-is, remote rows pull
       through the same LWW rule — no id remapping, so
-      `HistoryEntry.projectId` stays valid
-- [ ] Adoption-time slug collision under the same owner bumps via
-      `uniqueSlug`; both projects kept (decision 5)
-- [ ] Corrupt/partial remote rows sanitized on read (mirror the
-      `normalizeEntry` discipline)
-- [ ] Signed-out behavior stays byte-identical (061 contract)
+      `HistoryEntry.projectId` stays valid (adoption test pins id/slug/stamps)
+- [x] Adoption-time slug collision under the same owner bumps via
+      `uniqueSlug`; both projects kept (decision 5) — `applyRemoteProject`
+      bumps the LOCAL holder at adoption, `reconcileProjectSlugs` runs
+      before every push payload (own-id rows never bump; foreign-owner rows
+      filtered out — uniqueness is per-owner)
+- [x] Corrupt/partial remote rows sanitized on read (mirror the
+      `normalizeEntry` discipline) — junk timestamp/empty name → dropped,
+      non-object state → `{}` (decision 7 records the `updatedAt` bump that
+      makes state LWW observable)
+- [ ] Signed-out behavior stays byte-identical (061 contract) — proven by
+      `e2e/project-session.spec.ts` in workstream 5
 
 ### 4. Reserved-slug fix
 

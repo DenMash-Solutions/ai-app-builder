@@ -7,6 +7,7 @@ import {
   PROJECT_STORAGE_KEY,
   slugifyProjectName,
 } from "./projects";
+import type { Project } from "./projects";
 
 type ProjectsModule = typeof import("./projects");
 
@@ -445,5 +446,119 @@ describe("project store", () => {
     // The history store is shared across test files — clean up both.
     removeEntry(loose.id);
     removeEntry(grouped.id);
+  });
+
+  test("a real session write bumps updatedAt for the LWW compare (064 d2)", () => {
+    const project = store.createProject("Shared clock");
+    expect(project).not.toBeNull();
+    const created = project as NonNullable<typeof project>;
+
+    // Deterministic advance: the bump must strictly exceed the create stamp.
+    const realNow = Date.now;
+    let clock = realNow();
+    Date.now = () => (clock += 5000);
+    try {
+      expect(
+        store.setSessionState(
+          created.id,
+          { token: "a" },
+          store.stampSessionValue(),
+        ),
+      ).toBe(true);
+      expect(store.getProjects()[0].updatedAt).toBeGreaterThan(
+        created.updatedAt,
+      );
+
+      const bumped = store.getProjects()[0].updatedAt;
+      // Identical content is still the no-op seed echo — no second bump.
+      expect(
+        store.setSessionState(
+          created.id,
+          { token: "a" },
+          store.stampSessionValue(),
+        ),
+      ).toBe(false);
+      expect(store.getProjects()[0].updatedAt).toBe(bumped);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  test("applyRemoteProject adopts the row, stamps the baseline and bumps a local slug holder (064)", () => {
+    const local = store.createProject("Pokédex");
+    expect(local).not.toBeNull();
+    const created = local as NonNullable<typeof local>;
+
+    // A session write stamped BEFORE the adoption must not clobber it.
+    const staleStamp = store.stampSessionValue();
+    const remote: Project = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Pokédex",
+      slug: "pokedex",
+      createdAt: 1000,
+      updatedAt: 9000,
+      state: { team: ["pikachu"] },
+    };
+    store.applyRemoteProject(remote);
+
+    const projects = store.getProjects();
+    expect(projects).toHaveLength(2);
+    expect(projects.find((candidate) => candidate.id === remote.id)).toEqual(
+      remote,
+    );
+    // The local holder yields the slug (constraint truth), never dropped.
+    expect(
+      projects.find((candidate) => candidate.id === created.id)?.slug,
+    ).toBe("pokedex-2");
+    expect(
+      store.setSessionState(remote.id, { team: ["mew"] }, staleStamp),
+    ).toBe(false);
+    expect(
+      store.getProjects().find((candidate) => candidate.id === remote.id)
+        ?.state,
+    ).toEqual({ team: ["pikachu"] });
+
+    // Persisted for the next read.
+    const stored = JSON.parse(
+      ls().getItem(PROJECT_STORAGE_KEY) ?? "[]",
+    ) as Project[];
+    expect(stored).toHaveLength(2);
+    expect(stored.find((candidate) => candidate.id === remote.id)?.slug).toBe(
+      "pokedex",
+    );
+  });
+
+  test("reconcileProjectSlugs bumps local holders against foreign remote ids only (064)", () => {
+    const alpha = store.createProject("Alpha");
+    expect(alpha).not.toBeNull();
+    const alphaProject = alpha as NonNullable<typeof alpha>;
+    const beta = store.createProject("Beta");
+    expect(beta).not.toBeNull();
+    const betaProject = beta as NonNullable<typeof beta>;
+
+    store.reconcileProjectSlugs([
+      { id: "remote-1", slug: "alpha" }, // foreign id → bump the local copy
+      { id: betaProject.id, slug: "beta" }, // our own row → never bump
+      { id: "remote-2", slug: "alpha-2" }, // the suffix must skip it
+    ]);
+
+    const projects = store.getProjects();
+    expect(
+      projects.find((candidate) => candidate.id === alphaProject.id)?.slug,
+    ).toBe("alpha-3");
+    expect(
+      projects.find((candidate) => candidate.id === betaProject.id)?.slug,
+    ).toBe("beta");
+    const betaUpdatedAt = projects.find(
+      (candidate) => candidate.id === betaProject.id,
+    )?.updatedAt;
+
+    // No local holder → a no-op: nothing bumped, nothing re-stamped.
+    store.reconcileProjectSlugs([{ id: "remote-3", slug: "gamma" }]);
+    const after = store.getProjects();
+    expect(
+      after.find((candidate) => candidate.id === betaProject.id)?.updatedAt,
+    ).toBe(betaUpdatedAt);
+    expect(after.map((candidate) => candidate.slug)).toContain("alpha-3");
   });
 });

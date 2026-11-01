@@ -2,9 +2,11 @@
  * Project entity (plan 061, A1): a named group for the screens (history
  * entries) of one app — one project = one multi-screen UI in the making.
  *
- * **Local-only in v1** (061 Q1, 2026-10-29): a module store backed by
- * localStorage, no supabase table and no second sync loop — cross-device
- * project sync is follow-up F17. Entries reference a project through
+ * **Account-synced since plan 064**: the module store stays localStorage-
+ * backed (local-first), and a second sync loop in `lib/history/sync.ts`
+ * mirrors rows into the `projects` table under plain LWW (`updatedAt` vs
+ * `updated_at`) — local uuids upload as-is, so `HistoryEntry.projectId`
+ * never needs remapping. Entries reference a project through
  * `HistoryEntry.projectId`; entries without one (or with a dangling id after a
  * project is deleted) group under the "no project" bucket.
  *
@@ -33,8 +35,10 @@ export interface Project {
    * this project's route root — the home screen serves the bare segment and
    * in-project routes (`/pokedex/4`) resolve below it. Derived from the name
    * (NFD + diacritics stripped, "Pokédex" → "pokedex"), unique-ified within
-   * the store, re-derived on rename. Device-local like the rest of the
-   * entity (F17 would sync it).
+   * the store, re-derived on rename. Synced like the rest of the entity
+   * (064): `unique (owner_id, slug)` is the DB arbiter, so a local holder of
+   * a slug another device already pushed gets bumped at adoption/push time
+   * (`applyRemoteProject` / `reconcileProjectSlugs`).
    */
   slug: string;
   createdAt: number;
@@ -91,16 +95,20 @@ export function slugifyProjectName(name: string): string {
 /**
  * Make a slug collision-free within the store: `pokedex`, `pokedex-2`,
  * `pokedex-3`… — the project being renamed keeps its own slug (`ignoreId`),
- * so an unchanged name never bumps itself.
+ * so an unchanged name never bumps itself. `extraTaken` adds slugs owned by
+ * OTHER sources (remote rows, 064) to the avoided set — a bumped suffix must
+ * satisfy the DB's `unique (owner_id, slug)`, not just the local store.
  */
 function uniqueSlug(
   wanted: string,
   projects: readonly Project[],
   ignoreId?: string,
+  extraTaken: ReadonlySet<string> = new Set(),
 ): string {
   const taken = new Set(
     projects.filter((project) => project.id !== ignoreId).map((p) => p.slug),
   );
+  for (const slug of extraTaken) taken.add(slug);
   if (!taken.has(wanted)) return wanted;
   let suffix = 2;
   while (taken.has(`${wanted}-${suffix}`)) suffix += 1;
@@ -111,8 +119,12 @@ function uniqueSlug(
  * Drop anything that doesn't parse as a project — corrupt entries never
  * reach the UI — and backfill the route slug: a stored pre-061-3 project has
  * none (derived here from its name, unique-ified across the batch).
+ *
+ * Exported (064) as the sanitization discipline for REMOTE rows too: the
+ * sync mappers run candidate rows through this before they touch the store,
+ * so a partial/corrupt account copy behaves exactly like corrupt storage.
  */
-function sanitize(raw: unknown): Project[] {
+export function sanitizeProjects(raw: unknown): Project[] {
   if (!Array.isArray(raw)) return EMPTY;
   const seen: Project[] = [];
   return raw.filter(isValidProject).map((stored) => {
@@ -143,7 +155,7 @@ function readStored(): Project[] {
   try {
     const stored = window.localStorage.getItem(PROJECT_STORAGE_KEY);
     if (!stored) return EMPTY;
-    return sanitize(JSON.parse(stored));
+    return sanitizeProjects(JSON.parse(stored));
   } catch {
     // Unreadable/corrupt value — fall back to an empty project list.
     return EMPTY;
@@ -408,9 +420,15 @@ export function getSessionState(
  * value. No-ops on unknown ids, on non-object values (the session subtree is
  * an object by design), on content identical to what is stored (the seed
  * echo after mount writes nothing), and on stamps that are not strictly
- * newer than the last accepted write (stale-writer guard above). `updatedAt`
- * stays rename-owned. Stringify equality matches how the value round-trips
- * through localStorage. Returns whether the write landed.
+ * newer than the last accepted write (stale-writer guard above). Stringify
+ * equality matches how the value round-trips through localStorage. Returns
+ * whether the write landed.
+ *
+ * An accepted write bumps `updatedAt` (064 decision 2): `/session` syncs
+ * under plain LWW and the merge compares timestamps — a state change that
+ * didn't move the stamp would be invisible to the other device's pull. This
+ * supersedes 061's "updatedAt stays rename-owned" note; rename still bumps
+ * it too.
  */
 export function setSessionState(
   id: string,
@@ -427,10 +445,84 @@ export function setSessionState(
   if (stamp <= accepted) return false;
   acceptedSessionStamps.set(id, stamp);
   cache = projects.map((project, i) =>
-    i === index ? { ...project, state: next } : project,
+    i === index ? { ...project, state: next, updatedAt: Date.now() } : project,
   );
   persist();
   return true;
+}
+
+/**
+ * Insert-or-replace preserving the project's own timestamps — the account-
+ * sync write path (064), mirroring `applyRemoteEntry`: the sync loop has
+ * already decided LWW (remote newer or unknown) before calling.
+ *
+ * Adoption-time slug collision under the same owner (decision 5): the
+ * incoming remote row is the DB-constraint truth (`unique (owner_id, slug)`),
+ * so a LOCAL holder of the same slug yields — bumped via `uniqueSlug`, never
+ * dropped; both projects are kept. The adopted row also joins the session-
+ * stamp baseline (like a cross-tab write), so a late stale `/session` flush
+ * from this realm can't clobber the freshly adopted shared state.
+ */
+export function applyRemoteProject(remote: Project): void {
+  const projects = load();
+  const adoptedSlugs = new Set([remote.slug]);
+  const next = projects.map((project) => {
+    if (project.id === remote.id || project.slug !== remote.slug) {
+      return project;
+    }
+    return {
+      ...project,
+      slug: uniqueSlug(project.slug, projects, project.id, adoptedSlugs),
+      updatedAt: Date.now(),
+    };
+  });
+  const exists = next.some((project) => project.id === remote.id);
+  cache = exists
+    ? next.map((project) => (project.id === remote.id ? remote : project))
+    : [...next, remote];
+  acceptedSessionStamps.set(remote.id, sessionClock);
+  persist();
+}
+
+/**
+ * Push-time slug reconcile (064 decision 5): every local project holding a
+ * slug that a REMOTE row of a different id owns is bumped via `uniqueSlug`
+ * against the union of local and remote slugs — never dropped, so the
+ * upsert can never trip `unique (owner_id, slug)` from a stale local
+ * namespace. Runs inside the sync loop's push, before the payload is built.
+ *
+ * Bumps re-stamp `updatedAt` (a slug change is a rename) and persist, which
+ * re-schedules that loop's debounced push — the second pass finds nothing
+ * left to bump (idempotent).
+ */
+export function reconcileProjectSlugs(
+  remote: readonly { id: string; slug?: string }[],
+): void {
+  const remoteRows: { id: string; slug: string }[] = [];
+  const taken = new Set<string>();
+  for (const row of remote) {
+    if (typeof row.slug === "string" && row.slug !== "") {
+      remoteRows.push({ id: row.id, slug: row.slug });
+      taken.add(row.slug);
+    }
+  }
+  if (remoteRows.length === 0) return;
+  const projects = load();
+  let changed = false;
+  const next = projects.map((project) => {
+    const takenByAnother = remoteRows.some(
+      (row) => row.id !== project.id && row.slug === project.slug,
+    );
+    if (!takenByAnother) return project;
+    changed = true;
+    const slug = uniqueSlug(project.slug, projects, project.id, taken);
+    // Later bumps must avoid this one's new suffix too.
+    taken.add(slug);
+    return { ...project, slug, updatedAt: Date.now() };
+  });
+  if (!changed) return;
+  cache = next;
+  persist();
 }
 
 /**

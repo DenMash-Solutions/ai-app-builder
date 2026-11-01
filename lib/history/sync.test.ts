@@ -8,8 +8,27 @@ import {
   removeEntry,
 } from "./history";
 import type { HistoryEntry } from "./history";
-import { entryToRow, getSyncStatus, rowToEntry, startSync } from "./sync";
+import {
+  entryToRow,
+  flushSync,
+  getSyncStatus,
+  projectToRow,
+  projectsSyncSpec,
+  rowToEntry,
+  rowToProject,
+  startSync,
+  startTableSync,
+} from "./sync";
 import type { SelectBuilder, SyncClient } from "./sync";
+import {
+  ACTIVE_PROJECT_STORAGE_KEY,
+  PROJECT_STORAGE_KEY,
+  applyRemoteProject,
+  createProject,
+  getProjects,
+  removeProject,
+} from "@/lib/projects/projects";
+import type { Project } from "@/lib/projects/projects";
 
 function makeSpec(heading: string): Spec {
   return {
@@ -47,11 +66,20 @@ interface MockSelectBuilder {
 }
 
 function makeClient(state: MockState): SyncClient {
-  const select = (columns?: string): SelectBuilder => {
+  /** Rows visible to a table. Untagged rows predate table-awareness (the
+   *  entries tests seed plain rows) and stay visible to every table; tagged
+   *  rows surface only for their own — the two-loop tests share one mock
+   *  and need `uis`/`projects` kept apart like the real database. */
+  const visibleTo = (row: Record<string, unknown>, table: string): boolean =>
+    row.__table === undefined || row.__table === table;
+
+  const select = (table: string, columns?: string): SelectBuilder => {
     const filters: RecordedSelect["filters"] = [];
     const record = (): { data: unknown[]; error: null } => {
       state.selects.push({ columns, filters });
-      let rows = state.rows.map((row) => ({ ...row }));
+      let rows = state.rows
+        .filter((row) => visibleTo(row, table))
+        .map((row) => ({ ...row }));
       for (const filter of filters) {
         rows = rows.filter((row) =>
           filter.kind === "eq"
@@ -83,11 +111,12 @@ function makeClient(state: MockState): SyncClient {
   };
 
   return {
-    from: () => ({
-      select,
+    from: (table: string) => ({
+      select: (columns?: string) => select(table, columns),
       upsert: async (rows: Record<string, unknown>[]) => {
         state.upserts.push(rows);
-        for (const row of rows) {
+        for (const payload of rows) {
+          const row: Record<string, unknown> = { ...payload, __table: table };
           const index = state.rows.findIndex(
             (existing) => existing.id === row.id,
           );
@@ -407,5 +436,410 @@ describe("sync", () => {
     expect(state.selects).toHaveLength(2);
     expect(state.selects.filter((s) => s.columns === "*")).toHaveLength(0);
     stop();
+  });
+});
+
+/** The window's storage — reuses the shared test window or installs one
+ *  (same pattern as projects.test.ts: bun test shares one process). */
+function storage(): Storage {
+  const globalWindow = globalThis as { window?: unknown };
+  const candidate = globalWindow.window as
+    { localStorage?: Storage } | undefined;
+  if (!candidate || !candidate.localStorage) {
+    const map = new Map<string, string>();
+    globalWindow.window = {
+      localStorage: {
+        getItem: (key: string) => map.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          map.set(key, value);
+        },
+        removeItem: (key: string) => {
+          map.delete(key);
+        },
+      },
+    } as unknown as Window & typeof globalThis;
+    return (globalWindow.window as { localStorage: Storage }).localStorage;
+  }
+  return candidate.localStorage;
+}
+
+function projectRow(
+  id: string,
+  overrides: Partial<{
+    updatedAt: number;
+    name: string;
+    slug: string;
+    ownerId: string;
+  }> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    owner_id: overrides.ownerId ?? "owner-1",
+    name: overrides.name ?? "remote project",
+    slug: overrides.slug ?? "remote-project",
+    state: {},
+    created_at: new Date(1000).toISOString(),
+    updated_at: new Date(overrides.updatedAt ?? 5000).toISOString(),
+    __table: "projects",
+  };
+}
+
+describe("projects loop (plan 064)", () => {
+  let state: MockState;
+
+  const resetProjects = (): void => {
+    // Reset through the store's own API so cache and storage agree — the
+    // module instance (and its cache) is shared across test files.
+    for (const project of [...getProjects()]) removeProject(project.id);
+    storage().removeItem(PROJECT_STORAGE_KEY);
+    storage().removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+  };
+
+  beforeEach(() => {
+    storage(); // install/reuse the shared window so the store isn't SSR-empty
+    resetProjects();
+    clearHistory();
+    state = { rows: [], upserts: [], deletes: [], selects: [] };
+  });
+
+  afterEach(() => {
+    resetProjects();
+    clearHistory();
+  });
+
+  test("projectToRow / rowToProject round-trip; server-managed columns never travel", () => {
+    const project: Project = {
+      id: "aaaaaaaa-4444-4888-8999-aaaaaaaaaaaa",
+      name: "Pokédex",
+      slug: "pokedex",
+      createdAt: 1700000000000,
+      updatedAt: 1700000009000,
+      state: { cart: ["pikachu"] },
+    };
+    const row = projectToRow(project, "owner-1");
+    expect(row.owner_id).toBe("owner-1");
+    // status/home_screen_id belong to 065/069 — sync must not write them.
+    expect(row.status).toBeUndefined();
+    expect(row.home_screen_id).toBeUndefined();
+
+    expect(rowToProject(row)).toEqual(project);
+
+    // Corrupt/partial rows: junk timestamp → null, empty name → null,
+    // non-object state → backfilled to {}, non-object row → null.
+    expect(rowToProject({ ...row, created_at: "garbage" })).toBeNull();
+    expect(rowToProject({ ...row, name: "" })).toBeNull();
+    expect(rowToProject({ ...row, state: "scalar" })?.state).toEqual({});
+    expect(rowToProject("not-an-object")).toBeNull();
+  });
+
+  test("downloads a remote-only project with its id, slug and stamps (no remap)", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    state.rows.push(
+      projectRow(id, { name: "Pokédex", slug: "pokedex", updatedAt: 7000 }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const projects = getProjects();
+    expect(projects).toHaveLength(1);
+    expect(projects[0].id).toBe(id); // client-generated id adopted as-is
+    expect(projects[0].name).toBe("Pokédex");
+    expect(projects[0].slug).toBe("pokedex");
+    expect(projects[0].updatedAt).toBe(7000);
+    expect(getSyncStatus()).toBe("saved");
+    stop();
+    expect(getSyncStatus()).toBe("idle");
+  });
+
+  test("a remote-newer project wins the merge and is never clobbered back", async () => {
+    const adopted = createProject("Device two") as Project;
+    state.rows.push(
+      projectRow(adopted.id, {
+        name: "Renamed on device one",
+        slug: "device-two",
+        updatedAt: Date.now() + 90000,
+      }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    expect(getProjects().find((p) => p.id === adopted.id)?.name).toBe(
+      "Renamed on device one",
+    );
+    // The push must carry the adopted copy (or skip it) — never a stale name.
+    const pushed = state.upserts.flat().find((row) => row.id === adopted.id);
+    expect(pushed?.name ?? "Renamed on device one").toBe(
+      "Renamed on device one",
+    );
+    stop();
+  });
+
+  test("a local-newer project wins the merge and lands in the payload", async () => {
+    const local = createProject("Local winner") as Project;
+    state.rows.push(
+      projectRow(local.id, {
+        name: "stale remote",
+        slug: "local-winner",
+        updatedAt: 1,
+      }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const pushed = state.upserts.flat().find((row) => row.id === local.id);
+    expect(pushed?.name).toBe("Local winner");
+    expect(pushed?.owner_id).toBe("owner-1");
+    expect(pushed?.updated_at).toBe(new Date(local.updatedAt).toISOString());
+    const stored = getProjects().find((p) => p.id === local.id);
+    expect(stored?.name).toBe("Local winner");
+    // Our own remote row sharing the slug never triggers a reconcile bump.
+    expect(stored?.slug).toBe("local-winner");
+    stop();
+  });
+
+  test("pull never adopts projects owned by another account (F7 see-all)", async () => {
+    const foreignId = "55555555-5555-4555-8555-555555555555";
+    const ownId = "66666666-6666-4666-8666-666666666666";
+    state.rows.push(
+      projectRow(foreignId, {
+        name: "victim project",
+        slug: "victim",
+        ownerId: "someone-else",
+      }),
+    );
+    state.rows.push(projectRow(ownId, { name: "own project" }));
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const ids = getProjects().map((project) => project.id);
+    expect(ids).toContain(ownId);
+    expect(ids).not.toContain(foreignId);
+    stop();
+  });
+
+  test("push never overwrites or deletes a project another account owns (F7)", async () => {
+    const foreignId = "77777777-7777-4777-8777-777777777777";
+    state.rows.push(
+      projectRow(foreignId, {
+        name: "victim project",
+        slug: "victim",
+        ownerId: "someone-else",
+      }),
+    );
+    // A polluted LOCAL copy of the foreign id — LWW alone would win (it's
+    // newer), so only the owner guard can stop the upsert.
+    applyRemoteProject({
+      id: foreignId,
+      name: "polluted local copy",
+      slug: "polluted",
+      createdAt: 1,
+      updatedAt: 90000,
+      state: {},
+    });
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    expect(
+      state.upserts.flat().find((row) => row.id === foreignId),
+    ).toBeUndefined();
+    expect(state.rows.find((row) => row.id === foreignId)?.owner_id).toBe(
+      "someone-else",
+    );
+    expect(state.rows.find((row) => row.id === foreignId)?.name).toBe(
+      "victim project",
+    );
+
+    // Deleting the stale local copy must not delete the foreign row.
+    removeProject(foreignId);
+    await sleep(30);
+    expect(state.deletes.flat()).not.toContain(foreignId);
+    expect(state.rows.find((row) => row.id === foreignId)).toBeDefined();
+    stop();
+  });
+
+  test("corrupt or partial remote rows are sanitized away", async () => {
+    state.rows.push(
+      {
+        __table: "projects",
+        id: "bad-timestamp",
+        owner_id: "owner-1",
+        name: "No date",
+        slug: "no-date",
+        state: {},
+        created_at: "garbage",
+        updated_at: "garbage",
+      },
+      {
+        __table: "projects",
+        id: "bad-name",
+        owner_id: "owner-1",
+        name: "   ",
+        slug: "blank-name",
+        state: {},
+        created_at: new Date(1000).toISOString(),
+        updated_at: new Date(5000).toISOString(),
+      },
+      {
+        __table: "projects",
+        id: "junk-state",
+        owner_id: "owner-1",
+        name: "Junk state",
+        slug: "junk-state",
+        state: ["array"],
+        created_at: new Date(1000).toISOString(),
+        updated_at: new Date(5000).toISOString(),
+      },
+      projectRow("11111111-2222-4333-8444-555555555555", { name: "Good" }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const ids = getProjects().map((project) => project.id);
+    expect(ids).toContain("11111111-2222-4333-8444-555555555555");
+    expect(ids).not.toContain("bad-timestamp");
+    expect(ids).not.toContain("bad-name");
+    // Salvageable row kept, its junk state backfilled to the session object.
+    expect(getProjects().find((p) => p.id === "junk-state")?.state).toEqual({});
+    stop();
+  });
+
+  test("adopting a remote project bumps the LOCAL slug holder — both kept (d5)", async () => {
+    const local = createProject("Pokédex") as Project;
+    expect(local.slug).toBe("pokedex");
+    const remoteId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+    state.rows.push(
+      projectRow(remoteId, {
+        name: "Pokédex",
+        slug: "pokedex",
+        updatedAt: Date.now() + 90000,
+      }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const projects = getProjects();
+    expect(projects).toHaveLength(2);
+    // Constraint truth keeps the remote slug; the local holder yields.
+    expect(projects.find((p) => p.id === remoteId)?.slug).toBe("pokedex");
+    expect(projects.find((p) => p.id === local.id)?.slug).toBe("pokedex-2");
+    expect(state.upserts.flat().find((row) => row.id === local.id)?.slug).toBe(
+      "pokedex-2",
+    );
+    stop();
+  });
+
+  test("a remote row appearing after the pull is reconciled before the payload (d5)", async () => {
+    const local = createProject("Pokedex") as Project;
+    expect(local.slug).toBe("pokedex");
+
+    const client = makeClient(state);
+    const stop = startTableSync(client, "owner-1", projectsSyncSpec, {
+      debounceMs: 1,
+    });
+    await sleep(20); // initial run: empty remote → local pushed as-is
+    expect(state.rows.find((row) => row.id === local.id)?.slug).toBe("pokedex");
+
+    // Device one's pokedex lands in the account — no second pull runs this
+    // session, so only the push's reconcile can resolve the collision.
+    state.rows.push(
+      projectRow("bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb", {
+        name: "Pokedex",
+        slug: "pokedex",
+        updatedAt: Date.now() + 90000,
+      }),
+    );
+
+    createProject("Second screen set"); // schedules the next debounced push
+    await sleep(30);
+
+    expect(getProjects().find((p) => p.id === local.id)?.slug).toBe(
+      "pokedex-2",
+    );
+    // The LATEST push of that row must carry the bump (earlier pushes of the
+    // pre-bump copy are legitimately in the log).
+    const pushedRows = state.upserts
+      .flat()
+      .filter((row) => row.id === local.id);
+    expect(pushedRows.at(-1)?.slug).toBe("pokedex-2");
+    stop();
+  });
+
+  test("one status dot and one flush path across both loops (d1)", async () => {
+    const client = makeClient(state);
+    const stopEntries = startSync(client, "owner-1", { debounceMs: 50 });
+    const stopProjects = startTableSync(client, "owner-1", projectsSyncSpec, {
+      debounceMs: 50,
+    });
+    await sleep(20);
+
+    expect(getSyncStatus()).toBe("saved");
+
+    // One loop stopping must not dim the dot while the other still runs.
+    stopEntries();
+    expect(getSyncStatus()).toBe("saved");
+    stopProjects();
+    expect(getSyncStatus()).toBe("idle");
+
+    // One flush pushes BOTH tables outside their debounces.
+    const stopAgain = [
+      startSync(client, "owner-1", { debounceMs: 5000 }),
+      startTableSync(client, "owner-1", projectsSyncSpec, {
+        debounceMs: 5000,
+      }),
+    ];
+    await sleep(20);
+    addEntry(createEntry("entry to flush", makeSpec("v0")));
+    createProject("Project to flush");
+    flushSync();
+    await sleep(30);
+
+    const pushed = state.upserts.flat();
+    expect(pushed.some((row) => "revisions" in row)).toBe(true); // uis loop
+    expect(pushed.some((row) => "state" in row)).toBe(true); // projects loop
+    expect(getSyncStatus()).toBe("saved");
+    stopAgain.forEach((stop) => stop());
+    expect(getSyncStatus()).toBe("idle");
   });
 });

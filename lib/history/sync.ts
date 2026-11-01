@@ -5,12 +5,25 @@ import {
   subscribeHistory,
 } from "./history";
 import type { HistoryEntry, SpecRevision } from "./history";
+import {
+  applyRemoteProject,
+  getProjects,
+  reconcileProjectSlugs,
+  sanitizeProjects,
+  subscribeProjects,
+} from "@/lib/projects/projects";
+import type { Project } from "@/lib/projects/projects";
 
 /**
  * Local-first account sync (plan Q7): localStorage stays the working copy;
  * when a session exists we debounce-and-push entry changes to `uis` and merge
  * on start with last-write-wins (`updatedAt` vs `updated_at`). Fire-and-
  * forget — the app never blocks on Supabase.
+ *
+ * Plan 064 runs the SAME machinery as a second loop over `projects`
+ * (`startTableSync` + `projectsSyncSpec`): the loop is parameterized over
+ * table + row/entity mappers so both loops share ONE status dot and ONE
+ * `flushSync` path (design decision 1) instead of a parallel sync service.
  */
 
 export type SyncStatus = "idle" | "syncing" | "saved" | "offline";
@@ -29,26 +42,31 @@ export interface SelectBuilder extends PromiseLike<SelectResult> {
   eq(column: string, value: unknown): SelectBuilder;
   in(column: string, values: unknown[]): SelectBuilder;
 }
-interface UisTable {
+interface TableOps {
   select(columns?: string): SelectBuilder;
   upsert(rows: Record<string, unknown>[]): PromiseLike<QueryResult>;
   delete(): { in(column: string, ids: string[]): PromiseLike<QueryResult> };
 }
 export interface SyncClient {
-  from(table: string): UisTable;
+  from(table: string): TableOps;
 }
 
 let status: SyncStatus = "idle";
 const statusListeners = new Set<() => void>();
-let activeFlush: (() => void) | null = null;
+/** Per-loop status, keyed by table — the single status dot aggregates every
+ *  running loop (064 decision 1: one indicator, not one per loop). */
+const loopStates = new Map<string, SyncStatus>();
+/** One "Upload now" path across every running loop (064 decision 1). */
+const flushes = new Set<() => void>();
 
 export function getSyncStatus(): SyncStatus {
   return status;
 }
 
-/** Forces an immediate push outside the debounce — the "Upload now" action. */
+/** Forces an immediate push outside the debounce — the "Upload now" action,
+ *  run against EVERY running loop (one flush path, 064 decision 1). */
 export function flushSync(): void {
-  activeFlush?.();
+  for (const flush of flushes) flush();
 }
 
 export function subscribeSyncStatus(listener: () => void): () => void {
@@ -56,10 +74,31 @@ export function subscribeSyncStatus(listener: () => void): () => void {
   return () => statusListeners.delete(listener);
 }
 
-function setStatus(next: SyncStatus): void {
+/** Collapse the per-loop states into the one published status. */
+function publishStatus(): void {
+  const states = [...loopStates.values()];
+  let next: SyncStatus = "idle";
+  if (states.includes("syncing")) {
+    next = "syncing";
+  } else if (states.includes("offline")) {
+    next = "offline";
+  } else if (states.length > 0) {
+    next = "saved";
+  }
   if (next === status) return;
   status = next;
   for (const listener of statusListeners) listener();
+}
+
+function setLoopStatus(table: string, next: SyncStatus): void {
+  if (loopStates.get(table) === next) return;
+  loopStates.set(table, next);
+  publishStatus();
+}
+
+function releaseLoop(table: string): void {
+  loopStates.delete(table);
+  publishStatus();
 }
 
 interface UisRow {
@@ -87,11 +126,13 @@ function isUisRow(value: unknown): value is UisRow {
   );
 }
 
-/** The slim compare-row pull's phase 1 returns (plan 055 A). */
-interface SlimRow {
+/** The slim compare-row pull's phase 1 returns (plan 055 A). `slug` rides
+ *  along when a spec's slimColumns include it (projects — 064 reconcile). */
+export interface SlimRow {
   id: string;
   owner_id: string;
   updated_at: string;
+  slug?: string;
 }
 
 function isSlimRow(value: unknown): value is SlimRow {
@@ -141,14 +182,108 @@ export function entryToRow(
   };
 }
 
+/** The `projects` row shape the full-row phase returns (064). `status` and
+ *  `home_screen_id` are deliberately absent: they belong to plans 065/069,
+ *  sync reads past them and never writes them (see `projectToRow`). */
+interface ProjectRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  slug: string;
+  state: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+function isProjectRow(value: unknown): value is ProjectRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<ProjectRow>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
+    typeof row.name === "string" &&
+    typeof row.slug === "string" &&
+    typeof row.created_at === "string" &&
+    typeof row.updated_at === "string"
+  );
+}
+
+/** Row → `Project`: corrupt or partial remote rows come back `null` (the
+ *  `normalizeEntry` discipline — junk never reaches the store); salvageable
+ *  rows go through the store's sanitizer, which backfills slug/state and
+ *  falls back `updatedAt` to `createdAt` for a junk stamp. */
+export function rowToProject(raw: unknown): Project | null {
+  if (!isProjectRow(raw)) return null;
+  const createdAt = Date.parse(raw.created_at);
+  if (!Number.isFinite(createdAt)) return null;
+  const updatedAt = Date.parse(raw.updated_at);
+  const [project] = sanitizeProjects([
+    {
+      id: raw.id,
+      name: raw.name,
+      slug: raw.slug,
+      state: raw.state,
+      createdAt,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
+    },
+  ]);
+  return project ?? null;
+}
+
+/** `Project` → upsert row. Deliberately PARTIAL: `status` and
+ *  `home_screen_id` are server-side facts this device doesn't model —
+ *  PostgREST's upsert sets only the provided columns, so an update leaves
+ *  them intact and a fresh insert takes the DB defaults. */
+export function projectToRow(
+  project: Project,
+  ownerId: string,
+): Record<string, unknown> {
+  return {
+    id: project.id,
+    owner_id: ownerId,
+    name: project.name,
+    slug: project.slug,
+    state: project.state,
+    created_at: new Date(project.createdAt).toISOString(),
+    updated_at: new Date(project.updatedAt).toISOString(),
+  };
+}
+
+/** One synced table: the loop below is parameterized over row/entity shape
+ *  so `uis` and `projects` share one status dot and one flush path (064
+ *  decision 1). */
+export interface SyncSpec<T extends { id: string; updatedAt: number }> {
+  /** Table name — also this loop's key in the shared status registry. */
+  table: string;
+  /** Slim columns of BOTH phases — must include `id, owner_id, updated_at`. */
+  slimColumns: string;
+  /** Local working copy (the loop never touches storage itself). */
+  read(): T[];
+  /** Adopt a remote row that won the LWW compare (already decided by the
+   *  loop — mirrors `applyRemoteEntry`, which trusts its caller). */
+  apply(remote: T, local: T | undefined): void;
+  /** Change subscription — every change schedules the debounced push. */
+  subscribe(listener: () => void): () => void;
+  /** Row → entity; `null` drops corrupt/partial rows (sanitized away). */
+  toEntity(row: unknown): T | null;
+  /** Entity → upsert row (the `owner_id` stamp happens here). */
+  toRow(entity: T, ownerId: string): Record<string, unknown>;
+  /** Runs against the push's slim view before the payload is built: fixes
+   *  up local data colliding with remote rows (slug uniqueness, 064
+   *  decision 5). Absent for entries — their namespaces reconcile today. */
+  reconcile?(remote: readonly SlimRow[]): void;
+}
+
 /**
- * Starts syncing for a session: one full merge (download account copies that
- * are newer or unknown, upload local winners), then a debounced push on every
- * history change until the returned stop function is called.
+ * Starts syncing ONE table for a session: one full merge (download account
+ * copies that are newer or unknown, upload local winners), then a debounced
+ * push on every change until the returned stop function is called. The loop
+ * reports its status under `spec.table`; `flushSync` runs its push directly.
  */
-export function startSync(
+export function startTableSync<T extends { id: string; updatedAt: number }>(
   client: SyncClient,
   ownerId: string,
+  spec: SyncSpec<T>,
   options: { debounceMs?: number } = {},
 ): () => void {
   const debounceMs = options.debounceMs ?? 800;
@@ -160,22 +295,20 @@ export function startSync(
   const isOnline = () =>
     typeof navigator === "undefined" || navigator.onLine !== false;
 
-  /** Download remote-only / remote-newer entries (LWW).
+  /** Download remote-only / remote-newer rows (LWW).
    *
-   *  Two-phase (plan 055 A): phase 1 fetches only `id, owner_id,
-   *  updated_at` with a server-side owner filter — the LWW decision needs
-   *  nothing else; phase 2 pulls full rows (`revisions` included) solely
-   *  for ids that actually win the compare. Same merge semantics as the
-   *  old single full-table `select("*")`. */
+   *  Two-phase (plan 055 A): phase 1 fetches only the slim compare columns
+   *  with a server-side owner filter — the LWW decision needs nothing else;
+   *  phase 2 pulls full rows solely for ids that actually win the compare. */
   async function pull(): Promise<void> {
     const slim = await client
-      .from("uis")
-      .select("id, owner_id, updated_at")
+      .from(spec.table)
+      .select(spec.slimColumns)
       .eq("owner_id", ownerId);
     if (stopped || slim.error) return;
 
     const localById = new Map(
-      getHistory().map((entry) => [entry.id, entry] as const),
+      spec.read().map((entity) => [entity.id, entity] as const),
     );
     const needIds: string[] = [];
     for (const raw of slim.data ?? []) {
@@ -189,75 +322,89 @@ export function startSync(
     }
     if (needIds.length === 0) return;
 
-    const full = await client.from("uis").select("*").in("id", needIds);
+    const full = await client.from(spec.table).select("*").in("id", needIds);
     if (stopped || full.error) return;
+    // Re-read AFTER the awaits: a local write newer than phase 1's snapshot
+    // must still win the compare (never clobber what was typed mid-pull).
+    const currentById = new Map(
+      spec.read().map((entity) => [entity.id, entity] as const),
+    );
     for (const raw of full.data ?? []) {
-      if (!isUisRow(raw)) continue;
+      if (!isSlimRow(raw)) continue;
       // Never adopt rows owned by another account (RLS audit F7): an admin
-      // sees every `uis` row under the SELECT policy, so without this guard
-      // an admin's pull would copy other users' drafts into local history
-      // and the next push would re-upsert them with `owner_id = admin` — a
-      // silent ownership transfer (RLS can't block it: writing owner_id =
-      // self passes WITH CHECK for an admin). Phase 1's server-side filter
+      // sees every row under the SELECT policy, so without this guard an
+      // admin's pull would copy foreign data into the local store and the
+      // next push would re-upsert it with `owner_id = admin` — a silent
+      // ownership transfer (RLS can't block it: writing owner_id = self
+      // passes WITH CHECK for an admin). Phase 1's server-side filter
       // already excluded foreign rows; this re-check is defense in depth.
       if (raw.owner_id !== ownerId) continue;
-      const remote = rowToEntry(raw);
-      const local = getHistory().find((entry) => entry.id === remote.id);
+      const remote = spec.toEntity(raw);
+      if (!remote) continue; // corrupt/partial row — sanitized away
+      const local = currentById.get(remote.id);
       if (!local || remote.updatedAt > local.updatedAt) {
-        // `uis` has no project column (projects are local-only, 061): a remote
-        // row winning the LWW merge must not drop the local grouping — carry
-        // the device's own projectId onto the adopted copy.
-        applyRemoteEntry(
-          local?.projectId ? { ...remote, projectId: local.projectId } : remote,
-        );
+        spec.apply(remote, local);
       }
     }
   }
 
   /** Upload local winners, delete rows removed locally since the last sync. */
   async function push(): Promise<void> {
+    // A queued chain item can outlive stop() (sign-out) — never resurrect a
+    // released loop's status from a push that races the teardown.
+    if (stopped) return;
     if (!isOnline()) {
-      setStatus("offline");
+      setLoopStatus(spec.table, "offline");
       return;
     }
-    setStatus("syncing");
-    const local = getHistory();
-    const localIds = new Set(local.map((entry) => entry.id));
-
+    setLoopStatus(spec.table, "syncing");
     // Only rows the remote copy is missing or older than — never clobber a
     // fresher write from another device. Column-slimmed (plan 055 A): the
     // compare reads `updated_at`, the guards read `owner_id`, the delete
-    // pass reads `id` — no `revisions` payloads. Deliberately UNfiltered by
+    // pass reads `id` — no payload columns. Deliberately UNfiltered by
     // owner (decision 5): the F7 guard below must SEE foreign rows to
     // refuse upserting them.
     const { data, error } = await client
-      .from("uis")
-      .select("id, owner_id, updated_at");
+      .from(spec.table)
+      .select(spec.slimColumns);
     if (stopped) return;
     if (error) {
-      setStatus("offline");
+      setLoopStatus(spec.table, "offline");
       return;
     }
-    const remoteById = new Map(
-      (data ?? []).filter(isSlimRow).map((row) => [row.id, row]),
-    );
+    const slimRows = (data ?? []).filter(isSlimRow);
+    const remoteById = new Map(slimRows.map((row) => [row.id, row]));
+
+    // Reconcile BEFORE the payload (064 decision 5): local rows holding a
+    // slug a remote row of a different id owns get bumped — never dropped —
+    // so the upsert can never trip `unique (owner_id, slug)`. Only OUR rows
+    // count: uniqueness is per-owner, and an admin's see-all select must not
+    // bump local names off someone else's slugs. May persist a bump, which
+    // re-schedules this loop's own debounce; the second pass finds nothing
+    // left to bump (idempotent).
+    spec.reconcile?.(slimRows.filter((row) => row.owner_id === ownerId));
+
+    const local = spec.read();
+    const localIds = new Set(local.map((entity) => entity.id));
     const payload = local
-      .filter((entry) => {
-        const remote = remoteById.get(entry.id);
+      .filter((entity) => {
+        const remote = remoteById.get(entity.id);
         // Belt to pull's braces: never overwrite a row another account
         // owns — the upsert stamps owner_id = us and would steal it (F7).
         if (remote && remote.owner_id !== ownerId) return false;
         // Missing remotely, or local write not older than the remote copy —
         // never clobber a fresher write from another device.
-        return !remote || entry.updatedAt >= Date.parse(remote.updated_at);
+        return !remote || entity.updatedAt >= Date.parse(remote.updated_at);
       })
-      .map((entry) => entryToRow(entry, ownerId));
+      .map((entity) => spec.toRow(entity, ownerId));
 
     if (payload.length > 0) {
-      const { error: upsertError } = await client.from("uis").upsert(payload);
+      const { error: upsertError } = await client
+        .from(spec.table)
+        .upsert(payload);
       if (stopped) return;
       if (upsertError) {
-        setStatus("offline");
+        setLoopStatus(spec.table, "offline");
         return;
       }
     }
@@ -270,21 +417,22 @@ export function startSync(
     });
     if (removed.length > 0) {
       const { error: deleteError } = await client
-        .from("uis")
+        .from(spec.table)
         .delete()
         .in("id", removed);
       if (stopped) return;
       if (deleteError) {
-        setStatus("offline");
+        setLoopStatus(spec.table, "offline");
         return;
       }
     }
 
     syncedIds = localIds;
-    setStatus("saved");
+    setLoopStatus(spec.table, "saved");
   }
 
   async function run(): Promise<void> {
+    if (stopped) return;
     await pull();
     if (stopped) return;
     await push();
@@ -304,14 +452,14 @@ export function startSync(
     timer = null;
     chain = chain.then(() => push());
   };
-  activeFlush = flush;
+  flushes.add(flush);
 
-  setStatus("syncing");
+  setLoopStatus(spec.table, "syncing");
   chain = chain.then(() => run());
 
-  const unsubscribeHistory = subscribeHistory(schedule);
+  const unsubscribe = spec.subscribe(schedule);
   const handleOnline = () => schedule();
-  const handleOffline = () => setStatus("offline");
+  const handleOffline = () => setLoopStatus(spec.table, "offline");
   // Some test environments expose a partial `window` — feature-detect.
   const canListen =
     typeof window !== "undefined" &&
@@ -324,12 +472,58 @@ export function startSync(
   return () => {
     stopped = true;
     if (timer) clearTimeout(timer);
-    unsubscribeHistory();
-    if (activeFlush === flush) activeFlush = null;
+    unsubscribe();
+    flushes.delete(flush);
     if (canListen) {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     }
-    setStatus("idle");
+    releaseLoop(spec.table);
   };
+}
+
+/** The `uis` loop — plan Q7/055 A semantics, unchanged: 064 wraps it as the
+ *  first spec so the entries contract stays byte-identical (061/055 tests
+ *  pin it). */
+export const entriesSyncSpec: SyncSpec<HistoryEntry> = {
+  table: "uis",
+  slimColumns: "id, owner_id, updated_at",
+  read: getHistory,
+  apply: (remote, local) =>
+    applyRemoteEntry(
+      // `uis` has no project column (061): a remote row winning the LWW
+      // merge must not drop the local grouping — carry the device's own
+      // projectId onto the adopted copy.
+      local?.projectId ? { ...remote, projectId: local.projectId } : remote,
+    ),
+  subscribe: subscribeHistory,
+  toEntity: (row) => (isUisRow(row) ? rowToEntry(row) : null),
+  toRow: entryToRow,
+};
+
+/** The `projects` loop (plan 064): same machinery one table over — one
+ *  status dot, one flush path (decision 1); adoption-time slug collisions
+ *  bump the local copy, never dropping either side (decision 5). */
+export const projectsSyncSpec: SyncSpec<Project> = {
+  table: "projects",
+  slimColumns: "id, owner_id, updated_at, slug",
+  read: getProjects,
+  apply: (remote) => applyRemoteProject(remote),
+  subscribe: subscribeProjects,
+  toEntity: rowToProject,
+  toRow: projectToRow,
+  reconcile: reconcileProjectSlugs,
+};
+
+/**
+ * Starts the `uis` loop for a session (the original entry point).
+ * `startTableSync` + `projectsSyncSpec` runs the second loop; the SyncEngine
+ * starts both and stops both, sharing this module's status and flush paths.
+ */
+export function startSync(
+  client: SyncClient,
+  ownerId: string,
+  options: { debounceMs?: number } = {},
+): () => void {
+  return startTableSync(client, ownerId, entriesSyncSpec, options);
 }
