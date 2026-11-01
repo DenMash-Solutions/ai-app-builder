@@ -220,6 +220,45 @@ describe("toScreenListings", () => {
 
     expect(listings.map((listing) => listing.route)).toEqual(["{id}", null]);
   });
+
+  test("membership context supplies routes and the home marker (065)", () => {
+    const listings = toScreenListings(
+      [
+        { id: "detail", name: "Detail", projectId: "p1" },
+        { id: "flat", name: "Flat" },
+      ],
+      {
+        memberships: [
+          {
+            id: "m-detail",
+            projectId: "p1",
+            screenId: "detail",
+            route: "{id}",
+            position: 0,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          {
+            // Another project's row must never claim the flat screen.
+            id: "m-flat",
+            projectId: "other",
+            screenId: "flat",
+            route: "{x}",
+            position: 0,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        homeScreenId: "detail",
+      },
+    );
+
+    expect(listings).toEqual([
+      { ref: "detail", name: "Detail", route: "{id}", home: true },
+      // No row for its own project → spec-level fallback (no pattern here).
+      { ref: "flat", name: "Flat", route: null },
+    ]);
+  });
 });
 
 describe("recordRouteParam", () => {

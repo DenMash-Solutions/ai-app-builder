@@ -604,4 +604,37 @@ describe("membership store", () => {
         ?.homeScreenId ?? null,
     ).toBeNull(); // still cleared — the backfill never resurrects it
   });
+
+  test("in-session healing: entries created after first load gain rows (065 task 4)", () => {
+    const project = seedProject("Heal");
+    // The shared instance's first load already happened (beforeEach) — a
+    // screen created NOW must not wait for a reload to become a member,
+    // or the membership-driven drawer would strand it in the legacy bucket.
+    const screen = seedEntry("created-late", project.id);
+    expect(store.getMembership(project.id, screen)).not.toBeNull();
+    expect(
+      store
+        .getMemberships()
+        .filter(
+          (row) => row.projectId === project.id && row.screenId === screen,
+        ),
+    ).toHaveLength(1); // idempotent — one commit per row, no duplicates
+
+    // The first-time membership set seeds the home too (decision 13) —
+    // the healing runs the same `backfillFromEntries` pass as first load.
+    expect(
+      getProjects().find((candidate) => candidate.id === project.id)
+        ?.homeScreenId,
+    ).toBe(screen);
+
+    // The healed row drives ordering like any other (position appended).
+    expect(
+      store.getProjectMemberships(project.id).map((m) => m.screenId),
+    ).toEqual([screen]);
+
+    // Pointer-only entries (no project) and entries of unknown projects
+    // never gain rows from the healing pass.
+    const loose = seedEntry("still-loose");
+    expect(store.getMembership(project.id, loose)).toBeNull();
+  });
 });

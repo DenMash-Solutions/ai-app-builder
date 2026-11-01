@@ -27,6 +27,14 @@ describe("NAVIGATE_RULES", () => {
     expect(NAVIGATE_RULES).toContain("screen-local state");
     expect(NAVIGATE_RULES).toContain("resets on every screen change");
   });
+
+  test("teaches route contracts and the home marker (065 decision 14)", () => {
+    expect(NAVIGATE_RULES).toContain("URL contract");
+    expect(NAVIGATE_RULES).toContain("configured in the workspace");
+    expect(NAVIGATE_RULES).toContain("never in the spec");
+    expect(NAVIGATE_RULES).toContain("(home)");
+    expect(NAVIGATE_RULES).toContain("bare project URL");
+  });
 });
 
 describe("parseScreens", () => {
@@ -68,6 +76,21 @@ describe("parseScreens", () => {
       `ref-${MAX_LISTED_SCREENS - 1}`,
     );
   });
+
+  test("carries the route and home flags, dropping junk (065 decision 14)", () => {
+    expect(
+      parseScreens([
+        { ref: "aaa", name: "Alpha", route: "{id}", home: true },
+        // Blank route and a non-boolean home are dropped, not rendered.
+        { ref: "bbb", name: "Beta", route: "  ", home: "yes" },
+        { ref: "ccc" },
+      ]),
+    ).toEqual([
+      { ref: "aaa", name: "Alpha", route: "{id}", home: true },
+      { ref: "bbb", name: "Beta" },
+      { ref: "ccc", name: "ccc" },
+    ]);
+  });
 });
 
 describe("siblingScreensBlock", () => {
@@ -87,6 +110,18 @@ describe("siblingScreensBlock", () => {
     const block = siblingScreensBlock([{ ref: "aaa", name: "aaa" }]);
     expect(block).toContain('- "aaa"');
     expect(block.endsWith('- "aaa"')).toBe(true);
+  });
+
+  test("appends each target's route contract and the home marker (065)", () => {
+    const block = siblingScreensBlock([
+      { ref: "grid", name: "Grid", home: true },
+      { ref: "detail", name: "Detail", route: "{id}" },
+    ]);
+    expect(block).toContain('- "grid" — Grid (home)');
+    expect(block).toContain('- "detail" — Detail (route: {id})');
+    // Route before home, and no stray markers on a plain listing.
+    const plain = siblingScreensBlock([{ ref: "loose", name: "Loose" }]);
+    expect(plain.trimEnd().endsWith('- "loose" — Loose')).toBe(true);
   });
 
   test("an empty list renders nothing (the route ships neither half alone)", () => {

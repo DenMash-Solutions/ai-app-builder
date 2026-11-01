@@ -69,14 +69,30 @@ export interface ScreenSource extends ScreenTarget {
 /**
  * The `{ref, name}` pair the prompt lists and the editor tile offers — `ref`
  * is the screen id (stable; resolution falls back to slug/name anyway).
- * `route` (061-3) is the target's spec-level route pattern — the tile reads
- * it to offer the "send record id" toggle when the pattern declares a
- * placeholder; the prompt block ignores it.
+ * `route` (061-3, reworked 065) is the URL contract the target resolves at:
+ * the MEMBERSHIP row's configured pattern when the caller passes the scope's
+ * memberships, else the legacy spec-level pattern (project-less screens —
+ * the preview's flat paths still match it). The tile reads it to offer the
+ * "send record id" toggle; the prompt block renders it so the model knows
+ * which URLs exist. `home` marks the scope project's explicit home screen
+ * (065 decision 5) — the prompt teaches the bare-namespace front door.
  */
 export interface ScreenListing {
   ref: string;
   name: string;
   route?: string | null;
+  home?: boolean;
+}
+
+/**
+ * Scope context for listings (065): membership rows supply each screen's
+ * configured route, `homeScreenId` the front-door marker. Omitted by
+ * callers with no project scope — listings then fall back to the
+ * spec-level route and carry no home flag.
+ */
+export interface ScreenListingContext {
+  memberships?: readonly ProjectMembership[];
+  homeScreenId?: string | null;
 }
 
 /** Filter entries down to the screens a ref may resolve to. */
@@ -142,12 +158,27 @@ export function screenScope(
 /** Map resolved screens to the `{ref, name}` pairs the prompt/tile offer. */
 export function toScreenListings(
   screens: readonly ScreenTarget[],
+  context?: ScreenListingContext,
 ): ScreenListing[] {
-  return screens.map((screen) => ({
-    ref: screen.id,
-    name: screen.name,
-    route: specRoutePattern(screen.spec),
-  }));
+  const rows = context?.memberships;
+  const homeId = context?.homeScreenId ?? null;
+  return screens.map((screen) => {
+    // Row must belong to the SCREEN's project — scope-filtered callers pass
+    // that project's rows, and a foreign row must never claim a flat screen.
+    const row = rows?.find(
+      (candidate) =>
+        candidate.screenId === screen.id &&
+        candidate.projectId === screen.projectId,
+    );
+    return {
+      ref: screen.id,
+      name: screen.name,
+      // Membership route wins (065 — that is what resolves); the spec-level
+      // pattern stays the fallback for project-less screens.
+      route: row ? row.route : specRoutePattern(screen.spec),
+      ...(screen.id === homeId ? { home: true } : {}),
+    };
+  });
 }
 
 /**

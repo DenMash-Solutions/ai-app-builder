@@ -389,7 +389,27 @@
     "rename": "Rename project",
     "delete": "Delete project",
     "switch": "Switch project",
-    "reserved": "That address is reserved — pick another name"
+    "reserved": "That address is reserved — pick another name",
+    "workspace": "Workspace",
+    "expandWorkspace": "Manage project workspace",
+    "collapseWorkspace": "Close workspace",
+    "addScreen": "Add screen",
+    "noCandidates": "No other screens to add",
+    "emptyMembers": "No screens in this project yet.",
+    "noHome": "No home screen — the bare project URL serves nothing yet.",
+    "setHome": "Set as home screen",
+    "unsetHome": "Clear home screen",
+    "routeEdit": "Edit route",
+    "routePlaceholder": "Route pattern, e.g. '{id}'",
+    "routeTaken": "Another screen in this project already uses that route",
+    "moveTo": "Move to project",
+    "copyTo": "Copy to project",
+    "copied": "Copied to {name}",
+    "removeScreen": "Remove from project",
+    "moveUp": "Move earlier",
+    "moveDown": "Move later",
+    "noOtherProjects": "No other project",
+    "rowActions": "Actions for {name}"
   },
   "localeSwitcher": {
     "label": "Language"

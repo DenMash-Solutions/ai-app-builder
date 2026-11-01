@@ -389,7 +389,27 @@
     "rename": "Renombrar proyecto",
     "delete": "Eliminar proyecto",
     "switch": "Cambiar de proyecto",
-    "reserved": "Esa dirección está reservada: elige otro nombre"
+    "reserved": "Esa dirección está reservada: elige otro nombre",
+    "workspace": "Espacio de trabajo",
+    "expandWorkspace": "Gestionar el espacio del proyecto",
+    "collapseWorkspace": "Cerrar espacio de trabajo",
+    "addScreen": "Añadir pantalla",
+    "noCandidates": "No hay otras pantallas para añadir",
+    "emptyMembers": "Aún no hay pantallas en este proyecto.",
+    "noHome": "Sin pantalla de inicio: la URL básica del proyecto no sirve nada todavía.",
+    "setHome": "Establecer como pantalla de inicio",
+    "unsetHome": "Quitar pantalla de inicio",
+    "routeEdit": "Editar ruta",
+    "routePlaceholder": "Patrón de ruta, p. ej. '{id}'",
+    "routeTaken": "Otra pantalla de este proyecto ya usa esa ruta",
+    "moveTo": "Mover a proyecto",
+    "copyTo": "Copiar a proyecto",
+    "copied": "Copiado a {name}",
+    "removeScreen": "Quitar del proyecto",
+    "moveUp": "Mover antes",
+    "moveDown": "Mover después",
+    "noOtherProjects": "Ningún otro proyecto",
+    "rowActions": "Acciones de {name}"
   },
   "localeSwitcher": {
     "label": "Idioma"

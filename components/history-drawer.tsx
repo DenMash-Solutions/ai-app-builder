@@ -3,10 +3,20 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 import type { Spec } from "@json-render/core";
-import { Check, Copy, Folder, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Folder,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/auth-provider";
+import { ProjectWorkspacePanel } from "@/components/projects/project-workspace-panel";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -26,6 +36,13 @@ import { formatRelativeTime } from "@/lib/history";
 import { copySpecToClipboard } from "@/lib/playground/json-io";
 import { getPublishedState, asPublishClient } from "@/lib/publish/publish";
 import type { PublishedPage } from "@/lib/publish/publish";
+import { groupEntriesForDrawer } from "@/lib/projects/drawer-groups";
+import type { ProjectGroup } from "@/lib/projects/drawer-groups";
+import {
+  getMemberships,
+  getServerMemberships,
+  subscribeMemberships,
+} from "@/lib/projects/memberships";
 import {
   createProject,
   getActiveProjectId,
@@ -55,12 +72,6 @@ interface HistoryDrawerProps {
   onUpdateJson: (targetId: string, spec: Spec) => void;
 }
 
-/** One project's group of screens — `project: null` is the legacy bucket. */
-interface ProjectGroup {
-  project: Project | null;
-  entries: HistoryEntry[];
-}
-
 export function HistoryDrawer({
   open,
   onOpenChange,
@@ -81,13 +92,20 @@ export function HistoryDrawer({
   >({});
   const [goLiveEntry, setGoLiveEntry] = useState<HistoryEntry | null>(null);
 
-  // Project grouping (plan 061 A1): every project is listed (even a screenless
-  // one — a freshly created project must be visible), entries whose projectId
-  // is absent or dangling fall into the trailing legacy group.
+  // Project grouping (plan 061 A1, membership-driven since 065 task 4):
+  // every project is listed (even a screenless one — a freshly created
+  // project must be visible); membership rows decide which screens sit
+  // under a header and in which position order, entries no project claims
+  // fall into the trailing legacy group.
   const projects = useSyncExternalStore(
     subscribeProjects,
     getProjects,
     getServerProjects,
+  );
+  const memberships = useSyncExternalStore(
+    subscribeMemberships,
+    getMemberships,
+    getServerMemberships,
   );
   const activeProjectId = useSyncExternalStore(
     subscribeActiveProject,
@@ -98,25 +116,16 @@ export function HistoryDrawer({
   const [projectDraft, setProjectDraft] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  /** The project whose workspace section is expanded (065 decision 14). */
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** Set by the expanded panel while an inline edit is open — the Escape
+   *  veto below covers it (radix-escape-capture). */
+  const [workspaceEditing, setWorkspaceEditing] = useState(false);
 
-  const groups = useMemo<ProjectGroup[]>(() => {
-    const buckets = projects.map((project) => ({
-      project,
-      entries: [] as HistoryEntry[],
-    }));
-    const byId = new Map(
-      projects.map((project, index) => [project.id, buckets[index]]),
-    );
-    const legacy: HistoryEntry[] = [];
-    for (const entry of entries) {
-      const bucket = entry.projectId ? byId.get(entry.projectId) : undefined;
-      if (bucket) bucket.entries.push(entry);
-      else legacy.push(entry);
-    }
-    return legacy.length > 0
-      ? [...buckets, { project: null, entries: legacy }]
-      : buckets;
-  }, [entries, projects]);
+  const groups = useMemo<ProjectGroup[]>(
+    () => groupEntriesForDrawer(entries, projects, memberships),
+    [entries, projects, memberships],
+  );
 
   // Published state for the visible rows — one query while the drawer is
   // open and a session exists.
@@ -212,8 +221,11 @@ export function HistoryDrawer({
             // `document`, i.e. BEFORE any input handler — cancelling an inline
             // edit from the input itself is too late and would close the whole
             // drawer (lesson: radix-escape-capture). Radix honours
-            // `defaultPrevented`, so veto it here instead.
-            if (creatingProject || renamingId !== null) event.preventDefault();
+            // `defaultPrevented`, so veto it here instead — the workspace
+            // panel reports its route edit through `workspaceEditing`.
+            if (creatingProject || renamingId !== null || workspaceEditing) {
+              event.preventDefault();
+            }
           }}
         >
           <DrawerHeader>
@@ -318,6 +330,37 @@ export function HistoryDrawer({
                           {group.entries.length}
                         </span>
                         {project !== null && renamingId !== project.id && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={
+                              expandedId === project.id
+                                ? t("projects.collapseWorkspace")
+                                : t("projects.expandWorkspace")
+                            }
+                            aria-expanded={expandedId === project.id}
+                            className="h-6 px-1 text-muted-foreground"
+                            onClick={() =>
+                              setExpandedId((current) =>
+                                current === project.id ? null : project.id,
+                              )
+                            }
+                          >
+                            {expandedId === project.id ? (
+                              <ChevronDown
+                                aria-hidden="true"
+                                className="size-3.5"
+                              />
+                            ) : (
+                              <ChevronRight
+                                aria-hidden="true"
+                                className="size-3.5"
+                              />
+                            )}
+                          </Button>
+                        )}
+                        {project !== null && renamingId !== project.id && (
                           <>
                             <Button
                               type="button"
@@ -408,6 +451,14 @@ export function HistoryDrawer({
                             </li>
                           ))}
                         </ul>
+                      )}
+
+                      {project !== null && expandedId === project.id && (
+                        <ProjectWorkspacePanel
+                          projectId={project.id}
+                          entries={entries}
+                          onEditingChange={setWorkspaceEditing}
+                        />
                       )}
                     </section>
                   );

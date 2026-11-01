@@ -106,15 +106,28 @@ explicit home screen.
     bare namespace. `setProjectHomeScreenId` is the explicit seam for
     task 4's UI; `projectHomeScreenId` validates membership + entry
     existence at resolve time (decision 10's app-side check).
+14. Workspace panel shape (2026-11-01, user-selected): an EXPANDABLE
+    section inside each drawer project group — the membership list with
+    per-row affordances (home star, route edit, reorder, move, copy,
+    remove) plus an "add screen" picker in the section header. Rejected: a
+    separate workspace dialog (an extra surface to mount/seed, diverges
+    from the drawer-first chrome), rejected: inline-only minimal actions
+    (leaves the route-config UI checkbox open with no seam). Prompt
+    teaching rides `ScreenListing`: `route` (membership row's pattern,
+    spec-level route as the project-less fallback) and a `home` marker,
+    carried through `parseScreens` into `siblingScreensBlock`.
 
 ## Files
 
-`lib/projects/memberships.ts` (+tests), `lib/projects/screen-routes.ts`,
+`lib/projects/memberships.ts` (+tests), `lib/projects/drawer-groups.ts`
+(+tests), `lib/projects/screen-routes.ts`,
 `lib/projects/screen-routes.test.ts`, `lib/projects/projects.ts`,
 `lib/history/history.ts` (copy + pointer helpers), `lib/history/sync.ts`
 (+`membershipsSyncSpec`), `components/sync/sync-engine.tsx` (third loop),
-`db/` migration + RLS, project panel and drawer components,
-`app/[locale]/[slug]/preview-client.tsx`, en/es keys,
+`components/projects/project-workspace-panel.tsx`,
+`components/history-drawer.tsx` (membership grouping + panel mount),
+`lib/projects/screen-nav.ts` + `lib/playground/navigate-rules.ts` (listing
+context + prompt teaching), `db/` migration + RLS, en/es keys,
 `e2e/project-session.spec.ts` extensions.
 
 ## Tasks
@@ -191,11 +204,30 @@ explicit home screen.
 
 ### 4. Workspace UI and prompt
 
-- [ ] Project panel + history-drawer grouping inside the existing chrome —
-      no new top-level route (061 decision 7)
-- [ ] `siblingScreensBlock` extended with routes and home (prompt teaching)
+- [x] Project panel + history-drawer grouping inside the existing chrome —
+      no new top-level route (061 decision 7). Implemented 2026-11-01 as
+      decision 14: `groupEntriesForDrawer` (pure, tested) drives the
+      drawer's groups from membership ROWS in position order; a screen in
+      two projects shows in both; unclaimed entries trail in legacy.
+      `ProjectWorkspacePanel` mounts under an expandable chevron in each
+      project group with home star, route edit (duplicate → toast),
+      reorder, move/copy submenus, remove, add-screen picker; its inline
+      edit reports into the drawer's Escape veto. Supporting change: the
+      membership store now HEALS in-session — it re-runs the idempotent
+      backfill on every history commit (read stored, add missing rows
+      only), because the generation/import seams stamp `entry.projectId`
+      without a membership row and the first-load backfill runs once;
+      `removeScreenFromProject` persists before its pointer hygiene so the
+      heal never catches a removal mid-flight
+- [x] `siblingScreensBlock` extended with routes and home (prompt
+      teaching) — `toScreenListings` takes an optional listing context
+      (membership rows + `homeScreenId`), `parseScreens` learns
+      `route`/`home`, `NAVIGATE_RULES` teaches the route contract and the
+      `(home)` marker; playground wires the context with store
+      subscriptions
 - [ ] `preview-client.tsx` serves the bare project namespace through the
-      home screen
+      home screen — call sites already resolve via the explicit home
+      (WS3); the e2e proof lands with task 5
 
 ### 5. Tests
 
@@ -227,3 +259,4 @@ explicit home screen.
 | 2026-11-01 | review vs. codebase: Task 1's "sync when signed in" overstated (loop unwired) → sync-loop item added; Files gains `sync.ts`/`sync-engine.tsx`/`history.ts`; decisions 11 (pair-dup reconcile) and 12 (remove/move pointer hygiene — backfill resurrection) added; Task 3 notes the `home_screen_id` sync contract |
 | 2026-11-01 | sync loop + copy/move/remove implemented — gate green (lint 0, tsc clean, prettier clean, 879 unit pass incl. 11 new); tasks 1 and 2 (minus rename UI) closed |
 | 2026-11-01 | Task 3 core implemented — decision 13 (initial home fill) added after a clarifying question; `resolveProjectRoute` membership-driven (exact > static > dynamic > position), `Project.homeScreenId` end-to-end (store, sync, resolve, nav) — gate green (lint 0, tsc clean, prettier clean, 888 unit pass incl. 9 new); route-config UI checkbox remains for task 4's panel |
+| 2026-11-01 | Task 4 implemented — decision 14 (expandable panel in drawer) recorded after a clarifying question; membership-driven drawer grouping (`groupEntriesForDrawer`), `ProjectWorkspacePanel` (home/route/reorder/move/copy/remove/add), prompt teaching (route + home in listings/rules), in-session membership healing added so mid-session created screens gain rows without a reload — gate green (lint 0, tsc clean, prettier clean, 897 unit pass incl. 9 new); preview-client checkbox waits for task 5's e2e |

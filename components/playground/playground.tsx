@@ -91,6 +91,11 @@ import {
 } from "@/lib/projects/screen-nav";
 import type { ScreenListing } from "@/lib/projects/screen-nav";
 import {
+  getMemberships,
+  getServerMemberships,
+  subscribeMemberships,
+} from "@/lib/projects/memberships";
+import {
   deviceFrameSize,
   getDevicePreview,
   getServerDevicePreview,
@@ -118,7 +123,12 @@ import {
   undoRevision,
   updateEntry,
 } from "@/lib/history";
-import { createProjectEntry } from "@/lib/projects/projects";
+import {
+  createProjectEntry,
+  getProjects,
+  getServerProjects,
+  subscribeProjects,
+} from "@/lib/projects/projects";
 import {
   dataNamespaceFor,
   omitSessionState,
@@ -252,6 +262,20 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     getHistory,
     getServerHistory,
   );
+  // Workspace stores (065 task 4): the sibling listings carry each target's
+  // membership route and the project's home marker — both change from the
+  // drawer's workspace panel while this page is mounted, so the listings
+  // must re-derive on those writes (subscriptions are the invalidation).
+  const memberships = useSyncExternalStore(
+    subscribeMemberships,
+    getMemberships,
+    getServerMemberships,
+  );
+  const projects = useSyncExternalStore(
+    subscribeProjects,
+    getProjects,
+    getServerProjects,
+  );
   // The URL owns the active UI: the entry for the `/ui/[ref]` route comes
   // straight from the history store — resolved by id first (the stable
   // identity every pre-slug link uses), then by slug (short hand-typed
@@ -355,15 +379,26 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
   // targets, and the editor's navigate tile offers the same set. One scope
   // chain (screenScope) feeds prompt, tile and runtime handlers, so a ref
   // listed here resolves exactly where it was listed.
-  const siblingScreens = useMemo<ScreenListing[]>(
-    () =>
-      toScreenListings(
-        screensInScope(history, screenScope(activeEntry)).filter(
-          (screen) => screen.id !== activeEntry?.id,
-        ),
+  const siblingScreens = useMemo<ScreenListing[]>(() => {
+    const scope = screenScope(activeEntry);
+    const scopeProject =
+      typeof scope === "string"
+        ? (projects.find((project) => project.id === scope) ?? null)
+        : null;
+    return toScreenListings(
+      screensInScope(history, scope).filter(
+        (screen) => screen.id !== activeEntry?.id,
       ),
-    [history, activeEntry],
-  );
+      // Project scope → the membership routes + home marker that resolve
+      // there (065 decision 14); no scope → spec-route fallback, no home.
+      typeof scope === "string"
+        ? {
+            memberships: memberships.filter((row) => row.projectId === scope),
+            homeScreenId: scopeProject?.homeScreenId ?? null,
+          }
+        : undefined,
+    );
+  }, [history, activeEntry, memberships, projects]);
 
   const { spec, isStreaming, send, clear, rawLines } = useUIStream({
     api: "/api/generate",

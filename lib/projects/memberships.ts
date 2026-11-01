@@ -21,6 +21,7 @@ import {
   getHistory,
   removeEntry,
   setEntryProject,
+  subscribeHistory,
 } from "@/lib/history";
 import type { HistoryEntry } from "@/lib/history";
 import { getProjects, setProjectHomeScreenId } from "@/lib/projects/projects";
@@ -225,7 +226,86 @@ const listeners = new Set<() => void>();
 
 let cache: ProjectMembership[] | null = null;
 
+/**
+ * In-session healing (065 task 4): the load-time backfill runs ONCE per
+ * module instance, but screens created afterwards need rows too — the
+ * generation flow and the JSON import stamp `entry.projectId` at creation,
+ * and the membership-driven drawer would strand them in the legacy bucket
+ * until reload otherwise. The same idempotent pass re-runs on every history
+ * commit; it only ever ADDS missing rows (never removes — a synced
+ * membership can legitimately arrive before its entry), so re-entrancy
+ * terminates: the next pass finds the rows it just wrote.
+ *
+ * The pass reads the STORED rows rather than this instance's cache: tests
+ * simulate reloads with cache-busted instances sharing one localStorage,
+ * and persisting a stale cache would resurrect rows another instance just
+ * removed (production is single-instance, where the two stay identical).
+ * When the stored set already contains everything (another instance healed
+ * first) the cache still ADOPTS it — same content, no persist — so this
+ * instance's reads never go stale behind another instance's write.
+ */
+let healing = false;
+let subscribedToHistory = false;
+
+function sameRows(
+  a: readonly ProjectMembership[],
+  b: readonly ProjectMembership[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((row, i) => {
+      const other = b[i];
+      return (
+        row.id === other.id &&
+        row.projectId === other.projectId &&
+        row.screenId === other.screenId &&
+        row.route === other.route &&
+        row.position === other.position &&
+        row.updatedAt === other.updatedAt
+      );
+    })
+  );
+}
+
+function healFromHistory(): void {
+  if (healing || cache === null) return;
+  healing = true;
+  try {
+    const current = cache;
+    const backfilled = backfillFromEntries(
+      readStored(),
+      getHistory(),
+      getProjects(),
+    );
+    if (backfilled.changed) {
+      cache = backfilled.rows;
+      persist();
+    } else if (!sameRows(backfilled.rows, current)) {
+      cache = backfilled.rows; // storage is authoritative — no persist
+    } else {
+      return;
+    }
+    // Initial fills (decision 13) after the cache is set — same order as
+    // the load-time path, so listeners re-entering see consistent state.
+    // (`changed: false` never carries seeds — see `backfillFromEntries`.)
+    for (const seed of backfilled.homeSeeds) {
+      setProjectHomeScreenId(seed.projectId, seed.screenId);
+    }
+  } finally {
+    healing = false;
+  }
+}
+
+function subscribeHistoryOnce(): void {
+  if (subscribedToHistory) return;
+  subscribedToHistory = true;
+  subscribeHistory(() => healFromHistory());
+}
+
 function load(): ProjectMembership[] {
+  // Register the healing even when the cache is already warm (a prior
+  // server-side read may have populated it without a window to listen on).
+  if (typeof window !== "undefined") subscribeHistoryOnce();
   if (cache !== null) return cache;
   if (typeof window === "undefined") {
     cache = EMPTY;
@@ -342,6 +422,16 @@ export function addScreenToProject(
   };
   cache = [...rows, membership];
   persist();
+  // Pointer alignment (decision 12, add side): a screen with NO born-into
+  // project gains one when a project claims it — `screensInScope` (prompt
+  // sibling list, runtime nav) still derives scope from `entry.projectId`,
+  // so without this the added screen would be invisible to its project's
+  // sibling teaching. An existing pointer (another project) is left alone —
+  // born-into history is not rewritten by a later add.
+  const entry = getHistory().find((candidate) => candidate.id === screenId);
+  if (entry && entry.projectId === undefined) {
+    setEntryProject(screenId, projectId);
+  }
   // Initial home fill (decision 13): the first member seeds an empty home
   // — never a reassignment (decision 5). Unknown project ids no-op inside
   // the setter, so membership-only callers need no guard here.
@@ -373,6 +463,11 @@ export function removeScreenFromProject(
   );
   if (next.length === rows.length) return false;
   cache = next;
+  // Persist BEFORE the pointer hygiene below: `setEntryProject` commits
+  // history, the healing listens to it and reads STORAGE — it must never
+  // catch this call mid-flight with the removed row still on disk (the
+  // resync would adopt it straight back).
+  persist();
   const entry = getHistory().find((candidate) => candidate.id === screenId);
   if (entry?.projectId === projectId) setEntryProject(screenId, undefined);
   // Decision 5: removing the home screen does NOT reassign — the root
@@ -382,7 +477,6 @@ export function removeScreenFromProject(
   if (project && (project.homeScreenId ?? null) === screenId) {
     setProjectHomeScreenId(projectId, null);
   }
-  persist();
   return true;
 }
 
@@ -413,9 +507,14 @@ export function copyScreenToProject(
   const source = getHistory().find((entry) => entry.id === screenId);
   if (!source) return null;
   const copy = copyEntry(source, toProjectId);
-  if (addScreenToProject(toProjectId, copy.id) === null) {
-    // Destination pair already exists (corrupt input) — never leave an
-    // orphan entry behind.
+  // The in-session healing sees copyEntry's commit BEFORE this line and
+  // writes the destination row itself — a row for THIS fresh copy is the
+  // membership we wanted, not a collision; only a row we cannot explain
+  // justifies the rollback.
+  if (
+    addScreenToProject(toProjectId, copy.id) === null &&
+    getMembership(toProjectId, copy.id) === null
+  ) {
     removeEntry(copy.id);
     return null;
   }
