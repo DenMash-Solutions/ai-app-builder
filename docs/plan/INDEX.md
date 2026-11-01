@@ -71,7 +71,7 @@ row in the same turn as any status change** (rule:
 | 061 | [project-design](061-project-design/plan.md) | implemented | 2026-10-30 |
 | 062 | [project-app-builder](062-project-app-builder/plan.md) | implemented | 2026-10-31 |
 | 063 | [re-import-existing-ui](063-re-import-existing-ui/plan.md) | implemented | 2026-10-31 |
-| 064 | [database-projects](064-database-projects/plan.md) | approved | 2026-10-31 |
+| 064 | [database-projects](064-database-projects/plan.md) | implemented | 2026-10-31 |
 | 065 | [project-workspace](065-project-workspace/plan.md) | draft | 2026-10-31 |
 | 066 | [ui-catalog](066-ui-catalog/plan.md) | draft | 2026-10-31 |
 | 067 | [project-data-state](067-project-data-state/plan.md) | draft | 2026-10-31 |
@@ -79,4 +79,4 @@ row in the same turn as any status change** (rule:
 | 069 | [project-publishing](069-project-publishing/plan.md) | draft | 2026-10-31 |
 | 070 | [ecommerce-reference-demo](070-ecommerce-reference-demo/plan.md) | draft | 2026-10-31 |
 
-_70 plans: 59 implemented · 2 approved (`033`, `064`) · 8 draft (`015`, `035`, `065`-`070`) · 1 rejected (`026`)._
+_70 plans: 60 implemented · 1 approved (`033`) · 8 draft (`015`, `035`, `065`-`070`) · 1 rejected (`026`)._

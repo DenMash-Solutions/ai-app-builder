@@ -1,6 +1,4 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
-import { PROJECT_STORAGE_KEY } from "@/lib/projects/projects";
 import {
   ACTIONS,
   COMPONENT,
@@ -15,7 +13,13 @@ import {
   entryRowName,
   historyButtonName,
 } from "./constants";
-import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
+import {
+  createProject,
+  mockGenerate,
+  readHistoryStorage,
+  readStoredProjects,
+  waitForMsw,
+} from "./helpers";
 
 /**
  * Shared data/state (plan 061-4, A3): two screens of one project share the
@@ -244,42 +248,6 @@ const SCREEN_B_SPEC = {
     },
   },
 };
-
-async function createProject(page: Page, name: string): Promise<void> {
-  await page
-    .getByRole(ROLE.button, { name: PROJECTS.switcher })
-    .filter({ visible: true })
-    .click();
-  await page
-    .getByRole(ROLE.button, { name: PROJECTS.create })
-    .filter({ visible: true })
-    .click();
-  await page
-    .getByLabel(PROJECTS.namePlaceholder)
-    .filter({ visible: true })
-    .fill(name);
-  await page.keyboard.press("Enter");
-  // The pill now names the project new screens are created into.
-  await expect(
-    page
-      .getByRole(ROLE.button, { name: PROJECTS.switcher })
-      .filter({ visible: true })
-      .getByText(name),
-  ).toBeVisible();
-}
-
-interface StoredProject {
-  id: string;
-  name: string;
-  state: Record<string, unknown>;
-}
-
-async function readStoredProjects(page: Page): Promise<StoredProject[]> {
-  return page.evaluate((key) => {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as StoredProject[]) : [];
-  }, PROJECT_STORAGE_KEY);
-}
 
 test.describe("shared data/state in a project (061-4, A3)", () => {
   test("two screens share /session and records through the project namespace, navigate to each other, and grouping survives reload", async ({

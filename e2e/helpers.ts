@@ -1,6 +1,9 @@
 import path from "node:path";
+import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { STORAGE_KEY } from "@/lib/history";
+import { PROJECT_STORAGE_KEY } from "@/lib/projects/projects";
+import { PROJECTS, ROLE } from "./constants";
 import type { GenerateMockConfig } from "@/e2e/msw/fixture";
 
 export type { GenerateMockConfig };
@@ -85,6 +88,48 @@ export async function readHistoryStorage(page: Page): Promise<StoredEntry[]> {
     const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as StoredEntry[]) : [];
   }, STORAGE_KEY);
+}
+
+/** A project as stored locally (plans 061 A1 / 064). */
+export interface StoredProject {
+  id: string;
+  name: string;
+  state: Record<string, unknown>;
+}
+
+export async function readStoredProjects(page: Page): Promise<StoredProject[]> {
+  return page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as StoredProject[]) : [];
+  }, PROJECT_STORAGE_KEY);
+}
+
+/**
+ * Creates a project through the top-bar switcher's inline input and waits
+ * for the pill to name it — the creation seam both project suites exercise
+ * (anonymous 061-4 and authenticated 064).
+ */
+export async function createProject(page: Page, name: string): Promise<void> {
+  await page
+    .getByRole(ROLE.button, { name: PROJECTS.switcher })
+    .filter({ visible: true })
+    .click();
+  await page
+    .getByRole(ROLE.button, { name: PROJECTS.create })
+    .filter({ visible: true })
+    .click();
+  await page
+    .getByLabel(PROJECTS.namePlaceholder)
+    .filter({ visible: true })
+    .fill(name);
+  await page.keyboard.press("Enter");
+  // The pill now names the project new screens are created into.
+  await expect(
+    page
+      .getByRole(ROLE.button, { name: PROJECTS.switcher })
+      .filter({ visible: true })
+      .getByText(name),
+  ).toBeVisible();
 }
 
 /**

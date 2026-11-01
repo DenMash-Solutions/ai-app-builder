@@ -6,6 +6,7 @@ import {
   ADMIN,
   I18N,
   PATHS,
+  PROJECTS,
   PUBLISH,
   ROLE,
   SLOTS,
@@ -28,13 +29,21 @@ import {
   TODO_UI_LINES,
   TODO_UI_LINES_SUPABASE,
 } from "./msw/fixture";
-import { mockGenerate, readHistoryStorage, waitForMsw } from "./helpers";
+import {
+  createProject,
+  mockGenerate,
+  readHistoryStorage,
+  readStoredProjects,
+  waitForMsw,
+} from "./helpers";
 import {
   captureFeatured,
   deleteGenuiRecords,
+  deleteTestProject,
   deleteTestRow,
   restoreFeaturedIfRecovery,
   TEST_PROMPT_PREFIX,
+  waitForRemoteProject,
   waitForRemoteRow,
 } from "./db";
 import { BASE_URL, canSeed, hasAdminAuth, hasUserAuth, statePath } from "./env";
@@ -179,6 +188,103 @@ test.describe("authenticated — admin identity", () => {
     } finally {
       // …service-role safety net for crash paths.
       await deleteTestRow(entryId);
+    }
+  });
+
+  test("a project created on one device appears on another with the same id (064)", async ({
+    page,
+    browser,
+  }) => {
+    const projectName = `${TEST_PROMPT_PREFIX}project ${randomUUID()}`;
+    const promptA = `${TEST_PROMPT_PREFIX}project screen A ${randomUUID()}`;
+    const promptB = `${TEST_PROMPT_PREFIX}project screen B ${randomUUID()}`;
+    let projectId: string | undefined;
+    let entryAId: string | undefined;
+    let entryBId: string | undefined;
+    try {
+      // --- Device A: create the project, generate a screen into it ---
+      await mockGenerate(page);
+      await page.goto(PATHS.ui);
+      await waitForMsw(page);
+      await createProject(page, projectName);
+      await page.getByPlaceholder(UI.promptPlaceholder).fill(promptA);
+      await page.getByRole(ROLE.button, { name: ACTIONS.generate }).click();
+      await expect(page.getByText(UI.mockHeading)).toBeVisible();
+      await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/);
+      await dismissUploadNudge(page);
+
+      // The screen groups under the project locally (061 creation seam)…
+      const storedA = await readStoredProjects(page);
+      projectId = storedA.find((project) => project.name === projectName)?.id;
+      expect(projectId).toBeTruthy();
+      const historyA = await readHistoryStorage(page);
+      entryAId = historyA.find((entry) => entry.prompt === promptA)?.id;
+      expect(entryAId).toBeTruthy();
+      expect(historyA.find((entry) => entry.id === entryAId)?.projectId).toBe(
+        projectId,
+      );
+
+      // …and the account rows are the authoritative "push landed" gates (the
+      // dot alone can't gate: admin-sized pulls stretch the cycle).
+      await waitForRemoteProject(projectName);
+      await waitForRemoteRow(promptA);
+
+      // --- Device B: same account, empty localStorage — a true pull ---
+      const fresh = await browser.newContext({
+        baseURL: BASE_URL,
+        storageState: statePath("admin.json"),
+      });
+      try {
+        const freshPage = await fresh.newPage();
+        await mockGenerate(freshPage);
+        await freshPage.goto(PATHS.ui);
+        await waitForMsw(freshPage);
+
+        // The PROJECT arrives through the projects loop — adopted WITH its
+        // id (no id remapping is what keeps grouping keys valid, 064).
+        await freshPage
+          .getByRole(ROLE.button, { name: PROJECTS.switcher })
+          .filter({ visible: true })
+          .click();
+        const adopted = freshPage
+          .getByRole(ROLE.button, { name: projectName })
+          .filter({ visible: true });
+        await expect(adopted).toBeVisible({ timeout: 20_000 });
+        const storedB = await readStoredProjects(freshPage);
+        expect(
+          storedB.find((project) => project.name === projectName)?.id,
+        ).toBe(projectId);
+
+        // Grouping CONTINUES on B: switch to the adopted project and
+        // generate — the new screen groups under the very same id.
+        await adopted.click();
+        await freshPage.getByPlaceholder(UI.promptPlaceholder).fill(promptB);
+        await freshPage
+          .getByRole(ROLE.button, { name: ACTIONS.generate })
+          .click();
+        await expect(freshPage.getByText(UI.mockHeading)).toBeVisible();
+        await dismissUploadNudge(freshPage);
+        const historyB = await readHistoryStorage(freshPage);
+        entryBId = historyB.find((entry) => entry.prompt === promptB)?.id;
+        expect(entryBId).toBeTruthy();
+        expect(historyB.find((entry) => entry.id === entryBId)?.projectId).toBe(
+          projectId,
+        );
+
+        // A's screen also arrived through the `uis` loop (055, unchanged).
+        await openHistory(freshPage);
+        await expect(historyRow(freshPage, promptA)).toBeVisible({
+          timeout: 20_000,
+        });
+      } finally {
+        await fresh.close();
+      }
+    } finally {
+      // Service-role safety net for crash paths; the next run's
+      // name-scoped leftover sweep covers both records as well.
+      await deleteTestRow(entryAId);
+      await deleteTestRow(entryBId);
+      await deleteTestProject(projectId);
     }
   });
 

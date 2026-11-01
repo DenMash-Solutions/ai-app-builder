@@ -1,6 +1,6 @@
 # Database-backed Projects (closes F17)
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-31
 
 ## Goal
@@ -128,8 +128,8 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
       `normalizeEntry` discipline) — junk timestamp/empty name → dropped,
       non-object state → `{}` (decision 7 records the `updatedAt` bump that
       makes state LWW observable)
-- [ ] Signed-out behavior stays byte-identical (061 contract) — proven by
-      `e2e/project-session.spec.ts` in workstream 5
+- [x] Signed-out behavior stays byte-identical (061 contract) — proven by
+      `e2e/project-session.spec.ts` in workstream 5 (passes unchanged)
 
 ### 4. Reserved-slug fix
 
@@ -145,28 +145,40 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 
 ### 5. Tests and probes
 
-- [ ] Unit (`lib/projects/projects.test.ts`, `lib/history/sync.test.ts`):
+- [x] Unit (`lib/projects/projects.test.ts`, `lib/history/sync.test.ts`):
       adoption merge, LWW tie-break, reserved rejection at create and
-      rename, corrupt-row sanitization
-- [ ] e2e two contexts: create in A, same account in B sees the same id and
+      rename, corrupt-row sanitization — 17 new tests across workstreams
+      2–4 (859 total, all green)
+- [x] e2e two contexts: create in A, same account in B sees the same id and
       grouping — context B reuses the dedicated storage state, never a fresh
-      anon signup (lesson `e2e-auth-quota`)
+      anon signup (lesson `e2e-auth-quota`); `waitForRemoteProject` /
+      `waitForRemoteRow` gate on the account rows (authoritative, not the
+      dot), cleanup via `deleteTestProject` + the extended name-scoped
+      leftover sweep in `db.ts`
 - [x] RLS probe: user A saw only `probe-a`, user B only `probe-b`
       (cross-owner invisible), anon 0 rows; probe rows deleted, table left
       with 0 rows
-- [ ] `e2e/project-session.spec.ts` stays green; full gate
+- [x] `e2e/project-session.spec.ts` stays green; full gate — shared
+      switcher-create/storage helpers moved to `e2e/helpers.ts`;
+      130/130 e2e (chromium + authed + signout), 859 unit, lint/tsc/Prettier
+      clean
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit: adoption merge, LWW tie-break, reserved-slug rejection at create
-      and rename, corrupt-row sanitization
-- [ ] e2e: two browser contexts — create in A, sign in as the same account
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+      — all green (859 unit tests, 0 fail)
+- [x] Unit: adoption merge, LWW tie-break, reserved-slug rejection at create
+      and rename, corrupt-row sanitization — covered by the workstream 2–4
+      tests named above
+- [x] e2e: two browser contexts — create in A, sign in as the same account
       in B, project appears with the same id and grouping
-- [ ] RLS probe: a service client cannot read another owner's `projects`
-      rows; signed-out read returns nothing
-- [ ] Existing 061 e2e (`project-session.spec.ts`) stays green — behavior
-      when signed out must be byte-identical
+      (`authed.spec.ts` "same id" test, 130/130 suite green)
+- [x] RLS probe: cross-owner reads return nothing for a signed-in client
+      (probe users A/B, each saw only their own row); signed-out read
+      returns nothing — service role bypasses RLS by design, so the probe
+      used user-scoped tokens with the anon key
+- [x] Existing 061 e2e (`project-session.spec.ts`) stays green — behavior
+      when signed out must be byte-identical (test passes unchanged)
 
 ## Status log
 
@@ -174,3 +186,4 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 | ---- | ----- |
 | 2026-10-31 | plan drafted (F17 claimed here) |
 | 2026-10-31 | approved — decisions confirmed by the user: SQL home = `db/0*.sql` canonical only (design decision 6), migration applied to the live Supabase project (additive, RLS + grants in one batch, SQL shown before execution); plan 062 closed as implemented in the same turn |
+| 2026-10-31 | implemented — migration `20261031235914` applied live (RLS probes clean); second sync loop + adoption + reserved-slug fix landed (decisions 5–7 recorded during implementation); full gate green: 859 unit, 130 e2e incl. the new cross-device project test, lint/tsc/Prettier clean |

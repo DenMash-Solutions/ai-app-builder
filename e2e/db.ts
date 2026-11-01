@@ -271,9 +271,10 @@ export async function seedFixture(): Promise<void> {
 }
 
 /**
- * Removes crash leftovers: `uis` rows owned by the dedicated e2e admin that
- * carry the test marker prefix. Scoped by identity AND marker — the personal
- * account and unmarked records are never touched.
+ * Removes crash leftovers owned by the dedicated e2e admin that carry the
+ * test marker prefix — `uis` rows by prompt and `projects` rows by name
+ * (064). Scoped by identity AND marker — the personal account and unmarked
+ * records are never touched.
  */
 export async function sweepTestRows(ownerId: string): Promise<number> {
   const svc = serviceClient();
@@ -286,14 +287,38 @@ export async function sweepTestRows(ownerId: string): Promise<number> {
     throw new Error(`[e2e] leftover sweep failed: ${error.message}`);
   }
   const ids = (data ?? []).map((row) => String(row.id));
-  if (ids.length === 0) return 0;
-  const { error: deleteError } = await svc.from("uis").delete().in("id", ids);
-  if (deleteError) {
+  if (ids.length > 0) {
+    const { error: deleteError } = await svc.from("uis").delete().in("id", ids);
+    if (deleteError) {
+      throw new Error(
+        `[e2e] leftover sweep delete failed: ${deleteError.message}`,
+      );
+    }
+  }
+
+  const projectResult = await svc
+    .from("projects")
+    .select("id")
+    .eq("owner_id", ownerId)
+    .like("name", `${TEST_PROMPT_PREFIX}%`);
+  if (projectResult.error) {
     throw new Error(
-      `[e2e] leftover sweep delete failed: ${deleteError.message}`,
+      `[e2e] project leftover sweep failed: ${projectResult.error.message}`,
     );
   }
-  return ids.length;
+  const projectIds = (projectResult.data ?? []).map((row) => String(row.id));
+  if (projectIds.length > 0) {
+    const { error: projectDeleteError } = await svc
+      .from("projects")
+      .delete()
+      .in("id", projectIds);
+    if (projectDeleteError) {
+      throw new Error(
+        `[e2e] project leftover sweep delete failed: ${projectDeleteError.message}`,
+      );
+    }
+  }
+  return ids.length + projectIds.length;
 }
 
 /**
@@ -307,6 +332,56 @@ export async function deleteTestRow(uiId: string | undefined): Promise<void> {
   const { error } = await svc.from("uis").delete().eq("id", uiId);
   if (error) {
     console.warn(`[e2e] cleanup of ${uiId} failed: ${error.message}`);
+  }
+}
+
+/**
+ * Service-role safety net for the PROJECT row this test itself created (by
+ * id — targeted, never a range or a bare owner match). The name-scoped
+ * leftover sweep also covers it on the next run; this keeps a run's account
+ * tidy even when it is the last one. Silent without the service-role key.
+ */
+export async function deleteTestProject(
+  projectId: string | undefined,
+): Promise<void> {
+  if (!projectId || !canSeed) return;
+  const svc = serviceClient();
+  const { error } = await svc.from("projects").delete().eq("id", projectId);
+  if (error) {
+    console.warn(
+      `[e2e] project cleanup of ${projectId} failed: ${error.message}`,
+    );
+  }
+}
+
+/**
+ * Polls until the PROJECT row exists in the account — the authoritative
+ * "projects sync push landed" gate for the cross-device test (plan 064),
+ * same reasoning as `waitForRemoteRow`: the UI dot can't gate this reliably
+ * (debounce plus admin-sized pulls stretch the cycle). Best-effort silent
+ * without the service-role key, like the other helpers.
+ */
+export async function waitForRemoteProject(
+  name: string,
+  timeoutMs = 20_000,
+): Promise<void> {
+  if (!canSeed) return;
+  const svc = serviceClient();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data, error } = await svc
+      .from("projects")
+      .select("id")
+      .eq("name", name)
+      .limit(1);
+    if (!error && data && data.length > 0) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `[e2e] account project row for "${name.slice(0, 40)}…" missing ` +
+          `after ${timeoutMs}ms${error ? ` (${error.message})` : ""}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 }
 
