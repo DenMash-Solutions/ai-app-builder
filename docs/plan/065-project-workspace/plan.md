@@ -1,6 +1,6 @@
 # Project Workspace — Membership, Routes, Home Screen
 
-**Status:** draft
+**Status:** approved
 **Date:** 2026-10-31
 
 ## Goal
@@ -136,3 +136,4 @@ explicit home screen.
 | Date | Event |
 | ---- | ----- |
 | 2026-10-31 | plan drafted |
+| 2026-10-31 | approved |
