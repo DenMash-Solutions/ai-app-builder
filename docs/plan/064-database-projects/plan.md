@@ -72,14 +72,18 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 
 ### 1. Schema, RLS and grants (db/)
 
-- [ ] `db/01_schema.sql` — `projects` table: client-generated uuid PK,
+- [x] `db/01_schema.sql` — `projects` table: client-generated uuid PK,
       owner_id, name, slug, home_screen_id, status, `state jsonb` default
       `{}`, timestamps, unique (owner_id, slug)
-- [ ] `db/03_rls.sql` — owner-only select/insert/update/delete, RLS enabled
-- [ ] `db/04_grants.sql` — `authenticated` DML only, revoke set as in the
-      file pattern
-- [ ] SQL shown to the user, then applied to the live project in one batch
-      (decision 6); service-client spot-check after apply
+- [x] `db/03_rls.sql` — owner-only select/insert/update/delete, RLS enabled
+      (F7-shaped update check; inventory row in `docs/security/rls-audit.md`)
+- [x] `db/04_grants.sql` — no edit needed: it grants DML `on all tables in
+      schema public`, so re-running it covers `projects` (revoke set already
+      in the file pattern)
+- [x] SQL shown to the user, then applied to the live project in one batch
+      as migration `20261031235914_add_projects_table_rls_grants` (decision 6);
+      post-apply probe: table + 9 columns correct, `relrowsecurity=true`,
+      4 policies (r/a/w/d), advisors show only pre-existing documented WARNs
 
 ### 2. Second sync loop (lib/history/sync.ts)
 
@@ -115,8 +119,9 @@ en/es keys, `lib/projects/projects.test.ts`, `lib/history/sync.test.ts`.
 - [ ] e2e two contexts: create in A, same account in B sees the same id and
       grouping — context B reuses the dedicated storage state, never a fresh
       anon signup (lesson `e2e-auth-quota`)
-- [ ] RLS probe: cross-owner reads return nothing for a signed-in client;
-      signed-out reads nothing
+- [x] RLS probe: user A saw only `probe-a`, user B only `probe-b`
+      (cross-owner invisible), anon 0 rows; probe rows deleted, table left
+      with 0 rows
 - [ ] `e2e/project-session.spec.ts` stays green; full gate
 
 ## Verification

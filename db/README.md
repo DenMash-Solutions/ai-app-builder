@@ -8,7 +8,7 @@ project state after the RLS audit (`docs/security/rls-audit.md`).
 
 | # | File | What it does |
 | - | ---- | ------------ |
-| 1 | `01_schema.sql` | 5 public tables (`profiles`, `uis`, `page_versions`, `published_pages`, `site_settings`), constraints, defaults |
+| 1 | `01_schema.sql` | 6 public tables (`profiles`, `uis`, `page_versions`, `published_pages`, `site_settings`, `projects`), constraints, defaults |
 | 2 | `02_functions.sql` | `handle_new_user()` (signup trigger fn), `is_admin()` (RLS helper), `rls_auto_enable()` (event trigger fn) |
 | 3 | `03_rls.sql` | Enable RLS on all tables + the full policy set (post-audit) |
 | 4 | `04_grants.sql` | Table DML grants, TRUNCATE/TRIGGER/REFERENCES revokes, function EXECUTE ACLs |

@@ -1,4 +1,4 @@
--- Schema: 5 public tables, constraints, defaults.
+-- Schema: 6 public tables, constraints, defaults.
 -- Depends on: Supabase-managed `auth` schema (auth.users) — exists on any project.
 -- Re-runnable: CREATE TABLE IF NOT EXISTS; constraints are added only when missing.
 -- gen_random_uuid() is core since PostgreSQL 13 — no extension needed.
@@ -66,4 +66,29 @@ create table if not exists public.site_settings (
   id             boolean primary key default true constraint site_settings_id_check check (id),
   featured_ui_id uuid references public.published_pages (ui_id) on delete set null,
   updated_at     timestamptz not null default now()
+);
+
+-- ── projects ────────────────────────────────────────────────────────────────
+-- Plan 064: the application boundary (a grouping of screens). Local-first:
+-- the PK deliberately has NO default — ids are client-generated uuids so an
+-- anonymous local project adopts without ever remapping HistoryEntry.projectId.
+-- `updated_at` is stamped app-side by the sync writer (same as uis) and is
+-- the LWW tie-break. Reserved segments are checked in code at create and
+-- rename (lib/slug.ts isReservedSlug) — the reserved list lives in
+-- lib/slug.ts and a DB copy would drift. home_screen_id gains a membership
+-- check when project_screens lands (plan 065); ON DELETE SET NULL leaves the
+-- project without a root entry point rather than dangling.
+create table if not exists public.projects (
+  id             uuid primary key,
+  owner_id       uuid not null references auth.users (id) on delete cascade,
+  name           text not null,
+  slug           text not null,
+  home_screen_id uuid references public.uis (id) on delete set null,
+  status         text not null default 'draft',
+  state          jsonb not null default '{}'::jsonb,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  constraint projects_slug_check check (char_length(slug) between 1 and 64),
+  constraint projects_status_check check (status in ('draft', 'published', 'archived')),
+  constraint projects_owner_id_slug_key unique (owner_id, slug)
 );

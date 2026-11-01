@@ -42,6 +42,10 @@ All five tables have RLS enabled; no views exist in `public`; no `public.*` tabl
 | `published_pages` | `published_pages_delete_owner_or_admin` | DELETE | authenticated | `owner_id = auth.uid() or is_admin()` | — |
 | `site_settings` | `site_settings_select_everyone` | SELECT | **public** | `true` (featured pointer is public by design) | — |
 | `site_settings` | `site_settings_write_admin` | ALL | authenticated | `is_admin()` | `is_admin()` |
+| `projects` | `projects_select_owner_or_admin` | SELECT | authenticated | `owner_id = auth.uid() or is_admin()` | — |
+| `projects` | `projects_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` |
+| `projects` | `projects_update_owner_or_admin` | UPDATE | authenticated | `owner_id = auth.uid() or is_admin()` | `owner_id = auth.uid()` ← F7 shape (no ownership takeover) |
+| `projects` | `projects_delete_owner_or_admin` | DELETE | authenticated | `owner_id = auth.uid() or is_admin()` | — |
 
 `profiles` has no INSERT/UPDATE/DELETE policy at all → **privilege escalation via `UPDATE profiles SET role='admin'` is impossible** (battery: 0 rows). Signups get their row from the `handle_new_user` trigger.
 
@@ -55,7 +59,7 @@ All five tables have RLS enabled; no views exist in `public`; no `public.*` tabl
 
 ### Grants (post-fix)
 
-`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on the five tables (RLS filters rows). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
+`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all six tables (RLS filters rows). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
 
 ## Findings
 

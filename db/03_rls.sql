@@ -9,6 +9,7 @@ alter table public.uis            enable row level security;
 alter table public.page_versions  enable row level security;
 alter table public.published_pages enable row level security;
 alter table public.site_settings  enable row level security;
+alter table public.projects       enable row level security;
 
 -- ── profiles ────────────────────────────────────────────────────────────────
 -- No write policies at all: rows are created by the signup trigger, and an
@@ -130,3 +131,32 @@ create policy site_settings_write_admin
   to authenticated
   using (is_admin())
   with check (is_admin());
+
+-- ── projects ────────────────────────────────────────────────────────────────
+-- Owner-only (plan 064): no public read — projects stay private until their
+-- entry points publish (plan 069). UPDATE mirrors the uis F7 hardening: the
+-- WITH CHECK forbids re-stamping owner_id (sync ownership takeover).
+drop policy if exists projects_select_owner_or_admin on public.projects;
+create policy projects_select_owner_or_admin
+  on public.projects for select
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin());
+
+drop policy if exists projects_insert_own on public.projects;
+create policy projects_insert_own
+  on public.projects for insert
+  to authenticated
+  with check (owner_id = auth.uid());
+
+drop policy if exists projects_update_owner_or_admin on public.projects;
+create policy projects_update_owner_or_admin
+  on public.projects for update
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin())
+  with check (owner_id = auth.uid());
+
+drop policy if exists projects_delete_owner_or_admin on public.projects;
+create policy projects_delete_owner_or_admin
+  on public.projects for delete
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin());
