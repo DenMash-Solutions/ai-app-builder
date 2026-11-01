@@ -50,3 +50,6 @@ next-env.d.ts
 
 # git-commit skill scratch file
 commit-plan.md
+
+# shared cross-session agent memory (never committed — self-contained)
+.agents/memory/
