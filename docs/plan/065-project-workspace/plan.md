@@ -74,11 +74,31 @@ explicit home screen.
     project_screens`, because the two sync loops are independent and a
     cross-loop dependency fails whole-project pushes transiently (amends the
     064 schema comment that promised a DB check).
+11. Cross-device duplicate PAIR (same (project, screen), two uuids — e.g.
+    both devices add the same synced screen): resolved by **re-keying** the
+    local twin onto the remote row's id — the remote id is the DB identity
+    (the row already exists in `project_screens`), the newer content wins
+    under LWW, and the next push overwrites the remote row instead of
+    tripping the pair constraint. At adoption the same rule applies
+    symmetrically (remote newer → replace; local newer → re-keyed onto the
+    remote id). Extends decision 9's
+    "never let a constraint poison the batch": unlike a route, a pair cannot
+    be "cleared", so the two rows must become one. Rejected: dropping the
+    local twin (silently loses its newer content/position), letting both
+    push (the unique(project, screen) violation fails the whole upsert
+    batch — every membership stalls, exactly decision 9's failure mode).
+12. Remove/move keep the device-local `entry.projectId` pointer aligned
+    (cleared on remove-from-the-pointer's-project, re-stamped on move):
+    otherwise the idempotent backfill re-adds the removed membership on the
+    next load. Rejected: tombstones (extra state for a pointer the backfill
+    already trusts).
 
 ## Files
 
 `lib/projects/memberships.ts` (+tests), `lib/projects/screen-routes.ts`,
 `lib/projects/screen-routes.test.ts`, `lib/projects/projects.ts`,
+`lib/history/history.ts` (copy + pointer helpers), `lib/history/sync.ts`
+(+`membershipsSyncSpec`), `components/sync/sync-engine.tsx` (third loop),
 `db/` migration + RLS, project panel and drawer components,
 `app/[locale]/[slug]/preview-client.tsx`, en/es keys,
 `e2e/project-session.spec.ts` extensions.
@@ -96,22 +116,37 @@ explicit home screen.
       probes green (cross-owner insert 403, reads invisible, delete no-op,
       anon 0, table cleaned)
 - [x] `lib/projects/memberships.ts` module store (projects.ts pattern):
-      local-first, sync when signed in (decision 2) — sanitizer restores the
-      two uniqueness invariants (dup pair dropped, dup route cleared not
-      dropped), 9 unit tests green
+      local-first, contract-ready for account sync (decision 2) — sanitizer
+      restores the two uniqueness invariants (dup pair dropped, dup route
+      cleared not dropped), 9 unit tests green. **Review 2026-11-01**: this
+      checkbox overstated — the store is sync-*contract*-ready only; the
+      loop itself is the next item
+- [x] Account sync loop (decision 2, added by 2026-11-01 review): third
+      `startTableSync` over `project_screens` — `membershipsSyncSpec` in
+      `lib/history/sync.ts` + wiring in `components/sync/sync-engine.tsx`
+      (one status dot, one flush path — 064 decision 1), push-time
+      `reconcileProjectRoutes` (decisions 9/11) + adoption-time
+      `applyRemoteMembership` — implemented 2026-11-01; 6 loop tests green
+      (row round-trip, download no-remap, push columns, d9 route clear,
+      d11 pair re-key, delete-not-resurrect)
 - [x] Backfill: existing `projectId` pointers become membership rows (on
       first client read, chronological positions, idempotent); dangling ids
       keep the "no project" bucket (062 migration note)
 
 ### 2. Operations (add / copy / move / remove / rename)
 
-- [ ] Add existing screen → membership row only, no new screen
-- [ ] Copy → new `HistoryEntry`/`uis` row with revision 0 + destination
-      membership (decision 3)
-- [ ] Move → remove source membership, add destination; identity and
-      revisions preserved
-- [ ] Remove → membership only; the screen survives in its other projects
-- [ ] Rename-in-project and reorder (position)
+- [x] Add existing screen → membership row only, no new screen
+- [x] Copy → new `HistoryEntry`/`uis` row with revision 0 + destination
+      membership (decision 3) — `copyScreenToProject` + `copyEntry`
+- [x] Move → remove source membership, add destination; identity and
+      revisions preserved — `moveScreenBetweenProjects` (pointer
+      re-stamped, decision 12)
+- [x] Remove → membership only; the screen survives in its other projects —
+      pointer cleared with the row (decision 12) so reload never
+      resurrects it
+- [ ] Rename-in-project and reorder (position) — reorder done
+      (`reorderProjectMembers`); rename is an entry-rename UI affordance,
+      lands with the workspace panel (task 4)
 
 ### 3. Routes and home screen
 
@@ -123,7 +158,11 @@ explicit home screen.
       (decision 7)
 - [ ] Explicit `homeScreenId` replaces the `projectHomeScreenId`
       oldest-member rule; removing home forces a replacement choice or
-      leaves the root entry point empty (decision 5)
+      leaves the root entry point empty (decision 5) — carries through the
+      projects sync (`Project.homeScreenId` ↔ `projects.home_screen_id`:
+      `rowToProject`/`projectToRow`/`sanitizeProjects` + the
+      `sync.test.ts` assertion that today pins the column out of the row —
+      amended by this plan, per the 064 comment "belongs to 065/069")
 
 ### 4. Workspace UI and prompt
 
@@ -160,3 +199,5 @@ explicit home screen.
 | ---- | ----- |
 | 2026-10-31 | plan drafted |
 | 2026-10-31 | approved |
+| 2026-11-01 | review vs. codebase: Task 1's "sync when signed in" overstated (loop unwired) → sync-loop item added; Files gains `sync.ts`/`sync-engine.tsx`/`history.ts`; decisions 11 (pair-dup reconcile) and 12 (remove/move pointer hygiene — backfill resurrection) added; Task 3 notes the `home_screen_id` sync contract |
+| 2026-11-01 | sync loop + copy/move/remove implemented — gate green (lint 0, tsc clean, prettier clean, 879 unit pass incl. 11 new); tasks 1 and 2 (minus rename UI) closed |

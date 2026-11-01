@@ -12,9 +12,12 @@ import {
   entryToRow,
   flushSync,
   getSyncStatus,
+  membershipToRow,
+  membershipsSyncSpec,
   projectToRow,
   projectsSyncSpec,
   rowToEntry,
+  rowToMembership,
   rowToProject,
   startSync,
   startTableSync,
@@ -29,6 +32,14 @@ import {
   removeProject,
 } from "@/lib/projects/projects";
 import type { Project } from "@/lib/projects/projects";
+import {
+  MEMBERSHIP_STORAGE_KEY,
+  addScreenToProject,
+  getMembership,
+  getMemberships,
+  removeScreenFromProject,
+} from "@/lib/projects/memberships";
+import type { ProjectMembership } from "@/lib/projects/memberships";
 
 function makeSpec(heading: string): Spec {
   return {
@@ -484,6 +495,30 @@ function projectRow(
   };
 }
 
+function membershipRow(
+  id: string,
+  overrides: Partial<{
+    updatedAt: number;
+    projectId: string;
+    screenId: string;
+    route: string | null;
+    position: number;
+    ownerId: string;
+  }> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    owner_id: overrides.ownerId ?? "owner-1",
+    project_id: overrides.projectId ?? "11111111-2222-4333-8444-555555555555",
+    screen_id: overrides.screenId ?? "11111111-2222-4333-8444-666666666666",
+    route: overrides.route ?? null,
+    position: overrides.position ?? 0,
+    created_at: new Date(1000).toISOString(),
+    updated_at: new Date(overrides.updatedAt ?? 5000).toISOString(),
+    __table: "project_screens",
+  };
+}
+
 describe("projects loop (plan 064)", () => {
   let state: MockState;
 
@@ -841,5 +876,206 @@ describe("projects loop (plan 064)", () => {
     expect(getSyncStatus()).toBe("saved");
     stopAgain.forEach((stop) => stop());
     expect(getSyncStatus()).toBe("idle");
+  });
+});
+
+describe("memberships loop (plan 065)", () => {
+  let state: MockState;
+
+  /** Reset through the store's own API so cache and storage agree. History
+   *  is cleared FIRST, so the backfill reads nothing to seed. */
+  const resetMemberships = (): void => {
+    for (const membership of [...getMemberships()]) {
+      removeScreenFromProject(membership.projectId, membership.screenId);
+    }
+    storage().removeItem(MEMBERSHIP_STORAGE_KEY);
+  };
+
+  beforeEach(() => {
+    storage(); // install/reuse the shared window so the store isn't SSR-empty
+    clearHistory();
+    resetMemberships();
+    state = { rows: [], upserts: [], deletes: [], selects: [] };
+  });
+
+  afterEach(() => {
+    clearHistory();
+    resetMemberships();
+  });
+
+  test("membershipToRow / rowToMembership round-trip; owner stamp and corrupt rows", () => {
+    const membership: ProjectMembership = {
+      id: "aaaaaaaa-4444-4888-8999-aaaaaaaaaaaa",
+      projectId: "11111111-2222-4333-8444-555555555555",
+      screenId: "11111111-2222-4333-8444-666666666666",
+      route: "detail/{id}",
+      position: 3,
+      createdAt: 1700000000000,
+      updatedAt: 1700000009000,
+    };
+    const row = membershipToRow(membership, "owner-1");
+    expect(row.owner_id).toBe("owner-1");
+    expect(row.project_id).toBe(membership.projectId);
+    expect(row.route).toBe("detail/{id}");
+    expect(rowToMembership(row)).toEqual(membership);
+
+    // Corrupt/partial rows: junk timestamp → null, missing columns → null,
+    // non-object → null (the rowToProject discipline).
+    expect(rowToMembership({ ...row, created_at: "garbage" })).toBeNull();
+    expect(rowToMembership({ ...row, screen_id: undefined })).toBeNull();
+    expect(rowToMembership("not-an-object")).toBeNull();
+  });
+
+  test("downloads a remote-only membership with its ids and stamps (no remap)", async () => {
+    const id = "99999999-8888-4777-6666-555555555555";
+    state.rows.push(membershipRow(id, { updatedAt: 7000, route: "settings" }));
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      membershipsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const rows = getMemberships();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(id); // client-generated id adopted as-is
+    expect(rows[0].route).toBe("settings");
+    expect(rows[0].updatedAt).toBe(7000);
+    expect(getSyncStatus()).toBe("saved");
+    stop();
+    expect(getSyncStatus()).toBe("idle");
+  });
+
+  test("pushes a local membership with pair, route, position and owner stamp", async () => {
+    const project = "22222222-3333-4444-5555-666666666666";
+    const screen = "33333333-4444-5555-6666-777777777777";
+    const membership = addScreenToProject(
+      project,
+      screen,
+      "detail/{id}",
+    ) as ProjectMembership;
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      membershipsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    const pushed = state.upserts.flat().find((row) => row.id === membership.id);
+    expect(pushed?.owner_id).toBe("owner-1");
+    expect(pushed?.project_id).toBe(project);
+    expect(pushed?.screen_id).toBe(screen);
+    expect(pushed?.route).toBe("detail/{id}");
+    expect(pushed?.position).toBe(0);
+    expect(pushed?.updated_at).toBe(
+      new Date(membership.updatedAt).toISOString(),
+    );
+    stop();
+  });
+
+  test("push reconciles a route another remote row owns — cleared, not poisoned (d9)", async () => {
+    const project = "44444444-5555-6666-7777-888888888888";
+    const local = addScreenToProject(
+      project,
+      "55555555-6666-7777-8888-999999999999",
+      "settings",
+    ) as ProjectMembership;
+    // Device one already pushed the same route on ANOTHER pair.
+    state.rows.push(
+      membershipRow("66666666-7777-8888-9999-000000000000", {
+        projectId: project,
+        screenId: "77777777-8888-9999-0000-111111111111",
+        route: "settings",
+        updatedAt: Date.now() + 90000,
+      }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      membershipsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    // The local holder cleared BEFORE the payload — the batch never trips
+    // unique (project_id, route) (decision 9).
+    const pushed = state.upserts.flat().filter((row) => row.id === local.id);
+    expect(pushed.at(-1)?.route).toBeNull();
+    expect(getMembership(project, local.screenId)?.route).toBeNull();
+    // The remote route owner is untouched (still routed, still theirs).
+    expect(
+      state.rows.find(
+        (row) => row.id === "66666666-7777-8888-9999-000000000000",
+      )?.route,
+    ).toBe("settings");
+    stop();
+  });
+
+  test("push re-keys a local pair twin onto the remote id — one row per pair (d11)", async () => {
+    const project = "88888888-9999-0000-1111-222222222222";
+    const screen = "99999999-0000-1111-2222-333333333333";
+    const local = addScreenToProject(project, screen) as ProjectMembership;
+    // Device one added the SAME screen to the SAME project (another uuid)
+    // with older content — the local copy should win under LWW.
+    state.rows.push(
+      membershipRow("aaaaaaa1-0000-1111-2222-333333333333", {
+        projectId: project,
+        screenId: screen,
+        position: 7,
+        updatedAt: 1,
+      }),
+    );
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      membershipsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+
+    // Exactly one local row for the pair, carrying the remote's DB identity
+    // and the local content.
+    const forPair = getMemberships().filter(
+      (row) => row.projectId === project && row.screenId === screen,
+    );
+    expect(forPair).toHaveLength(1);
+    expect(forPair[0].id).toBe("aaaaaaa1-0000-1111-2222-333333333333");
+    expect(forPair[0].position).toBe(local.position);
+    // The push upserts that id with the local content (local newer wins).
+    const pushed = state.upserts
+      .flat()
+      .filter((row) => row.id === "aaaaaaa1-0000-1111-2222-333333333333");
+    expect(pushed.at(-1)?.position).toBe(local.position);
+    stop();
+  });
+
+  test("a local deletion reaches the table as a delete, not a resurrection", async () => {
+    const project = "22222222-3333-4444-5555-aaaaaaaaaaaa";
+    const screen = "33333333-4444-5555-6666-bbbbbbbbbbbb";
+    expect(addScreenToProject(project, screen)).not.toBeNull();
+    const remoteId = "aaaaaaa2-0000-1111-2222-333333333333";
+    state.rows.push(
+      membershipRow(remoteId, { projectId: project, screenId: screen }),
+    );
+
+    const client = makeClient(state);
+    const stop = startTableSync(client, "owner-1", membershipsSyncSpec, {
+      debounceMs: 1,
+    });
+    await sleep(30); // pair duplicate resolved by the first run's reconcile
+
+    // Remove locally — the row leaves the store...
+    removeScreenFromProject(project, screen);
+    await sleep(30);
+    // ...and the synced id is deleted server-side, never re-upserted.
+    expect(getMembership(project, screen)).toBeNull();
+    expect(state.rows.some((row) => row.id === remoteId)).toBe(false);
+    stop();
   });
 });

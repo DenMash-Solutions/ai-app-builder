@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { createClient } from "@/lib/supabase/client";
 import {
+  membershipsSyncSpec,
   projectsSyncSpec,
   startSync,
   startTableSync,
@@ -11,10 +12,11 @@ import {
 import type { SyncClient } from "@/lib/history/sync";
 
 /**
- * Keeps the local playground history (`uis`) and projects (`projects`) in
- * sync with the account while a session exists — local-first, debounced,
- * fire-and-forget (plan Q7 + 064). Two loops, but one status dot and one
- * `flushSync` path: both live in `lib/history/sync.ts` (064 decision 1).
+ * Keeps the local playground history (`uis`), projects (`projects`) and
+ * project memberships (`project_screens`) in sync with the account while a
+ * session exists — local-first, debounced, fire-and-forget (plan Q7 + 064 +
+ * 065). Three loops, but one status dot and one `flushSync` path: all live
+ * in `lib/history/sync.ts` (064 decision 1).
  * Mounted once inside the auth provider; renders nothing.
  */
 export function SyncEngine() {
@@ -31,6 +33,7 @@ export function SyncEngine() {
     const stops = [
       startSync(client, user.id),
       startTableSync(client, user.id, projectsSyncSpec),
+      startTableSync(client, user.id, membershipsSyncSpec),
     ];
     return () => stops.forEach((stop) => stop());
   }, [loading, user, supabase]);

@@ -13,6 +13,14 @@ import {
   subscribeProjects,
 } from "@/lib/projects/projects";
 import type { Project } from "@/lib/projects/projects";
+import {
+  applyRemoteMembership,
+  getMemberships,
+  reconcileProjectRoutes,
+  sanitizeMemberships,
+  subscribeMemberships,
+} from "@/lib/projects/memberships";
+import type { ProjectMembership } from "@/lib/projects/memberships";
 
 /**
  * Local-first account sync (plan Q7): localStorage stays the working copy;
@@ -21,9 +29,11 @@ import type { Project } from "@/lib/projects/projects";
  * forget — the app never blocks on Supabase.
  *
  * Plan 064 runs the SAME machinery as a second loop over `projects`
- * (`startTableSync` + `projectsSyncSpec`): the loop is parameterized over
- * table + row/entity mappers so both loops share ONE status dot and ONE
- * `flushSync` path (design decision 1) instead of a parallel sync service.
+ * (`startTableSync` + `projectsSyncSpec`), and plan 065 as a third over
+ * `project_screens` (`membershipsSyncSpec`): the loop is parameterized
+ * over table + row/entity mappers so every loop shares ONE status dot and
+ * ONE `flushSync` path (design decision 1) instead of a parallel sync
+ * service.
  */
 
 export type SyncStatus = "idle" | "syncing" | "saved" | "offline";
@@ -127,12 +137,17 @@ function isUisRow(value: unknown): value is UisRow {
 }
 
 /** The slim compare-row pull's phase 1 returns (plan 055 A). `slug` rides
- *  along when a spec's slimColumns include it (projects — 064 reconcile). */
+ *  along when a spec's slimColumns include it (projects — 064 reconcile);
+ *  `project_id`/`screen_id`/`route` likewise for `project_screens` (065 —
+ *  `reconcileProjectRoutes` needs them to resolve cross-device duplicates). */
 export interface SlimRow {
   id: string;
   owner_id: string;
   updated_at: string;
   slug?: string;
+  project_id?: string;
+  screen_id?: string;
+  route?: string | null;
 }
 
 function isSlimRow(value: unknown): value is SlimRow {
@@ -513,6 +528,87 @@ export const projectsSyncSpec: SyncSpec<Project> = {
   toEntity: rowToProject,
   toRow: projectToRow,
   reconcile: reconcileProjectSlugs,
+};
+
+/** The `project_screens` row shape the full-row phase returns (065). */
+interface ProjectScreenRow {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  screen_id: string;
+  route: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function isProjectScreenRow(value: unknown): value is ProjectScreenRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<ProjectScreenRow>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
+    typeof row.project_id === "string" &&
+    typeof row.screen_id === "string" &&
+    typeof row.created_at === "string" &&
+    typeof row.updated_at === "string"
+  );
+}
+
+/** Row → `ProjectMembership`: corrupt/partial rows come back `null` (the
+ *  `rowToProject` discipline); salvageable rows go through the store's
+ *  sanitizer, which restores the two uniqueness invariants (065 decision
+ *  7/11) and falls back `updatedAt` to `createdAt` for a junk stamp. */
+export function rowToMembership(raw: unknown): ProjectMembership | null {
+  if (!isProjectScreenRow(raw)) return null;
+  const createdAt = Date.parse(raw.created_at);
+  if (!Number.isFinite(createdAt)) return null;
+  const updatedAt = Date.parse(raw.updated_at);
+  const [membership] = sanitizeMemberships([
+    {
+      id: raw.id,
+      projectId: raw.project_id,
+      screenId: raw.screen_id,
+      route: raw.route,
+      position: raw.position,
+      createdAt,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
+    },
+  ]);
+  return membership ?? null;
+}
+
+/** `ProjectMembership` → upsert row (the `owner_id` stamp happens here). */
+export function membershipToRow(
+  membership: ProjectMembership,
+  ownerId: string,
+): Record<string, unknown> {
+  return {
+    id: membership.id,
+    owner_id: ownerId,
+    project_id: membership.projectId,
+    screen_id: membership.screenId,
+    route: membership.route,
+    position: membership.position,
+    created_at: new Date(membership.createdAt).toISOString(),
+    updated_at: new Date(membership.updatedAt).toISOString(),
+  };
+}
+
+/** The `project_screens` loop (plan 065): a third run of the same
+ *  machinery — one status dot, one flush path (064 decision 1). The slim
+ *  compare view carries pair + route so the push's reconcile can defuse
+ *  cross-device duplicates before they poison the upsert batch (decisions
+ *  9/11). */
+export const membershipsSyncSpec: SyncSpec<ProjectMembership> = {
+  table: "project_screens",
+  slimColumns: "id, owner_id, updated_at, project_id, screen_id, route",
+  read: getMemberships,
+  apply: (remote) => applyRemoteMembership(remote),
+  subscribe: subscribeMemberships,
+  toEntity: rowToMembership,
+  toRow: membershipToRow,
+  reconcile: reconcileProjectRoutes,
 };
 
 /**

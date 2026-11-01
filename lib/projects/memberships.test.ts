@@ -1,6 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Spec } from "@json-render/core";
-import { addEntry, createEntry, getHistory } from "@/lib/history";
+import {
+  addEntry,
+  createEntry,
+  getHistory,
+  replaceEntrySpec,
+} from "@/lib/history";
 import {
   ACTIVE_PROJECT_STORAGE_KEY,
   PROJECT_STORAGE_KEY,
@@ -301,5 +306,228 @@ describe("membership store", () => {
     unsubscribe();
     store.addScreenToProject(project.id, screen);
     expect(calls).toBe(3);
+  });
+
+  test("remove clears the device-local pointer so reload never resurrects the membership", async () => {
+    const project = seedProject("Pointer");
+    const screen = seedEntry("pointer-screen", project.id);
+
+    const first = "./memberships.ts?remove-reload-1";
+    const storeA = (await import(first)) as MembershipsModule;
+    expect(storeA.getMembership(project.id, screen)).not.toBeNull();
+
+    expect(storeA.removeScreenFromProject(project.id, screen)).toBe(true);
+    // Decision 12: the pointer goes with the row.
+    expect(
+      getHistory().find((entry) => entry.id === screen)?.projectId,
+    ).toBeUndefined();
+
+    // A fresh load (reload) backfills nothing — the membership stays gone.
+    const second = "./memberships.ts?remove-reload-2";
+    const storeB = (await import(second)) as MembershipsModule;
+    expect(storeB.getMembership(project.id, screen)).toBeNull();
+  });
+
+  test("copy: new screen at revision 0 in the destination; source untouched", () => {
+    const from = seedProject("CopyFrom");
+    const to = seedProject("CopyTo");
+    const screen = seedEntry("copy-me", from.id);
+    // Explicit add: the shared instance's cache already loaded in beforeEach
+    // (backfill only runs on first load), and the guards test membership —
+    // not how the row got there.
+    store.addScreenToProject(from.id, screen);
+    expect(store.getMembership(from.id, screen)).not.toBeNull();
+    // Give the source real revision history — the copy must not inherit it.
+    replaceEntrySpec(screen, makeSpec("second revision"), "prompt");
+    const source = getHistory().find((entry) => entry.id === screen);
+    expect(source?.revisions.length).toBe(2);
+    if (!source) throw new Error("seeded source entry missing");
+
+    const copy = store.copyScreenToProject(from.id, to.id, screen);
+    expect(copy).not.toBeNull();
+    if (!copy) throw new Error("copyScreenToProject returned null");
+    expect(copy.id).not.toBe(screen);
+    expect(copy.slug).not.toBe(source.slug);
+    // Decision 3: revision 0 — a single fresh revision, current spec only.
+    expect(copy.revisions).toHaveLength(1);
+    expect(copy.head).toBe(0);
+    expect(copy.spec).toEqual(source.spec);
+    expect(copy.projectId).toBe(to.id);
+    // Destination membership (route-less), source membership intact.
+    expect(store.getMembership(to.id, copy.id)?.route).toBeNull();
+    expect(store.getMembership(from.id, screen)).not.toBeNull();
+    expect(getHistory().some((entry) => entry.id === screen)).toBe(true);
+
+    // Guards: same project / non-member source are no-ops.
+    expect(store.copyScreenToProject(from.id, from.id, screen)).toBeNull();
+    expect(store.copyScreenToProject(from.id, to.id, "nope")).toBeNull();
+  });
+
+  test("move: identity and revisions preserved, pointer re-stamped, no resurrection", async () => {
+    const from = seedProject("MoveFrom");
+    const to = seedProject("MoveTo");
+    const screen = seedEntry("mover", from.id);
+    replaceEntrySpec(screen, makeSpec("v2"), "prompt");
+    expect(
+      getHistory().find((entry) => entry.id === screen)?.revisions.length,
+    ).toBe(2);
+
+    const first = "./memberships.ts?move-reload-1";
+    const storeA = (await import(first)) as MembershipsModule;
+    expect(storeA.getMembership(from.id, screen)).not.toBeNull();
+
+    expect(storeA.moveScreenBetweenProjects(from.id, to.id, screen)).toBe(true);
+    expect(storeA.getMembership(from.id, screen)).toBeNull();
+    expect(storeA.getMembership(to.id, screen)).not.toBeNull();
+    // Same entry: id and revision stack preserved; pointer re-stamped.
+    const moved = getHistory().find((entry) => entry.id === screen);
+    expect(moved?.revisions.length).toBe(2);
+    expect(moved?.projectId).toBe(to.id);
+
+    // Reload: the source membership stays gone (no backfill resurrection).
+    const second = "./memberships.ts?move-reload-2";
+    const storeB = (await import(second)) as MembershipsModule;
+    expect(storeB.getMembership(from.id, screen)).toBeNull();
+    expect(storeB.getMembership(to.id, screen)).not.toBeNull();
+
+    // Guards: no longer a source member / same project / unknown pair /
+    // already a member of the destination.
+    expect(storeA.moveScreenBetweenProjects(from.id, to.id, screen)).toBe(
+      false,
+    );
+    expect(storeA.moveScreenBetweenProjects(from.id, from.id, screen)).toBe(
+      false,
+    );
+    expect(storeA.moveScreenBetweenProjects(from.id, to.id, "nope")).toBe(
+      false,
+    );
+    const both = seedEntry("both-ways");
+    storeA.addScreenToProject(from.id, both);
+    storeA.addScreenToProject(to.id, both);
+    expect(storeA.moveScreenBetweenProjects(from.id, to.id, both)).toBe(false);
+  });
+
+  test("applyRemoteMembership: same-id replace, pair twins re-keyed by LWW, route collision clears", () => {
+    const project = seedProject("Adopt");
+    const s1 = seedEntry("s1");
+    const s2 = seedEntry("s2");
+    const s3 = seedEntry("s3");
+    store.addScreenToProject(project.id, s1, "local-route");
+    const localTwin = store.addScreenToProject(project.id, s2);
+    store.addScreenToProject(project.id, s3, "settings");
+    expect(localTwin).not.toBeNull();
+
+    // 1. Same id: straight replace (the loop already decided LWW).
+    const sameId = store.getMembership(project.id, s1);
+    expect(sameId).not.toBeNull();
+    store.applyRemoteMembership({
+      ...(sameId as ProjectMembership),
+      route: "remote-route",
+      position: 5,
+      updatedAt: Date.now() + 10000,
+    });
+    expect(store.getMembership(project.id, s1)?.route).toBe("remote-route");
+    expect(store.getMembership(project.id, s1)?.position).toBe(5);
+
+    // 2. Older remote twin: local content wins but takes the remote's DB id
+    //    (decision 11) — one row per pair, local position preserved.
+    store.applyRemoteMembership({
+      id: "remote-twin-uuid",
+      projectId: project.id,
+      screenId: s2,
+      route: null,
+      position: 99,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const rekeyed = store.getMembership(project.id, s2);
+    expect(rekeyed?.id).toBe("remote-twin-uuid");
+    expect(rekeyed?.position).toBe(localTwin?.position);
+    expect(
+      store.getMemberships().filter((row) => row.screenId === s2),
+    ).toHaveLength(1);
+
+    // 3. Newer remote twin wins outright.
+    store.applyRemoteMembership({
+      id: "remote-newer",
+      projectId: project.id,
+      screenId: s2,
+      route: null,
+      position: 42,
+      createdAt: 1,
+      updatedAt: Date.now() + 10000,
+    });
+    const adopted = store.getMembership(project.id, s2);
+    expect(adopted?.id).toBe("remote-newer");
+    expect(adopted?.position).toBe(42);
+    expect(
+      store.getMemberships().filter((row) => row.screenId === s2),
+    ).toHaveLength(1);
+
+    // 4. Route collision with ANOTHER pair: the adopted route is DB truth —
+    //    the local holder clears (membership kept), never drops (d9).
+    expect(store.getMembership(project.id, s3)?.route).toBe("settings");
+    store.applyRemoteMembership({
+      id: "remote-route-owner",
+      projectId: project.id,
+      screenId: "other-screen",
+      route: "settings",
+      position: 0,
+      createdAt: 1,
+      updatedAt: Date.now() + 10000,
+    });
+    const cleared = store.getMembership(project.id, s3);
+    expect(cleared?.route).toBeNull();
+    expect(cleared).not.toBeNull();
+  });
+
+  test("reconcileProjectRoutes: re-keys pair twins, clears owned routes, leaves the rest", () => {
+    const project = seedProject("Reconcile");
+    const s1 = seedEntry("r1");
+    const s2 = seedEntry("r2");
+    const s3 = seedEntry("r3");
+    const localPair = store.addScreenToProject(project.id, s1);
+    const routeHolder = store.addScreenToProject(project.id, s2, "detail/{id}");
+    const untouched = store.addScreenToProject(project.id, s3);
+    expect(localPair).not.toBeNull();
+    expect(routeHolder).not.toBeNull();
+    expect(untouched).not.toBeNull();
+
+    store.reconcileProjectRoutes([
+      // Remote twin of s1's pair, different id → local re-keyed onto it.
+      {
+        id: "remote-pair",
+        project_id: project.id,
+        screen_id: s1,
+        route: null,
+      },
+      // Remote owner of "detail/{id}" on ANOTHER pair → ours clears (d9).
+      {
+        id: "remote-route",
+        project_id: project.id,
+        screen_id: "elsewhere",
+        route: "detail/{id}",
+      },
+      // Our own row echoing back must never trigger anything.
+      {
+        id: untouched?.id ?? "missing",
+        project_id: project.id,
+        screen_id: s3,
+        route: null,
+      },
+    ]);
+
+    const rekeyed = store.getMembership(project.id, s1);
+    expect(rekeyed?.id).toBe("remote-pair");
+    expect(rekeyed?.position).toBe(localPair?.position); // content preserved
+    const cleared = store.getMembership(project.id, s2);
+    expect(cleared?.route).toBeNull();
+    expect(cleared?.updatedAt).toBeGreaterThanOrEqual(
+      routeHolder?.updatedAt ?? Infinity,
+    );
+    expect(store.getMembership(project.id, s3)).toEqual(untouched);
+    // Never a duplicate id after re-keying.
+    const ids = store.getMemberships().map((row) => row.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

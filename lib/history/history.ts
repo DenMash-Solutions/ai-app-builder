@@ -366,6 +366,63 @@ export function createEntry(
 }
 
 /**
+ * Copy an existing screen into a NEW one (plan 065 decision 3): same
+ * prompt and spec snapshot, but a FRESH identity — new id, a slug that can
+ * never collide (`uniqueSlugFrom` tails the id) and **revision 0** (a single
+ * fresh revision; the copy never inherits the source's history). Stamped
+ * with the destination project when given, otherwise the "no project"
+ * bucket. Returns the added entry.
+ */
+export function copyEntry(
+  source: HistoryEntry,
+  projectId?: string,
+): HistoryEntry {
+  const createdAt = Date.now();
+  const id = crypto.randomUUID();
+  const snapshot = cloneSpec(source.spec);
+  const entry = withCoverageFlag({
+    id,
+    name: source.name,
+    slug: uniqueSlugFrom(source.name, id),
+    prompt: source.prompt,
+    spec: snapshot,
+    revisions: [{ spec: snapshot, label: REVISION_LABELS.generate, createdAt }],
+    head: 0,
+    createdAt,
+    updatedAt: createdAt,
+    ...(projectId ? { projectId } : {}),
+  });
+  addEntry(entry);
+  return entry;
+}
+
+/**
+ * Re-stamp (or with undefined/empty, clear) an entry's device-local project
+ * pointer (plan 065 decision 12): remove/move keep the pointer aligned with
+ * the membership rows, so the idempotent membership backfill never
+ * re-adds a membership the user removed. No `updatedAt` stamp — the pointer
+ * is device-local (`uis` rows carry no project column), so there is nothing
+ * to sync. Unknown ids and unchanged pointers are no-ops.
+ */
+export function setEntryProject(id: string, projectId?: string): void {
+  const history = getHistory();
+  const target = history.find((entry) => entry.id === id);
+  if (!target) return;
+  const next =
+    projectId === undefined || projectId === "" ? undefined : projectId;
+  if ((target.projectId ?? undefined) === next) return;
+  commit(
+    history.map((entry) => {
+      if (entry.id !== id) return entry;
+      const updated: HistoryEntry = { ...entry };
+      if (next === undefined) delete updated.projectId;
+      else updated.projectId = next;
+      return updated;
+    }),
+  );
+}
+
+/**
  * Drops the grouping from every entry that references a deleted project —
  * the entries themselves are kept and fall back to the "no project" bucket
  * (061 A1; called by `removeProject`).

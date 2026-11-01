@@ -16,7 +16,13 @@
  * rows from existing `projectId` pointers on first load.
  */
 
-import { getHistory } from "@/lib/history";
+import {
+  copyEntry,
+  getHistory,
+  removeEntry,
+  setEntryProject,
+} from "@/lib/history";
+import type { HistoryEntry } from "@/lib/history";
 import { getProjects } from "@/lib/projects/projects";
 
 export const MEMBERSHIP_STORAGE_KEY = "genui-project-memberships";
@@ -298,6 +304,12 @@ export function addScreenToProject(
  * Remove a screen from ONE project (decision 3: membership only — the
  * screen survives in its other projects and in history). Unknown pairs are a
  * no-op (false).
+ *
+ * Pointer hygiene (decision 12): when the entry's device-local
+ * `projectId` points at THIS project it is cleared alongside the row —
+ * otherwise the idempotent backfill would re-add the membership on the
+ * next load. The screen drops to the "no project" bucket in legacy
+ * grouping (membership-driven grouping is plan 065 task 4).
  */
 export function removeScreenFromProject(
   projectId: string,
@@ -309,7 +321,83 @@ export function removeScreenFromProject(
   );
   if (next.length === rows.length) return false;
   cache = next;
+  const entry = getHistory().find((candidate) => candidate.id === screenId);
+  if (entry?.projectId === projectId) setEntryProject(screenId, undefined);
   persist();
+  return true;
+}
+
+/**
+ * Copy a member screen into ANOTHER project as a NEW screen (decision 3):
+ * the copy gets a fresh `HistoryEntry`/`uis` identity at revision 0 and a
+ * membership row in the destination — the source membership, entry and its
+ * revisions are untouched. The destination membership never carries a
+ * route (a fresh screen has no route contract yet). No-ops (null) when the
+ * source isn't a member, the projects are the same, the source entry is
+ * missing, or the destination membership cannot be written (the copy is
+ * rolled back so no orphan entry is left behind).
+ */
+export function copyScreenToProject(
+  fromProjectId: string,
+  toProjectId: string,
+  screenId: string,
+): HistoryEntry | null {
+  if (fromProjectId === toProjectId) return null;
+  const rows = load();
+  if (
+    !rows.some(
+      (row) => row.projectId === fromProjectId && row.screenId === screenId,
+    )
+  ) {
+    return null;
+  }
+  const source = getHistory().find((entry) => entry.id === screenId);
+  if (!source) return null;
+  const copy = copyEntry(source, toProjectId);
+  if (addScreenToProject(toProjectId, copy.id) === null) {
+    // Destination pair already exists (corrupt input) — never leave an
+    // orphan entry behind.
+    removeEntry(copy.id);
+    return null;
+  }
+  return copy;
+}
+
+/**
+ * Move a member screen between projects (decision 3): remove the source
+ * membership, add it at the destination's tail — the entry's id, spec and
+ * revisions are preserved (no fork, no deep copy). The destination
+ * membership starts route-less (routes are per-project URL contracts) and
+ * the device-local pointer re-stamps to the destination (decision 12), so
+ * the backfill never resurrects the source membership on reload. No-ops
+ * (false) when the pair isn't a source member, already is a destination
+ * member, or the projects are the same.
+ */
+export function moveScreenBetweenProjects(
+  fromProjectId: string,
+  toProjectId: string,
+  screenId: string,
+): boolean {
+  if (fromProjectId === toProjectId) return false;
+  const rows = load();
+  if (
+    !rows.some(
+      (row) => row.projectId === fromProjectId && row.screenId === screenId,
+    ) ||
+    rows.some(
+      (row) => row.projectId === toProjectId && row.screenId === screenId,
+    )
+  ) {
+    return false;
+  }
+  if (!removeScreenFromProject(fromProjectId, screenId)) return false;
+  // Cannot fail: the destination pair was checked free above and a null
+  // route never collides — but guard anyway, restoring the source row.
+  if (addScreenToProject(toProjectId, screenId) === null) {
+    addScreenToProject(fromProjectId, screenId);
+    return false;
+  }
+  setEntryProject(screenId, toProjectId);
   return true;
 }
 
@@ -392,4 +480,125 @@ export function reorderProjectMembers(
   );
   persist();
   return true;
+}
+
+/* ------------------------------------------------------------------ */
+/* Account sync (decision 2 — the `membershipsSyncSpec` write paths)   */
+/* ------------------------------------------------------------------ */
+
+/** The (project, screen) pair key the uniqueness constraint owns. */
+function pairKey(row: { projectId: string; screenId: string }): string {
+  return `${row.projectId}\u0000${row.screenId}`;
+}
+
+/**
+ * Adopt a remote row that won the LWW compare (the loop has already
+ * decided) — insert-or-replace, preserving the row's own timestamps.
+ *
+ * Pair duplicates (decision 11): one row per (project, screen). The REMOTE
+ * id is the DB identity (that row already exists in `project_screens`), so
+ * a locally NEWER twin is re-keyed onto it (its content then overwrites the
+ * remote row on the next push under LWW) and an older one yields to the
+ * remote content. Route collisions with OTHER members (decision 9): the
+ * adopted row's route is DB-constraint truth — a colliding local holder
+ * clears its route (membership kept, re-stamped), never drops.
+ */
+export function applyRemoteMembership(remote: ProjectMembership): void {
+  const rows = load();
+  const twin = rows.find(
+    (row) => row.id !== remote.id && pairKey(row) === pairKey(remote),
+  );
+  const keepLocal = twin !== undefined && twin.updatedAt >= remote.updatedAt;
+  const adopted: ProjectMembership = keepLocal
+    ? { ...twin, id: remote.id }
+    : remote;
+  const dropIds = new Set<string>([remote.id]);
+  if (twin) dropIds.add(twin.id);
+  const now = Date.now();
+  const next = rows
+    .filter((row) => !dropIds.has(row.id))
+    .map((row) =>
+      row.projectId === adopted.projectId &&
+      row.route !== null &&
+      row.route === adopted.route
+        ? { ...row, route: null, updatedAt: now }
+        : row,
+    );
+  cache = sanitizeMemberships([...next, adopted]);
+  persist();
+}
+
+/**
+ * Push-time reconcile (decisions 9/11 — runs against the push's slim view
+ * BEFORE the payload is built, `reconcileProjectSlugs`' shape):
+ *
+ * - a local row whose PAIR a remote row of a different id already owns is
+ *   re-keyed onto that id (its content wins or loses at LWW by timestamp —
+ *   either way exactly one row exists per pair); when the id is already
+ *   taken locally (corrupt input) the twin is dropped instead,
+ * - a local row holding a ROUTE a remote row of a different id owns gets
+ *   the route cleared (membership kept, re-stamped) — a route is a URL
+ *   contract, never suffixed (decision 9).
+ *
+ * May persist a change, which re-schedules this loop's own debounced push;
+ * the second pass finds nothing left to fix (idempotent).
+ */
+export function reconcileProjectRoutes(
+  remote: readonly {
+    id: string;
+    project_id?: unknown;
+    screen_id?: unknown;
+    route?: unknown;
+  }[],
+): void {
+  const pairIds = new Map<string, string>();
+  const routeIds = new Map<string, string>();
+  for (const row of remote) {
+    if (
+      typeof row.project_id !== "string" ||
+      typeof row.screen_id !== "string"
+    ) {
+      continue;
+    }
+    pairIds.set(`${row.project_id}\u0000${row.screen_id}`, row.id);
+    if (typeof row.route === "string") {
+      const normalized = normalizeRoute(row.route);
+      if (normalized !== null) {
+        routeIds.set(`${row.project_id}\u0000${normalized}`, row.id);
+      }
+    }
+  }
+  if (pairIds.size === 0 && routeIds.size === 0) return;
+  const rows = load();
+  const now = Date.now();
+  let changed = false;
+  const next: ProjectMembership[] = [];
+  for (const row of rows) {
+    let out = row;
+    const pairOwner = pairIds.get(pairKey(row));
+    if (pairOwner !== undefined && pairOwner !== row.id) {
+      const taken =
+        pairOwner === row.id || // unreachable, kept for clarity
+        next.some((candidate) => candidate.id === pairOwner) ||
+        rows.some((candidate) => candidate.id === pairOwner);
+      if (taken) {
+        // Corrupt input: the remote id is already used locally for another
+        // row — drop the twin; the pull adopts the remote copy.
+        changed = true;
+        continue;
+      }
+      out = { ...row, id: pairOwner };
+    }
+    if (out.route !== null) {
+      const routeOwner = routeIds.get(`${out.projectId}\u0000${out.route}`);
+      if (routeOwner !== undefined && routeOwner !== out.id) {
+        out = { ...out, route: null, updatedAt: now };
+      }
+    }
+    if (out !== row) changed = true;
+    next.push(out);
+  }
+  if (!changed) return;
+  cache = next;
+  persist();
 }
