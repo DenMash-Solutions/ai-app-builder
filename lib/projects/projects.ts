@@ -53,6 +53,17 @@ export interface Project {
    * dialogs) never lives here. Backfilled to `{}` for stored projects.
    */
   state: Record<string, unknown>;
+  /**
+   * The member screen that serves the bare `/{locale}/{slug}` namespace
+   * (plan 065, decision 5) — EXPLICIT, never derived from creation order.
+   * Absent/unknown = the project has no root entry point (the bare
+   * namespace 404s). Seeded when empty by the first membership
+   * (`addScreenToProject` / first-load backfill — decision 13), changed
+   * only through `setProjectHomeScreenId` afterwards; removing the home
+   * screen clears it rather than reassigning. Synced as
+   * `projects.home_screen_id` (065 amends 064's "server-side fact" note).
+   */
+  homeScreenId?: string | null;
 }
 
 const EMPTY: Project[] = [];
@@ -154,6 +165,14 @@ export function sanitizeProjects(raw: unknown): Project[] {
         ? project.slug
         : slugifyProjectName(project.name);
     const slug = uniqueSlug(wanted, seen);
+    // Home screen (065 decision 5): a valid string rides through; anything
+    // else (absent, null, junk) normalizes to ABSENT — "no home". The seed
+    // paths (decision 13) treat absent and cleared identically, so the
+    // distinction never needs to survive a round trip.
+    const homeScreenId =
+      typeof project.homeScreenId === "string" && project.homeScreenId !== ""
+        ? project.homeScreenId
+        : undefined;
     const next: Project = {
       id: project.id,
       name: project.name,
@@ -165,6 +184,7 @@ export function sanitizeProjects(raw: unknown): Project[] {
       slug,
       // Older stored projects (pre-061-4) carry no shared state.
       state: isSessionState(project.state) ? project.state : {},
+      ...(homeScreenId !== undefined ? { homeScreenId } : {}),
     };
     seen.push(next);
     return next;
@@ -401,6 +421,34 @@ export function renameProject(id: string, name: string): void {
       : project,
   );
   persist();
+}
+
+/**
+ * Set (or with null, clear) a project's EXPLICIT home screen — the seam
+ * task 4's workspace UI uses (plan 065 decision 5). Unknown ids and
+ * unchanged values are no-ops (false = nothing written).
+ *
+ * Membership of `screenId` is the CALLER's contract (decision 10: validated
+ * app-side — `projectHomeScreenId` re-checks membership + existence at
+ * resolve time as the backstop); the projects store must not import the
+ * membership store (would be a cycle). A change re-stamps `updatedAt`: the
+ * projects sync compares LWW timestamps, so a home pick has to travel.
+ */
+export function setProjectHomeScreenId(
+  id: string,
+  screenId: string | null,
+): boolean {
+  const projects = load();
+  const index = projects.findIndex((project) => project.id === id);
+  if (index === -1) return false;
+  if ((projects[index].homeScreenId ?? null) === screenId) return false;
+  cache = projects.map((project, i) =>
+    i === index
+      ? { ...project, homeScreenId: screenId, updatedAt: Date.now() }
+      : project,
+  );
+  persist();
+  return true;
 }
 
 /**

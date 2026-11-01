@@ -542,7 +542,7 @@ describe("projects loop (plan 064)", () => {
     clearHistory();
   });
 
-  test("projectToRow / rowToProject round-trip; server-managed columns never travel", () => {
+  test("projectToRow / rowToProject round-trip; status stays server-side", () => {
     const project: Project = {
       id: "aaaaaaaa-4444-4888-8999-aaaaaaaaaaaa",
       name: "Pokédex",
@@ -550,20 +550,35 @@ describe("projects loop (plan 064)", () => {
       createdAt: 1700000000000,
       updatedAt: 1700000009000,
       state: { cart: ["pikachu"] },
+      homeScreenId: "bbbbbbbb-4444-4888-8999-bbbbbbbbbbbb",
     };
     const row = projectToRow(project, "owner-1");
     expect(row.owner_id).toBe("owner-1");
-    // status/home_screen_id belong to 065/069 — sync must not write them.
+    // status is 069's server-side fact — sync must not write it; the
+    // explicit home (065 decision 10) now travels BOTH ways.
     expect(row.status).toBeUndefined();
-    expect(row.home_screen_id).toBeUndefined();
+    expect(row.home_screen_id).toBe("bbbbbbbb-4444-4888-8999-bbbbbbbbbbbb");
 
     expect(rowToProject(row)).toEqual(project);
 
+    // No home → null on the wire, absent after normalization — both read
+    // as "empty home" for the decision-13 seed paths.
+    const withoutHome = projectToRow(
+      { ...project, homeScreenId: undefined },
+      "owner-1",
+    );
+    expect(withoutHome.home_screen_id).toBeNull();
+    expect(rowToProject(withoutHome)?.homeScreenId).toBeUndefined();
+
     // Corrupt/partial rows: junk timestamp → null, empty name → null,
-    // non-object state → backfilled to {}, non-object row → null.
+    // non-object state → backfilled to {}, non-object row → null, junk
+    // home id → absent.
     expect(rowToProject({ ...row, created_at: "garbage" })).toBeNull();
     expect(rowToProject({ ...row, name: "" })).toBeNull();
     expect(rowToProject({ ...row, state: "scalar" })?.state).toEqual({});
+    expect(
+      rowToProject({ ...row, home_screen_id: 42 })?.homeScreenId,
+    ).toBeUndefined();
     expect(rowToProject("not-an-object")).toBeNull();
   });
 

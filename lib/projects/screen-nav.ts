@@ -27,6 +27,7 @@
  */
 import { getByPath } from "@json-render/core";
 import { getActiveProjectId, type Project } from "./projects";
+import type { ProjectMembership } from "./memberships";
 import {
   buildRoutePath,
   projectHomeScreenId,
@@ -179,6 +180,12 @@ export interface NavigateContext {
    */
   projects?: readonly Project[];
   /**
+   * Membership rows for the home check (065 decision 5) — omitted in
+   * production, where `projectHomeScreenId` reads the store itself;
+   * injected in tests (the store is empty there).
+   */
+  memberships?: readonly ProjectMembership[];
+  /**
    * Live state for deref: the renderer pre-resolves `{"$item": "id"}` params
    * to the record's ABSOLUTE state path (same as `data_mutate`, see
    * `resolveRecordId`) — a `/`-leading string is read against this snapshot.
@@ -251,7 +258,11 @@ function buildNavigateRoute(
     return built !== null ? `${base}/${built}` : base;
   }
   if (built !== null) return `/${locale}/${project.slug}/${built}`;
-  const homeId = projectHomeScreenId(project, context.entries);
+  const homeId = projectHomeScreenId(
+    project,
+    context.entries,
+    context.memberships,
+  );
   if (target.id === homeId) return `/${locale}/${project.slug}`;
   return `/${locale}/${project.slug}/${target.slug ?? target.id}`;
 }

@@ -116,8 +116,9 @@ export default function PreviewPage({
   //  1. the local entry by slug — with a path, its own spec-level `route`
   //     pattern must match it (flat entry paths are a real shape: they are
   //     what buildNavigateRoute pushes for project-less targets),
-  //  2. else the project namespace — bare serves the home screen (oldest
-  //     member), a path resolves in-project (exact slug, then pattern),
+  //  2. else the project namespace — bare serves the EXPLICIT home screen
+  //     (`project.homeScreenId`, 065 decision 5), a path resolves
+  //     in-project (membership routes: exact slug, static, dynamic, pos),
   //  3. else the published projection, BARE ONLY: projects are device-local
   //     and publishing a namespace is follow-up F18, so a path under an
   //     unknown namespace is a 404, not a fallback.

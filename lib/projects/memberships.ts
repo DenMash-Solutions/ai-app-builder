@@ -23,7 +23,7 @@ import {
   setEntryProject,
 } from "@/lib/history";
 import type { HistoryEntry } from "@/lib/history";
-import { getProjects } from "@/lib/projects/projects";
+import { getProjects, setProjectHomeScreenId } from "@/lib/projects/projects";
 
 export const MEMBERSHIP_STORAGE_KEY = "genui-project-memberships";
 
@@ -137,11 +137,28 @@ function backfillFromEntries(
   memberships: ProjectMembership[],
   entries: ReturnType<typeof getHistory>,
   projects: ReturnType<typeof getProjects>,
-): { rows: ProjectMembership[]; changed: boolean } {
+): {
+  rows: ProjectMembership[];
+  changed: boolean;
+  /** Initial home fills for projects whose membership set is created NOW
+   *  (decision 13) — applied by the caller after the cache is set. */
+  homeSeeds: Array<{ projectId: string; screenId: string }>;
+} {
   const projectIds = new Set(projects.map((project) => project.id));
   const held = new Set(
     memberships.map((row) => `${row.projectId}\u0000${row.screenId}`),
   );
+  // Projects that already have rows are NOT first-time: seeding their home
+  // here would resurrect a deliberately cleared one on every reload
+  // (decision 13's rejection).
+  const rowsByProject = new Map<string, number>();
+  for (const row of memberships) {
+    rowsByProject.set(
+      row.projectId,
+      (rowsByProject.get(row.projectId) ?? 0) + 1,
+    );
+  }
+  const homeSeeds: Array<{ projectId: string; screenId: string }> = [];
   let nextPosition = memberships.reduce(
     (max, row) => Math.max(max, row.position),
     -1,
@@ -155,6 +172,27 @@ function backfillFromEntries(
     const key = `${entry.projectId}\u0000${entry.id}`;
     if (held.has(key)) continue;
     held.add(key);
+    const isFirstForRow =
+      (rowsByProject.get(entry.projectId) ?? 0) === 0 &&
+      !homeSeeds.some((seed) => seed.projectId === entry.projectId);
+    if (isFirstForRow) {
+      rowsByProject.set(entry.projectId, 1);
+      const project = projects.find(
+        (candidate) => candidate.id === entry.projectId,
+      );
+      if ((project?.homeScreenId ?? null) === null) {
+        // Oldest member first (iteration order) — the initial fill only.
+        homeSeeds.push({
+          projectId: entry.projectId,
+          screenId: entry.id,
+        });
+      }
+    } else {
+      rowsByProject.set(
+        entry.projectId,
+        (rowsByProject.get(entry.projectId) ?? 0) + 1,
+      );
+    }
     nextPosition += 1;
     added.push({
       id: crypto.randomUUID(),
@@ -166,8 +204,10 @@ function backfillFromEntries(
       updatedAt: entry.updatedAt,
     });
   }
-  if (added.length === 0) return { rows: memberships, changed: false };
-  return { rows: [...memberships, ...added], changed: true };
+  if (added.length === 0) {
+    return { rows: memberships, changed: false, homeSeeds: [] };
+  }
+  return { rows: [...memberships, ...added], changed: true, homeSeeds };
 }
 
 function readStored(): ProjectMembership[] {
@@ -198,6 +238,11 @@ function load(): ProjectMembership[] {
   const backfilled = backfillFromEntries(rows, getHistory(), getProjects());
   cache = backfilled.rows;
   if (backfilled.changed) persist();
+  // Initial home fills (decision 13) AFTER the cache is set — the setter
+  // persists the projects store, whose listeners may re-enter this module.
+  for (const seed of backfilled.homeSeeds) {
+    setProjectHomeScreenId(seed.projectId, seed.screenId);
+  }
   return cache;
 }
 
@@ -297,6 +342,13 @@ export function addScreenToProject(
   };
   cache = [...rows, membership];
   persist();
+  // Initial home fill (decision 13): the first member seeds an empty home
+  // — never a reassignment (decision 5). Unknown project ids no-op inside
+  // the setter, so membership-only callers need no guard here.
+  const project = getProjects().find((candidate) => candidate.id === projectId);
+  if (project && (project.homeScreenId ?? null) === null) {
+    setProjectHomeScreenId(projectId, screenId);
+  }
   return membership;
 }
 
@@ -323,6 +375,13 @@ export function removeScreenFromProject(
   cache = next;
   const entry = getHistory().find((candidate) => candidate.id === screenId);
   if (entry?.projectId === projectId) setEntryProject(screenId, undefined);
+  // Decision 5: removing the home screen does NOT reassign — the root
+  // entry point goes empty until the next fill (decision 13) or an
+  // explicit pick through the task-4 setter.
+  const project = getProjects().find((candidate) => candidate.id === projectId);
+  if (project && (project.homeScreenId ?? null) === screenId) {
+    setProjectHomeScreenId(projectId, null);
+  }
   persist();
   return true;
 }

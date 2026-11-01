@@ -92,6 +92,20 @@ explicit home screen.
     otherwise the idempotent backfill re-adds the removed membership on the
     next load. Rejected: tombstones (extra state for a pointer the backfill
     already trusts).
+13. Initial home assignment (2026-11-01, fills a decision-5 gap): home is
+    seeded when EMPTY at the two seams that give a project a first screen —
+    the first `addScreenToProject`, and the first-load backfill for a
+    project whose membership set is being created for the first time (the
+    generation flow creates screens via `entry.projectId`, never through
+    `addScreenToProject`); removing the home screen clears it (root stays
+    empty until the next add or the explicit setter). Always an initial
+    FILL, never a reassignment (decision 5). Rejected: seeding in the
+    idempotent backfill unconditionally, because it resurrects a
+    deliberately cleared home on every reload; rejected: explicit-only
+    (no setter UI until task 4), because pre-065 projects would 404 the
+    bare namespace. `setProjectHomeScreenId` is the explicit seam for
+    task 4's UI; `projectHomeScreenId` validates membership + entry
+    existence at resolve time (decision 10's app-side check).
 
 ## Files
 
@@ -151,18 +165,29 @@ explicit home screen.
 ### 3. Routes and home screen
 
 - [ ] Route configuration UI using the existing `{param}` syntax
-      (decision 6)
-- [ ] Deterministic matching precedence: exact slug > static > dynamic >
-      position order, including tie cases (`screen-routes.ts`)
-- [ ] Duplicate route rejected at authoring time, unique(project, route)
-      (decision 7)
-- [ ] Explicit `homeScreenId` replaces the `projectHomeScreenId`
+      (decision 6) — store seam done (`setMembershipRoute` rejects
+      duplicates, decision 7); the UI affordance lands with the workspace
+      panel (task 4), like rename
+- [x] Deterministic matching precedence: exact slug > static > dynamic >
+      position order, including tie cases (`screen-routes.ts`) —
+      `resolveProjectRoute` is membership-driven (rows injected or store
+      default); 7 precedence/edge tests green
+- [x] Duplicate route rejected at authoring time, unique(project, route)
+      (decision 7) — `setMembershipRoute` + sanitizer + push-time reconcile
+      (decisions 9/11), tested in WS1/WS2
+- [x] Explicit `homeScreenId` replaces the `projectHomeScreenId`
       oldest-member rule; removing home forces a replacement choice or
       leaves the root entry point empty (decision 5) — carries through the
       projects sync (`Project.homeScreenId` ↔ `projects.home_screen_id`:
       `rowToProject`/`projectToRow`/`sanitizeProjects` + the
       `sync.test.ts` assertion that today pins the column out of the row —
-      amended by this plan, per the 064 comment "belongs to 065/069")
+      amended by this plan, per the 064 comment "belongs to 065/069").
+      Implemented 2026-11-01 with decision 13 (initial-fill seeding):
+      `setProjectHomeScreenId` explicit seam, add/remove home hygiene in
+      the membership store, first-time-backfill seed; resolve-time
+      validation (member + entry exists). 9 unit tests green (setter,
+      sanitizer, seed/no-reassign, clear/no-resurrect, explicit-home
+      resolution, dangling home, precedence ties)
 
 ### 4. Workspace UI and prompt
 
@@ -201,3 +226,4 @@ explicit home screen.
 | 2026-10-31 | approved |
 | 2026-11-01 | review vs. codebase: Task 1's "sync when signed in" overstated (loop unwired) → sync-loop item added; Files gains `sync.ts`/`sync-engine.tsx`/`history.ts`; decisions 11 (pair-dup reconcile) and 12 (remove/move pointer hygiene — backfill resurrection) added; Task 3 notes the `home_screen_id` sync contract |
 | 2026-11-01 | sync loop + copy/move/remove implemented — gate green (lint 0, tsc clean, prettier clean, 879 unit pass incl. 11 new); tasks 1 and 2 (minus rename UI) closed |
+| 2026-11-01 | Task 3 core implemented — decision 13 (initial home fill) added after a clarifying question; `resolveProjectRoute` membership-driven (exact > static > dynamic > position), `Project.homeScreenId` end-to-end (store, sync, resolve, nav) — gate green (lint 0, tsc clean, prettier clean, 888 unit pass incl. 9 new); route-config UI checkbox remains for task 4's panel |

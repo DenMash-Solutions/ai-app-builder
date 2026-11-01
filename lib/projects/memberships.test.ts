@@ -12,6 +12,7 @@ import {
   createProject,
   getProjects,
   removeProject,
+  setProjectHomeScreenId,
 } from "./projects";
 import type { Project } from "./projects";
 import { MEMBERSHIP_STORAGE_KEY, getServerMemberships } from "./memberships";
@@ -529,5 +530,78 @@ describe("membership store", () => {
     // Never a duplicate id after re-keying.
     const ids = store.getMemberships().map((row) => row.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test("first membership seeds the home; later adds never reassign it", () => {
+    const project = seedProject("Home seed");
+    const first = seedEntry("first-screen");
+    const second = seedEntry("second-screen");
+    const homeOf = (): string | null | undefined =>
+      getProjects().find((candidate) => candidate.id === project.id)
+        ?.homeScreenId;
+
+    // Decision 13: the first add fills the empty home…
+    expect(store.addScreenToProject(project.id, first)).not.toBeNull();
+    expect(homeOf()).toBe(first);
+    // …and a later add is NOT a reassignment (decision 5).
+    expect(store.addScreenToProject(project.id, second)).not.toBeNull();
+    expect(homeOf()).toBe(first);
+
+    // An explicit pick is respected — adds keep hands off it.
+    expect(setProjectHomeScreenId(project.id, second)).toBe(true);
+    expect(
+      store.addScreenToProject(project.id, seedEntry("third")),
+    ).not.toBeNull();
+    expect(homeOf()).toBe(second);
+  });
+
+  test("removing the home clears it; removing another member keeps it", () => {
+    const project = seedProject("Home clear");
+    const home = seedEntry("home-screen");
+    const other = seedEntry("other-screen");
+    store.addScreenToProject(project.id, home);
+    store.addScreenToProject(project.id, other);
+    const homeOf = (): string | null | undefined =>
+      getProjects().find((candidate) => candidate.id === project.id)
+        ?.homeScreenId;
+    expect(homeOf()).toBe(home);
+
+    // Removing a NON-home member leaves the front door alone.
+    expect(store.removeScreenFromProject(project.id, other)).toBe(true);
+    expect(homeOf()).toBe(home);
+
+    // Removing the home clears (never reassigns to the survivor) —
+    // decision 5's "leaves the root entry point empty". In-session the
+    // value is an explicit null; a reload normalizes it to absent — both
+    // read as empty through the `?? null` discipline.
+    expect(store.removeScreenFromProject(project.id, home)).toBe(true);
+    expect(homeOf() ?? null).toBeNull();
+  });
+
+  test("backfill seeds home only for a FIRST-TIME membership set (d13)", async () => {
+    const project = seedProject("Backfill home");
+    const screen = seedEntry("backfilled-screen", project.id);
+    ls().removeItem(MEMBERSHIP_STORAGE_KEY); // fresh device / first read
+
+    // A fresh instance runs the backfill: the project's membership set is
+    // created NOW and its home is empty → seeded with the oldest member.
+    const firstSpecifier = "./memberships.ts?home-backfill-1";
+    const first = (await import(firstSpecifier)) as MembershipsModule;
+    expect(first.getMembership(project.id, screen)).not.toBeNull();
+    expect(
+      getProjects().find((candidate) => candidate.id === project.id)
+        ?.homeScreenId,
+    ).toBe(screen);
+
+    // A deliberately cleared home stays cleared across reloads — the rows
+    // already exist, so the backfill's first-time condition never fires.
+    expect(setProjectHomeScreenId(project.id, null)).toBe(true);
+    const secondSpecifier = "./memberships.ts?home-backfill-2";
+    const second = (await import(secondSpecifier)) as MembershipsModule;
+    second.getMembership(project.id, screen); // trigger its first read
+    expect(
+      getProjects().find((candidate) => candidate.id === project.id)
+        ?.homeScreenId ?? null,
+    ).toBeNull(); // still cleared — the backfill never resurrects it
   });
 });

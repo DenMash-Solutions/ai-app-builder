@@ -197,9 +197,11 @@ export function entryToRow(
   };
 }
 
-/** The `projects` row shape the full-row phase returns (064). `status` and
- *  `home_screen_id` are deliberately absent: they belong to plans 065/069,
- *  sync reads past them and never writes them (see `projectToRow`). */
+/** The `projects` row shape the full-row phase returns (064). `status` is
+ *  deliberately absent: it belongs to plan 069 — sync reads past it and
+ *  never writes it (see `projectToRow`). `home_screen_id` is modeled since
+ *  plan 065 (decision 10's sync contract) and travels as an optional
+ *  column. */
 interface ProjectRow {
   id: string;
   owner_id: string;
@@ -208,6 +210,7 @@ interface ProjectRow {
   state: unknown;
   created_at: string;
   updated_at: string;
+  home_screen_id?: string | null;
 }
 
 function isProjectRow(value: unknown): value is ProjectRow {
@@ -232,6 +235,10 @@ export function rowToProject(raw: unknown): Project | null {
   const createdAt = Date.parse(raw.created_at);
   if (!Number.isFinite(createdAt)) return null;
   const updatedAt = Date.parse(raw.updated_at);
+  const homeScreenId =
+    typeof raw.home_screen_id === "string" && raw.home_screen_id !== ""
+      ? raw.home_screen_id
+      : undefined;
   const [project] = sanitizeProjects([
     {
       id: raw.id,
@@ -240,15 +247,17 @@ export function rowToProject(raw: unknown): Project | null {
       state: raw.state,
       createdAt,
       updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
+      ...(homeScreenId !== undefined ? { homeScreenId } : {}),
     },
   ]);
   return project ?? null;
 }
 
-/** `Project` → upsert row. Deliberately PARTIAL: `status` and
- *  `home_screen_id` are server-side facts this device doesn't model —
- *  PostgREST's upsert sets only the provided columns, so an update leaves
- *  them intact and a fresh insert takes the DB defaults. */
+/** `Project` → upsert row. `home_screen_id` travels since plan 065 (the
+ *  explicit home is device-modeled and LWW-synced like the rest); `status`
+ *  stays out — a server-side fact this device doesn't model (069), so
+ *  PostgREST's partial upsert leaves it intact on update and a fresh
+ *  insert takes the DB default. */
 export function projectToRow(
   project: Project,
   ownerId: string,
@@ -259,6 +268,7 @@ export function projectToRow(
     name: project.name,
     slug: project.slug,
     state: project.state,
+    home_screen_id: project.homeScreenId ?? null,
     created_at: new Date(project.createdAt).toISOString(),
     updated_at: new Date(project.updatedAt).toISOString(),
   };

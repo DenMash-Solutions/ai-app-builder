@@ -1,23 +1,30 @@
 /**
- * Route helpers for the project route namespace (plan 061-3, decision 9):
+ * Route helpers for the project route namespace (plan 061-3 decision 9,
+ * reworked by plan 065):
  *
- * - `/{locale}/{project-slug}` serves the project's home screen,
- * - `/{locale}/{project-slug}/{…}` resolves an in-project screen — an exact
- *   screen slug first, then a spec-level `route` pattern (`"{id}"`, same
- *   extension style as `urlSync`) whose `{name}` segments bind into the
- *   target's state seed so the screen loads the right record (a detail
- *   screen's `get` query reads `params.id = {$state: "/id"}`),
+ * - `/{locale}/{project-slug}` serves the project's EXPLICIT home screen
+ *   (`project.homeScreenId`, decision 5),
+ * - `/{locale}/{project-slug}/{…}` resolves an in-project screen from its
+ *   MEMBERSHIP row's configured `route` pattern (`"{id}"` — same syntax as
+ *   the old spec-level route) with deterministic precedence: exact screen
+ *   slug > static pattern > dynamic pattern > position (decision 6), whose
+ *   `{name}` segments bind into the target's state seed so the screen
+ *   loads the right record (a detail screen's `get` query reads
+ *   `params.id = {$state: "/id"}`),
  * - `navigate` params ride the URL as path segments: a target with a
  *   buildable pattern gets `/{locale}/{project-slug}` + built path (the
  *   target's own slug is skipped — the pattern already names the route),
  *   anything else appends to the plain screen route.
  *
- * Pure functions only (dependency-injected) — the editor route
+ * Pure functions only (dependency-injected — the membership lookups take a
+ * rows parameter that defaults to the store) — the editor route
  * (`/ui/[ref]/[[...param]]`) and the preview route (`/[locale]/[slug]/
  * [[...route]]`) own the `window`/`router` side.
  */
 
 import type { HistoryEntry } from "@/lib/history";
+import { getProjectMemberships } from "@/lib/projects/memberships";
+import type { ProjectMembership } from "@/lib/projects/memberships";
 import type { Project } from "@/lib/projects/projects";
 
 /* ------------------------------------------------------------------ */
@@ -166,49 +173,82 @@ export interface ProjectRouteMatch {
 }
 
 /**
- * Resolve the path after a project slug: exact in-project screen slug
- * first (so `/pokedex/settings` wins over any pattern claiming it), then
- * the first screen whose `route` pattern matches. No match → null (the
- * caller 404s rather than silently falling back — a wrong screen at a
- * project URL would seed the wrong state).
+ * Resolve the path after a project slug against MEMBERSHIP rows (plan 065 —
+ * `route` and `position` live on `project_screens`, no longer on the spec).
+ * Precedence (decision 6's deterministic order):
+ *
+ *  1. exact screen slug (or id) — a literal screen always owns its own URL,
+ *  2. STATIC pattern (no `{}`) match — a concrete path contract beats a
+ *     parameterized one regardless of position,
+ *  3. DYNAMIC pattern (has `{}`) match,
+ *  4. within a class: `position` order (the store's sort: position →
+ *     createdAt → id), so ties resolve identically on every device.
+ *
+ * No match → null (the caller 404s rather than silently falling back — a
+ * wrong screen at a project URL would seed the wrong state).
+ * `memberships` defaults to the store's rows for this project; tests inject
+ * rows directly (dependency-injected purity, module docstring).
  */
 export function resolveProjectRoute(
   project: Project,
   entries: readonly HistoryEntry[],
   path: string,
+  memberships: readonly ProjectMembership[] = getProjectMemberships(project.id),
 ): ProjectRouteMatch | null {
   const clean = path.replace(/^\/+|\/+$/g, "");
   if (clean === "") return null;
-  const members = entries.filter((entry) => entry.projectId === project.id);
+  // Membership rows, in deterministic order, joined to their screens —
+  // a row whose screen entry is gone resolves nothing (dangling id).
+  const members = memberships
+    .filter((row) => row.projectId === project.id)
+    .sort(
+      (a, b) =>
+        a.position - b.position ||
+        a.createdAt - b.createdAt ||
+        a.id.localeCompare(b.id),
+    )
+    .map((row) => ({ row, entry: entries.find((e) => e.id === row.screenId) }))
+    .filter(
+      (m): m is { row: ProjectMembership; entry: HistoryEntry } =>
+        m.entry !== undefined,
+    );
+  // 1. exact slug/id — the screen's own URL.
   const exact = members.find(
-    (entry) => entry.slug === clean || entry.id === clean,
+    (m) => m.entry.slug === clean || m.entry.id === clean,
   );
-  if (exact) return { screen: exact, params: {} };
-  for (const entry of members) {
-    const pattern = specRoutePattern(entry.spec);
-    if (!pattern) continue;
-    const params = matchRoutePattern(pattern, clean);
-    if (params) return { screen: entry, params };
+  if (exact) return { screen: exact.entry, params: {} };
+  // 2./3. static patterns before dynamic, position order within each class.
+  for (const dynamic of [false, true]) {
+    for (const m of members) {
+      if (m.row.route === null) continue;
+      if (routePatternParams(m.row.route).length > 0 !== dynamic) continue;
+      const params = matchRoutePattern(m.row.route, clean);
+      if (params) return { screen: m.entry, params };
+    }
   }
   return null;
 }
 
 /**
  * The project's home screen — what serves the bare `/{locale}/{slug}`
- * segment. v1 rule: the **oldest** member entry (the screen the project
- * started from; a stable choice that doesn't flip while editing). No member
- * → null (the caller 404s the bare namespace).
+ * segment (plan 065 decision 5): the EXPLICIT `project.homeScreenId`,
+ * validated at resolve time — it must still be a member (decision 10's
+ * app-side check) and its entry must exist (dangling ids after a screen
+ * delete leave the root empty, never a wrong screen). No/unknown home →
+ * null (the caller 404s the bare namespace); the oldest-member rule is
+ * gone (decision 5 rejects relying on creation order).
+ * `memberships` defaults to the store — injected in tests.
  */
 export function projectHomeScreenId(
   project: Project,
-  entries: readonly {
-    id: string;
-    projectId?: string | undefined;
-    createdAt?: number | undefined;
-  }[],
+  entries: readonly { id: string }[],
+  memberships: readonly ProjectMembership[] = getProjectMemberships(project.id),
 ): string | null {
-  const oldest = entries
-    .filter((entry) => entry.projectId === project.id)
-    .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))[0];
-  return oldest?.id ?? null;
+  const homeId = project.homeScreenId ?? null;
+  if (homeId === null) return null;
+  const isMember = memberships.some(
+    (row) => row.projectId === project.id && row.screenId === homeId,
+  );
+  if (!isMember) return null;
+  return entries.some((entry) => entry.id === homeId) ? homeId : null;
 }

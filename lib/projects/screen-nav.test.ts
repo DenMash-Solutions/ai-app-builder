@@ -9,6 +9,7 @@ import {
   toScreenListings,
 } from "./screen-nav";
 import type { ScreenSource } from "./screen-nav";
+import type { ProjectMembership } from "./memberships";
 import {
   createProject,
   getProjects,
@@ -262,6 +263,29 @@ describe("runNavigate (061-3 params + project namespace)", () => {
       createdAt: 1,
       updatedAt: 1,
       state: {},
+      // Explicit home (065 decision 5) — resolves through the membership
+      // rows below, never by creation order.
+      homeScreenId: "grid",
+    },
+  ];
+  const MEMBERSHIPS: ProjectMembership[] = [
+    {
+      id: "m-grid",
+      projectId: "p1",
+      screenId: "grid",
+      route: null,
+      position: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    {
+      id: "m-detail",
+      projectId: "p1",
+      screenId: "detail",
+      route: null,
+      position: 1,
+      createdAt: 2,
+      updatedAt: 2,
     },
   ];
   const GRID: ScreenSource = {
@@ -348,6 +372,7 @@ describe("runNavigate (061-3 params + project namespace)", () => {
       surface: "preview",
       locale: "en",
       projects: PROJECTS,
+      memberships: MEMBERSHIPS,
       navigate,
     } as const;
 
@@ -406,6 +431,7 @@ describe("runNavigate (061-3 params + project namespace)", () => {
         surface: "preview",
         locale: "en",
         projects: PROJECTS,
+        memberships: MEMBERSHIPS,
         navigate,
       },
     );
@@ -418,6 +444,7 @@ describe("runNavigate (061-3 params + project namespace)", () => {
         surface: "preview",
         locale: "en",
         projects: PROJECTS,
+        memberships: MEMBERSHIPS,
         state: STATE,
         navigate,
       },

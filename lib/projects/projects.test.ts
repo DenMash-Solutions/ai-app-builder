@@ -630,4 +630,76 @@ describe("project store", () => {
     expect(slugs).not.toContain("admin");
     expect(new Set(slugs).size).toBe(slugs.length);
   });
+
+  test("setProjectHomeScreenId sets, clears and re-stamps (065 decision 5)", () => {
+    const project = store.createProject("Home test") as Project;
+    const homeEntry = createEntry("home screen", makeSpec("home"));
+    const otherEntry = createEntry("other screen", makeSpec("other"));
+    addEntry(homeEntry);
+    addEntry(otherEntry);
+    const home = homeEntry.id;
+    const other = otherEntry.id;
+
+    // Set: home travels, updatedAt moves (the projects sync compares LWW).
+    expect(store.setProjectHomeScreenId(project.id, home)).toBe(true);
+    const set = store.getProjects().find((c) => c.id === project.id);
+    expect(set?.homeScreenId).toBe(home);
+    expect(set?.updatedAt).toBeGreaterThanOrEqual(project.updatedAt);
+
+    // Unchanged value → no-op, no extra stamp.
+    expect(store.setProjectHomeScreenId(project.id, home)).toBe(false);
+
+    // Switch + clear are explicit choices — never derived from members.
+    expect(store.setProjectHomeScreenId(project.id, other)).toBe(true);
+    expect(
+      store.getProjects().find((c) => c.id === project.id)?.homeScreenId,
+    ).toBe(other);
+    expect(store.setProjectHomeScreenId(project.id, null)).toBe(true);
+    // In-session the cleared value is an explicit null (a reload normalizes
+    // it to absent) — both read as empty through `?? null` (decision 13).
+    expect(
+      store.getProjects().find((c) => c.id === project.id)?.homeScreenId ??
+        null,
+    ).toBeNull();
+
+    // Unknown project is a no-op (false, nothing thrown).
+    expect(store.setProjectHomeScreenId("nope", home)).toBe(false);
+  });
+
+  test("sanitizer keeps a valid home and drops junk (065)", async () => {
+    ls().setItem(
+      PROJECT_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "with-home",
+          name: "With home",
+          createdAt: 1,
+          updatedAt: 1,
+          homeScreenId: "screen-9",
+        },
+        {
+          id: "junk-home",
+          name: "Junk home",
+          createdAt: 2,
+          updatedAt: 2,
+          homeScreenId: 42,
+        },
+        {
+          id: "null-home",
+          name: "Null home",
+          createdAt: 3,
+          updatedAt: 3,
+          homeScreenId: null,
+        },
+      ]),
+    );
+    const specifier = "./projects.ts?home-sanitize";
+    const fresh = (await import(specifier)) as ProjectsModule;
+    const byId = new Map(
+      fresh.getProjects().map((candidate) => [candidate.id, candidate]),
+    );
+    expect(byId.get("with-home")?.homeScreenId).toBe("screen-9");
+    expect(byId.get("junk-home")?.homeScreenId).toBeUndefined();
+    expect(byId.get("null-home")?.homeScreenId).toBeUndefined();
+  });
 });
