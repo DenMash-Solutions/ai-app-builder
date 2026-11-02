@@ -71,7 +71,7 @@ Partial Prefetching) and gives published pages an instant shell.
   empty-state-only → 3 e2e tests fail; fresh `page.reload()` confirms the
   empty state is correct). The migration guide's remedy applies verbatim:
   "if your code relied on unmounting to clear state, add explicit reset
-  logic." **Fix (per brief §4 — two complementary safeguards):**
+  logic." **Fix (per brief section 4 — two complementary safeguards):**
   1. **Explicit handoff state** — `handoffPending` local state, set in the
      generate-completion branch before `router.push(/ui/{id})`, and the
      display rule becomes `isStreaming ? spec : (routeEntry?.spec ?
@@ -87,8 +87,8 @@ Partial Prefetching) and gives published pages an instant shell.
      completion effect so the handoff frame never blanks)
   **Rejected**: pathname-departure detection (attempt 1 — hidden trees
   never observe the intermediate pathname; proven empirically), DOM
-  visibility signals, `bfcacheId` keying (brief §6). **Also in scope**:
-  verify (brief §5) whether a parked completion can navigate — probe via
+  visibility signals, `bfcacheId` keying (brief section 6). **Also in scope**:
+  verify (brief section 5) whether a parked completion can navigate — probe via
   `delayMs` mock + park-mid-stream test; `useUIStream.clear()` confirmed
   local-only (`setSpec(null); setError(null)` — no abort). Scope:
   `components/playground/playground.tsx` only. The 10 `data-jr-key`

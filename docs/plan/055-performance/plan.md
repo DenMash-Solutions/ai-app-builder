@@ -25,7 +25,7 @@ query-shape change; 2 is measurement-driven; 3 needs a cache-model decision
 - `pull()` filters `.eq("owner_id", ownerId)` server-side (the client
   filters by owner already; today an admin's SELECT downloads every
   user's rows + revisions — recorded lesson
-  `.agents/lessons/dev-server-e2e-triage.md` §3: 92 rows → ~7s sync
+  `.agents/lessons/dev-server-e2e-triage.md` section 3: 92 rows → ~7s sync
   cycle); `push()` deliberately keeps its unfiltered select so the F7
   ownership guard can still SEE foreign rows (decision 5)
 - `pull()` becomes two-phase: slim compare pass
