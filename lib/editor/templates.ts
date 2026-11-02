@@ -100,6 +100,24 @@ function persist(): void {
   for (const listener of listeners) listener();
 }
 
+/** Plan 066 decision 5: called after every successful save while a listener
+ *  is registered. The SyncEngine registers it for the signed-in session so
+ *  new templates land as catalog rows too (`lib/catalog/`); signed out no
+ *  listener exists and saves stay local-only. Kept as a seam here so this
+ *  module never imports the catalog (the catalog imports US for the seed —
+ *  a direct import would be a cycle). */
+export type TemplateSavedListener = (template: ComponentTemplate) => void;
+
+let savedListener: TemplateSavedListener | null = null;
+
+/** Registers (or with null, clears) the save observer — single listener by
+ *  design: the SyncEngine is the only registrar, and its cleanup clears. */
+export function setTemplateSavedListener(
+  listener: TemplateSavedListener | null,
+): void {
+  savedListener = listener;
+}
+
 /**
  * Snapshot `key`'s subtree (detached — later edits to the source spec never
  * affect the saved template) and add it to the library. Returns the stored
@@ -130,6 +148,7 @@ export function saveTemplate(
   };
   current = [...current, template];
   persist();
+  savedListener?.(template);
   return template;
 }
 

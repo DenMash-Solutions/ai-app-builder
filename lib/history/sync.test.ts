@@ -12,17 +12,41 @@ import {
   entryToRow,
   flushSync,
   getSyncStatus,
+  assetToRow,
+  catalogAssetsSyncSpec,
+  catalogInstallsSyncSpec,
+  catalogVersionsSyncSpec,
+  installToRow,
   membershipToRow,
   membershipsSyncSpec,
   projectToRow,
   projectsSyncSpec,
+  rowToCatalogAsset,
+  rowToCatalogInstall,
+  rowToCatalogVersion,
   rowToEntry,
   rowToMembership,
   rowToProject,
   startSync,
   startTableSync,
+  versionToRow,
 } from "./sync";
 import type { SelectBuilder, SyncClient } from "./sync";
+import {
+  CATALOG_STORAGE_KEY,
+  addCatalogInstall,
+  createCatalogAsset,
+  getCatalogAssets,
+  getCatalogInstalls,
+  getCatalogVersions,
+  removeCatalogAsset,
+  removeCatalogInstall,
+} from "@/lib/catalog/catalog";
+import type {
+  CatalogAsset,
+  CatalogAssetVersion,
+  CatalogInstall,
+} from "@/lib/catalog/catalog";
 import {
   ACTIVE_PROJECT_STORAGE_KEY,
   PROJECT_STORAGE_KEY,
@@ -516,6 +540,77 @@ function membershipRow(
     created_at: new Date(1000).toISOString(),
     updated_at: new Date(overrides.updatedAt ?? 5000).toISOString(),
     __table: "project_screens",
+  };
+}
+
+function assetRow(
+  id: string,
+  overrides: Partial<{
+    updatedAt: number;
+    name: string;
+    type: string;
+    visibility: string;
+    latestVersionId: string | null;
+    ownerId: string;
+  }> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    owner_id: overrides.ownerId ?? "owner-1",
+    name: overrides.name ?? "remote asset",
+    description: null,
+    type: overrides.type ?? "component",
+    visibility: overrides.visibility ?? "private",
+    latest_version_id: overrides.latestVersionId ?? null,
+    created_at: new Date(1000).toISOString(),
+    updated_at: new Date(overrides.updatedAt ?? 5000).toISOString(),
+    __table: "catalog_assets",
+  };
+}
+
+function versionRow(
+  id: string,
+  overrides: Partial<{
+    updatedAt: number;
+    assetId: string;
+    version: number;
+    ownerId: string;
+  }> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    owner_id: overrides.ownerId ?? "owner-1",
+    asset_id: overrides.assetId ?? "11111111-2222-4333-8444-555555555555",
+    version: overrides.version ?? 1,
+    spec: makeSpec("remote"),
+    changelog: null,
+    created_at: new Date(1000).toISOString(),
+    updated_at: new Date(overrides.updatedAt ?? 5000).toISOString(),
+    __table: "catalog_asset_versions",
+  };
+}
+
+function installRow(
+  id: string,
+  overrides: Partial<{
+    updatedAt: number;
+    projectId: string;
+    assetId: string;
+    versionId: string;
+    ownerId: string;
+  }> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    owner_id: overrides.ownerId ?? "owner-1",
+    project_id: overrides.projectId ?? "11111111-2222-4333-8444-555555555555",
+    asset_id: overrides.assetId ?? "22222222-3333-4444-5555-666666666666",
+    version_id: overrides.versionId ?? "33333333-4444-5555-6666-777777777777",
+    target_ui_id: null,
+    target_key: null,
+    created_at: new Date(1000).toISOString(),
+    updated_at: new Date(overrides.updatedAt ?? 5000).toISOString(),
+    __table: "catalog_installs",
   };
 }
 
@@ -1092,5 +1187,307 @@ describe("memberships loop (plan 065)", () => {
     expect(getMembership(project, screen)).toBeNull();
     expect(state.rows.some((row) => row.id === remoteId)).toBe(false);
     stop();
+  });
+});
+
+describe("catalog loops (plan 066)", () => {
+  let state: MockState;
+
+  /** Reset through the store's own API so cache and storage agree — the
+   *  module instance (and its cache) is shared across test files. */
+  const resetCatalog = (): void => {
+    for (const asset of [...getCatalogAssets()]) removeCatalogAsset(asset.id);
+    for (const install of [...getCatalogInstalls()]) {
+      removeCatalogInstall(install.id);
+    }
+    storage().removeItem(CATALOG_STORAGE_KEY);
+  };
+
+  beforeEach(() => {
+    storage(); // install/reuse the shared window so the store isn't SSR-empty
+    clearHistory();
+    resetCatalog();
+    state = { rows: [], upserts: [], deletes: [], selects: [] };
+  });
+
+  afterEach(() => {
+    clearHistory();
+    resetCatalog();
+  });
+
+  test("asset/version/install mappers round-trip; owner stamp and corrupt rows", () => {
+    const asset: CatalogAsset = {
+      id: "aaaaaaaa-4444-4888-8999-cccccccccccc",
+      name: "Shared card",
+      description: "A card",
+      type: "component",
+      visibility: "public",
+      latestVersionId: "bbbbbbbb-4444-4888-8999-dddddddddddd",
+      createdAt: 1700000000000,
+      updatedAt: 1700000009000,
+    };
+    const assetOut = assetToRow(asset, "owner-1");
+    expect(assetOut.owner_id).toBe("owner-1");
+    expect(assetOut.latest_version_id).toBe(asset.latestVersionId);
+    expect(assetOut.visibility).toBe("public");
+    expect(rowToCatalogAsset(assetOut)).toEqual(asset);
+    // Corrupt/partial rows: junk timestamp, missing columns, non-object.
+    expect(
+      rowToCatalogAsset({ ...assetOut, created_at: "garbage" }),
+    ).toBeNull();
+    expect(rowToCatalogAsset({ ...assetOut, name: undefined })).toBeNull();
+    expect(rowToCatalogAsset("not-an-object")).toBeNull();
+
+    const version: CatalogAssetVersion = {
+      id: "cccccccc-4444-4888-8999-eeeeeeeeeeee",
+      assetId: asset.id,
+      version: 2,
+      spec: makeSpec("v2"),
+      changelog: "tweaks",
+      createdAt: 1700000001000,
+      updatedAt: 1700000008000,
+    };
+    const versionOut = versionToRow(version, "owner-1");
+    expect(versionOut.owner_id).toBe("owner-1");
+    expect(versionOut.asset_id).toBe(asset.id);
+    expect(versionOut.version).toBe(2);
+    expect(rowToCatalogVersion(versionOut)).toEqual(version);
+    expect(rowToCatalogVersion({ ...versionOut, spec: null })).toBeNull();
+    expect(
+      rowToCatalogVersion({ ...versionOut, asset_id: undefined }),
+    ).toBeNull();
+    expect(rowToCatalogVersion(null)).toBeNull();
+
+    const install: CatalogInstall = {
+      id: "dddddddd-4444-4888-8999-ffffffffffff",
+      projectId: "11111111-2222-4333-8444-555555555555",
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: "ui-9",
+      targetKey: null,
+      createdAt: 1700000002000,
+      updatedAt: 1700000007000,
+    };
+    const installOut = installToRow(install, "owner-1");
+    expect(installOut.owner_id).toBe("owner-1");
+    expect(installOut.version_id).toBe(version.id);
+    expect(installOut.target_ui_id).toBe("ui-9");
+    expect(rowToCatalogInstall(installOut)).toEqual(install);
+    expect(
+      rowToCatalogInstall({ ...installOut, version_id: undefined }),
+    ).toBeNull();
+    expect(
+      rowToCatalogInstall({ ...installOut, created_at: "nope" }),
+    ).toBeNull();
+  });
+
+  test("pulls remote-only rows through all three catalog loops", async () => {
+    const assetId = "aaaaaaaa-4444-4888-8999-0000000000a1";
+    const versionId = "bbbbbbbb-4444-4888-8999-0000000000b1";
+    const installId = "cccccccc-4444-4888-8999-0000000000c1";
+    state.rows.push(
+      assetRow(assetId, {
+        name: "Shared card",
+        visibility: "public",
+        latestVersionId: versionId,
+        updatedAt: 7000,
+      }),
+      versionRow(versionId, { assetId, version: 3, updatedAt: 7000 }),
+      installRow(installId, { assetId, versionId, updatedAt: 7000 }),
+    );
+
+    const client = makeClient(state);
+    const stops = [
+      startTableSync(client, "owner-1", catalogAssetsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogVersionsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogInstallsSyncSpec, {
+        debounceMs: 1,
+      }),
+    ];
+    await sleep(30);
+
+    expect(getCatalogAssets()).toHaveLength(1);
+    const [asset] = getCatalogAssets();
+    expect(asset.name).toBe("Shared card");
+    expect(asset.visibility).toBe("public");
+    expect(asset.latestVersionId).toBe(versionId);
+    expect(getCatalogVersions()).toHaveLength(1);
+    expect(getCatalogVersions()[0].version).toBe(3);
+    expect(getCatalogVersions()[0].assetId).toBe(assetId);
+    expect(getCatalogInstalls()).toHaveLength(1);
+    expect(getCatalogInstalls()[0].versionId).toBe(versionId);
+
+    // Slim phase-1 pin (plan 055 A): versions compare on asset_id + version
+    // too — the reconcile needs them before the payload is built.
+    const versionSelects = state.selects.filter(
+      (select) =>
+        select.columns === "id, owner_id, updated_at, asset_id, version",
+    );
+    expect(versionSelects.length).toBeGreaterThan(0);
+
+    expect(getSyncStatus()).toBe("saved");
+    stops.forEach((stop) => stop());
+    expect(getSyncStatus()).toBe("idle");
+  });
+
+  test("pushes local asset, version and install rows with owner stamps", async () => {
+    const { asset, version } = createCatalogAsset({
+      name: "Local card",
+      type: "component",
+      spec: makeSpec("v1"),
+    })!;
+    const install = addCatalogInstall({
+      projectId: "11111111-2222-4333-8444-555555555555",
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: "ui-1",
+    })!;
+
+    const client = makeClient(state);
+    const stops = [
+      startTableSync(client, "owner-1", catalogAssetsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogVersionsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogInstallsSyncSpec, {
+        debounceMs: 1,
+      }),
+    ];
+    await sleep(30);
+
+    const pushed = state.upserts.flat();
+    const assetOut = pushed.find((row) => row.id === asset.id);
+    expect(assetOut?.owner_id).toBe("owner-1");
+    expect(assetOut?.name).toBe("Local card");
+    expect(assetOut?.visibility).toBe("private");
+    expect(assetOut?.latest_version_id).toBe(version.id);
+
+    const versionOut = pushed.find((row) => row.id === version.id);
+    expect(versionOut?.owner_id).toBe("owner-1");
+    expect(versionOut?.asset_id).toBe(asset.id);
+    expect(versionOut?.version).toBe(1);
+    expect(versionOut?.spec).toEqual(makeSpec("v1"));
+
+    const installOut = pushed.find((row) => row.id === install.id);
+    expect(installOut?.owner_id).toBe("owner-1");
+    expect(installOut?.project_id).toBe(install.projectId);
+    expect(installOut?.version_id).toBe(version.id);
+    expect(installOut?.target_ui_id).toBe("ui-1");
+
+    expect(state.deletes).toHaveLength(0); // nothing was removed
+    stops.forEach((stop) => stop());
+  });
+
+  test("equal remote copy: assets re-push (LWW >=), versions never (immutable >)", async () => {
+    const { asset, version } = createCatalogAsset({
+      name: "Card",
+      type: "component",
+      spec: makeSpec("v1"),
+    })!;
+
+    // Session 1: the local rows land remotely.
+    let stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      catalogAssetsSyncSpec,
+      {
+        debounceMs: 1,
+      },
+    );
+    await sleep(20);
+    stop();
+    stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      catalogVersionsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+    stop();
+    expect(state.rows.some((row) => row.id === version.id)).toBe(true);
+
+    // Session 2: the remote copies are EQUAL. The versions table's
+    // immutability trigger refuses updates, so the strict `>` compare must
+    // keep that payload empty — while the assets loop's plain `>=` LWW
+    // re-pushes (an identical upsert is legal there).
+    const upsertsBefore = state.upserts.length;
+    stop = startTableSync(makeClient(state), "owner-1", catalogAssetsSyncSpec, {
+      debounceMs: 1,
+    });
+    await sleep(20);
+    stop();
+    stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      catalogVersionsSyncSpec,
+      { debounceMs: 1 },
+    );
+    await sleep(20);
+    stop();
+
+    const after = state.upserts.slice(upsertsBefore).flat();
+    expect(after.some((row) => row.id === asset.id)).toBe(true);
+    expect(after.some((row) => row.id === version.id)).toBe(false);
+  });
+
+  test("after a cascade the asset + install loops delete; versions never do", async () => {
+    const { asset, version } = createCatalogAsset({
+      name: "Card",
+      type: "component",
+      spec: makeSpec("v1"),
+    })!;
+    const install = addCatalogInstall({
+      projectId: "11111111-2222-4333-8444-555555555555",
+      assetId: asset.id,
+      versionId: version.id,
+    })!;
+
+    const client = makeClient(state);
+    const stops = [
+      startTableSync(client, "owner-1", catalogAssetsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogVersionsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogInstallsSyncSpec, {
+        debounceMs: 1,
+      }),
+    ];
+    await sleep(30);
+    const ids = [asset.id, version.id, install.id];
+    expect(
+      state.rows.filter((row) => ids.includes(row.id as string)),
+    ).toHaveLength(3);
+
+    // Both devices removed the asset: the DB cascade took the version and
+    // install rows with it (Task 1's rejection test) and the local cascade
+    // mirrored that in the same write.
+    state.rows = state.rows.filter((row) => !ids.includes(row.id as string));
+    removeCatalogAsset(asset.id);
+    expect(getCatalogVersions()).toHaveLength(0);
+
+    // Same session — syncedIds still holds the pushed ids, so the debounced
+    // push reaches the delete pass.
+    const upsertsBefore = state.upserts.length;
+    await sleep(30);
+
+    const deleted = state.deletes.flat();
+    expect(deleted).toContain(asset.id);
+    expect(deleted).toContain(install.id);
+    // The versions loop's delete pass is skipped (immutableRows): versions
+    // only leave with their owning asset — a direct delete would race the
+    // asset loop and trip the immutability trigger mid-race.
+    expect(deleted).not.toContain(version.id);
+    // And nothing re-upserted: no resurrection of the removed rows.
+    expect(state.upserts.slice(upsertsBefore).flat()).toHaveLength(0);
+
+    stops.forEach((stop) => stop());
   });
 });

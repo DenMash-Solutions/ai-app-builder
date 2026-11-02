@@ -107,12 +107,12 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 
 ### 2. Catalog library (lib/catalog/)
 
-- [ ] Asset and version CRUD on the existing client/seam patterns
-- [ ] Publish-new-version flow: keep old version, insert immutable version,
+- [x] Asset and version CRUD on the existing client/seam patterns
+- [x] Publish-new-version flow: keep old version, insert immutable version,
       bump `latest_version_id`, optional changelog
-- [ ] Lazy seed of the `genui-component-templates` localStorage library into
+- [x] Lazy seed of the `genui-component-templates` localStorage library into
       catalog rows without duplicates (decision 5)
-- [ ] Catalog sync: pull/push `catalog_assets` / `catalog_asset_versions` /
+- [x] Catalog sync: pull/push `catalog_assets` / `catalog_asset_versions` /
       installs in `lib/history/sync.ts` (third-loop pattern from 065),
       idempotent on conflict (decision 9)
 
@@ -166,3 +166,4 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 | 2026-11-02 | clarifications answered (Insert-picker tab, screen install = uis row + membership in active project, catalog joins account sync); decisions 7-9 added, decision 3 resolved to a BEFORE UPDATE/DELETE trigger; scope + files + tasks updated |
 | 2026-11-02 | approved — recommended options accepted as decisions 7-9 |
 | 2026-11-02 | Task 1 done — migration `plan_066_catalog_schema` applied (live: 11 tables, 37 policies, 5 functions); DB rejection test passed (UPDATE refused, direct DELETE refused, spec unchanged, asset cascade cleans versions+installs); advisors: no ERRORs — 0012 fires on all 11 tables project-wide (anonymous sign-ins enabled, pre-existing shape), F5/F6/genui-search-path WARNs pre-existing |
+| 2026-11-02 | Task 2 done — `lib/catalog/` store (CRUD, publish, install pins, id-keyed seed + `startTemplateSeeding`), `setTemplateSavedListener` seam, 3 sync loops with `immutableRows` (strict `>` + no delete pass) and version-collision renumber reconcile; tests: catalog 11, templates +1, sync +5 → gate 917 pass / 0 fail |

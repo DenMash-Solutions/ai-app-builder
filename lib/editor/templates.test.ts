@@ -196,4 +196,30 @@ describe("template library store", () => {
     expect(notified).toBe(1);
     unsubscribe();
   });
+
+  test("setTemplateSavedListener observes saves, rejects nothing else (plan 066)", () => {
+    // The seam the catalog seed registers (decision 5): fires per SAVE, not
+    // per rename/remove — the catalog mirrors new templates only.
+    const seen: ComponentTemplate[] = [];
+    store.setTemplateSavedListener((template) => {
+      seen.push(template);
+    });
+
+    const saved = store.saveTemplate("Observed", makeSpec(), "text-1")!;
+    expect(seen.map((template) => template.id)).toEqual([saved.id]);
+
+    store.renameTemplate(saved.id, "Renamed");
+    store.removeTemplate(saved.id);
+    expect(seen).toHaveLength(1); // no listener call without a save
+
+    // Single-listener design: a later registration replaces the earlier,
+    // and null clears it (SyncEngine's cleanup).
+    store.setTemplateSavedListener(() => {
+      throw new Error("replaced listener must not run");
+    });
+    store.setTemplateSavedListener(null);
+    const silent = store.saveTemplate("Silent", makeSpec(), "text-1");
+    expect(silent).not.toBeNull();
+    expect(seen).toHaveLength(1);
+  });
 });

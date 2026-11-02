@@ -21,6 +21,24 @@ import {
   subscribeMemberships,
 } from "@/lib/projects/memberships";
 import type { ProjectMembership } from "@/lib/projects/memberships";
+import {
+  applyRemoteCatalogAsset,
+  applyRemoteCatalogInstall,
+  applyRemoteCatalogVersion,
+  getCatalogAssets,
+  getCatalogInstalls,
+  getCatalogVersions,
+  reconcileCatalogVersions,
+  sanitizeCatalogAssets,
+  sanitizeCatalogInstalls,
+  sanitizeCatalogVersions,
+  subscribeCatalog,
+} from "@/lib/catalog/catalog";
+import type {
+  CatalogAsset,
+  CatalogAssetVersion,
+  CatalogInstall,
+} from "@/lib/catalog/catalog";
 
 /**
  * Local-first account sync (plan Q7): localStorage stays the working copy;
@@ -29,11 +47,12 @@ import type { ProjectMembership } from "@/lib/projects/memberships";
  * forget — the app never blocks on Supabase.
  *
  * Plan 064 runs the SAME machinery as a second loop over `projects`
- * (`startTableSync` + `projectsSyncSpec`), and plan 065 as a third over
- * `project_screens` (`membershipsSyncSpec`): the loop is parameterized
- * over table + row/entity mappers so every loop shares ONE status dot and
- * ONE `flushSync` path (design decision 1) instead of a parallel sync
- * service.
+ * (`startTableSync` + `projectsSyncSpec`), plan 065 as a third over
+ * `project_screens` (`membershipsSyncSpec`), and plan 066 as three more
+ * over `catalog_assets` / `catalog_asset_versions` / `catalog_installs`
+ * (decision 9): the loop is parameterized over table + row/entity mappers
+ * so every loop shares ONE status dot and ONE `flushSync` path (design
+ * decision 1) instead of a parallel sync service.
  */
 
 export type SyncStatus = "idle" | "syncing" | "saved" | "offline";
@@ -148,6 +167,8 @@ export interface SlimRow {
   project_id?: string;
   screen_id?: string;
   route?: string | null;
+  asset_id?: string;
+  version?: number;
 }
 
 function isSlimRow(value: unknown): value is SlimRow {
@@ -297,6 +318,14 @@ export interface SyncSpec<T extends { id: string; updatedAt: number }> {
    *  up local data colliding with remote rows (slug uniqueness, 064
    *  decision 5). Absent for entries — their namespaces reconcile today. */
   reconcile?(remote: readonly SlimRow[]): void;
+  /** Rows that NEVER change once created (066 versions — the DB's
+   *  immutability trigger refuses updates): the compare is strict `>` so an
+   *  equal remote copy is treated as already synced and never re-upserted
+   *  (an identical re-push would still hit the trigger), and the delete
+   *  pass is skipped — those rows only leave the store with their owning
+   *  asset, whose remote `ON DELETE CASCADE` cleans up (pushing deletes
+   *  races the asset loop and trips the same trigger mid-race). */
+  immutableRows?: boolean;
 }
 
 /**
@@ -417,6 +446,14 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
         // Belt to pull's braces: never overwrite a row another account
         // owns — the upsert stamps owner_id = us and would steal it (F7).
         if (remote && remote.owner_id !== ownerId) return false;
+        // Immutable rows (066): an EQUAL remote copy is already synced —
+        // strict `>` keeps the payload empty instead of re-upserting rows
+        // the table's immutability trigger would reject. Missing remotely
+        // or strictly newer locally still ships; never clobber a fresher
+        // write from another device.
+        if (spec.immutableRows) {
+          return !remote || entity.updatedAt > Date.parse(remote.updated_at);
+        }
         // Missing remotely, or local write not older than the remote copy —
         // never clobber a fresher write from another device.
         return !remote || entity.updatedAt >= Date.parse(remote.updated_at);
@@ -434,21 +471,26 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
       }
     }
 
-    const removed = [...syncedIds].filter((id) => {
-      if (localIds.has(id)) return false;
-      // A stale local copy of another account's row must not delete it.
-      const remote = remoteById.get(id);
-      return !remote || remote.owner_id === ownerId;
-    });
-    if (removed.length > 0) {
-      const { error: deleteError } = await client
-        .from(spec.table)
-        .delete()
-        .in("id", removed);
-      if (stopped) return;
-      if (deleteError) {
-        setLoopStatus(spec.table, "offline");
-        return;
+    // Immutable rows never push deletes (066): they only leave the store
+    // with their owning asset, whose remote cascade owns the cleanup — a
+    // direct delete here would race the asset loop and hit the trigger.
+    if (!spec.immutableRows) {
+      const removed = [...syncedIds].filter((id) => {
+        if (localIds.has(id)) return false;
+        // A stale local copy of another account's row must not delete it.
+        const remote = remoteById.get(id);
+        return !remote || remote.owner_id === ownerId;
+      });
+      if (removed.length > 0) {
+        const { error: deleteError } = await client
+          .from(spec.table)
+          .delete()
+          .in("id", removed);
+        if (stopped) return;
+        if (deleteError) {
+          setLoopStatus(spec.table, "offline");
+          return;
+        }
       }
     }
 
@@ -619,6 +661,243 @@ export const membershipsSyncSpec: SyncSpec<ProjectMembership> = {
   toEntity: rowToMembership,
   toRow: membershipToRow,
   reconcile: reconcileProjectRoutes,
+};
+
+/** The `catalog_assets` row shape the full-row phase returns (066).
+ *  `description`/`type`/`visibility`/`latest_version_id` ride as `unknown`
+ *  — the store's sanitizer validates them (corrupt values never reach the
+ *  UI), the row gate only pins the fields mappers cannot work without. */
+interface CatalogAssetRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: unknown;
+  type: unknown;
+  visibility: unknown;
+  latest_version_id: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+function isCatalogAssetRow(value: unknown): value is CatalogAssetRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<CatalogAssetRow>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
+    typeof row.name === "string" &&
+    typeof row.created_at === "string" &&
+    typeof row.updated_at === "string"
+  );
+}
+
+/** Row → `CatalogAsset`: junk timestamps → `null`, everything else through
+ *  the store's sanitizer (the `rowToProject` discipline). */
+export function rowToCatalogAsset(raw: unknown): CatalogAsset | null {
+  if (!isCatalogAssetRow(raw)) return null;
+  const createdAt = Date.parse(raw.created_at);
+  if (!Number.isFinite(createdAt)) return null;
+  const updatedAt = Date.parse(raw.updated_at);
+  const [asset] = sanitizeCatalogAssets([
+    {
+      id: raw.id,
+      name: raw.name,
+      description: raw.description,
+      type: raw.type,
+      visibility: raw.visibility,
+      latestVersionId: raw.latest_version_id,
+      createdAt,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
+    },
+  ]);
+  return asset ?? null;
+}
+
+/** `CatalogAsset` → upsert row (the `owner_id` stamp happens here). */
+export function assetToRow(
+  asset: CatalogAsset,
+  ownerId: string,
+): Record<string, unknown> {
+  return {
+    id: asset.id,
+    owner_id: ownerId,
+    name: asset.name,
+    description: asset.description,
+    type: asset.type,
+    visibility: asset.visibility,
+    latest_version_id: asset.latestVersionId,
+    created_at: new Date(asset.createdAt).toISOString(),
+    updated_at: new Date(asset.updatedAt).toISOString(),
+  };
+}
+
+/** The `catalog_asset_versions` row shape the full-row phase returns (066). */
+interface CatalogAssetVersionRow {
+  id: string;
+  owner_id: string;
+  asset_id: string;
+  version: unknown;
+  spec: unknown;
+  changelog: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+function isCatalogAssetVersionRow(
+  value: unknown,
+): value is CatalogAssetVersionRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<CatalogAssetVersionRow>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
+    typeof row.asset_id === "string" &&
+    typeof row.created_at === "string" &&
+    typeof row.updated_at === "string"
+  );
+}
+
+export function rowToCatalogVersion(raw: unknown): CatalogAssetVersion | null {
+  if (!isCatalogAssetVersionRow(raw)) return null;
+  const createdAt = Date.parse(raw.created_at);
+  if (!Number.isFinite(createdAt)) return null;
+  const updatedAt = Date.parse(raw.updated_at);
+  const [version] = sanitizeCatalogVersions([
+    {
+      id: raw.id,
+      assetId: raw.asset_id,
+      version: raw.version,
+      spec: raw.spec,
+      changelog: raw.changelog,
+      createdAt,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
+    },
+  ]);
+  return version ?? null;
+}
+
+export function versionToRow(
+  version: CatalogAssetVersion,
+  ownerId: string,
+): Record<string, unknown> {
+  return {
+    id: version.id,
+    owner_id: ownerId,
+    asset_id: version.assetId,
+    version: version.version,
+    spec: version.spec,
+    changelog: version.changelog,
+    created_at: new Date(version.createdAt).toISOString(),
+    updated_at: new Date(version.updatedAt).toISOString(),
+  };
+}
+
+/** The `catalog_installs` row shape the full-row phase returns (066). */
+interface CatalogInstallRow {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  asset_id: string;
+  version_id: string;
+  target_ui_id: unknown;
+  target_key: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+function isCatalogInstallRow(value: unknown): value is CatalogInstallRow {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Partial<CatalogInstallRow>;
+  return (
+    typeof row.id === "string" &&
+    typeof row.owner_id === "string" &&
+    typeof row.project_id === "string" &&
+    typeof row.asset_id === "string" &&
+    typeof row.version_id === "string" &&
+    typeof row.created_at === "string" &&
+    typeof row.updated_at === "string"
+  );
+}
+
+export function rowToCatalogInstall(raw: unknown): CatalogInstall | null {
+  if (!isCatalogInstallRow(raw)) return null;
+  const createdAt = Date.parse(raw.created_at);
+  if (!Number.isFinite(createdAt)) return null;
+  const updatedAt = Date.parse(raw.updated_at);
+  const [install] = sanitizeCatalogInstalls([
+    {
+      id: raw.id,
+      projectId: raw.project_id,
+      assetId: raw.asset_id,
+      versionId: raw.version_id,
+      targetUiId: raw.target_ui_id,
+      targetKey: raw.target_key,
+      createdAt,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
+    },
+  ]);
+  return install ?? null;
+}
+
+export function installToRow(
+  install: CatalogInstall,
+  ownerId: string,
+): Record<string, unknown> {
+  return {
+    id: install.id,
+    owner_id: ownerId,
+    project_id: install.projectId,
+    asset_id: install.assetId,
+    version_id: install.versionId,
+    target_ui_id: install.targetUiId,
+    target_key: install.targetKey,
+    created_at: new Date(install.createdAt).toISOString(),
+    updated_at: new Date(install.updatedAt).toISOString(),
+  };
+}
+
+/** The `catalog_assets` loop (066 decision 9): no uniques beyond the PK, so
+ *  no reconcile — names are free text. */
+export const catalogAssetsSyncSpec: SyncSpec<CatalogAsset> = {
+  table: "catalog_assets",
+  slimColumns: "id, owner_id, updated_at",
+  read: getCatalogAssets,
+  apply: (remote) => applyRemoteCatalogAsset(remote),
+  subscribe: subscribeCatalog,
+  toEntity: rowToCatalogAsset,
+  toRow: assetToRow,
+};
+
+/** The `catalog_asset_versions` loop (066 decision 9): `immutableRows` —
+ *  strict `>` compare and no delete pass (the DB trigger refuses updates
+ *  and direct deletes while the asset exists). The slim view carries
+ *  `asset_id, version` so the reconcile can defuse cross-device
+ *  `unique (asset_id, version)` collisions before the upsert batch. */
+export const catalogVersionsSyncSpec: SyncSpec<CatalogAssetVersion> = {
+  table: "catalog_asset_versions",
+  slimColumns: "id, owner_id, updated_at, asset_id, version",
+  read: getCatalogVersions,
+  apply: (remote) => applyRemoteCatalogVersion(remote),
+  subscribe: subscribeCatalog,
+  toEntity: rowToCatalogVersion,
+  toRow: versionToRow,
+  reconcile: reconcileCatalogVersions,
+  immutableRows: true,
+};
+
+/** The `catalog_installs` loop (066 decision 9): plain LWW — install rows
+ *  change only through the explicit update/rollback flow. Note the FK
+ *  ordering accepted since 065 (`project_screens`): a push can transiently
+ *  reference asset/version/uis rows the other loops haven't pushed yet; it
+ *  retries on the next change or session start. */
+export const catalogInstallsSyncSpec: SyncSpec<CatalogInstall> = {
+  table: "catalog_installs",
+  slimColumns: "id, owner_id, updated_at",
+  read: getCatalogInstalls,
+  apply: (remote) => applyRemoteCatalogInstall(remote),
+  subscribe: subscribeCatalog,
+  toEntity: rowToCatalogInstall,
+  toRow: installToRow,
 };
 
 /**
