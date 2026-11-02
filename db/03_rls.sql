@@ -10,6 +10,13 @@ alter table public.page_versions  enable row level security;
 alter table public.published_pages enable row level security;
 alter table public.site_settings  enable row level security;
 alter table public.projects       enable row level security;
+-- project_screens was previously left to the rls_auto_enable event trigger,
+-- which does not exist yet on a fresh run (05 runs after 01) — enable it
+-- explicitly like the rest (plan 066).
+alter table public.project_screens enable row level security;
+alter table public.catalog_assets          enable row level security;
+alter table public.catalog_asset_versions  enable row level security;
+alter table public.catalog_installs        enable row level security;
 
 -- ── profiles ────────────────────────────────────────────────────────────────
 -- No write policies at all: rows are created by the signup trigger, and an
@@ -209,5 +216,136 @@ create policy project_screens_update_owner
 drop policy if exists project_screens_delete_owner on public.project_screens;
 create policy project_screens_delete_owner
   on public.project_screens for delete
+  to authenticated
+  using (owner_id = auth.uid());
+
+-- ── catalog_assets (plan 066) ───────────────────────────────────────────────
+-- Browse scope (decision 6): everyone sees their own and every PUBLIC asset;
+-- writes are owner-only in practice — the WITH CHECK is the published_pages
+-- F4/F7 shape, which lets an admin edit but never re-stamps owner_id onto
+-- someone else's row (audit F7), while a non-admin can only ever keep their
+-- own ownership (no stealing).
+drop policy if exists catalog_assets_select_public_or_owner on public.catalog_assets;
+create policy catalog_assets_select_public_or_owner
+  on public.catalog_assets for select
+  to authenticated
+  using ((owner_id = auth.uid()) or (visibility = 'public') or is_admin());
+
+drop policy if exists catalog_assets_insert_own on public.catalog_assets;
+create policy catalog_assets_insert_own
+  on public.catalog_assets for insert
+  to authenticated
+  with check (owner_id = auth.uid());
+
+drop policy if exists catalog_assets_update_owner_or_admin on public.catalog_assets;
+create policy catalog_assets_update_owner_or_admin
+  on public.catalog_assets for update
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin())
+  with check ((owner_id = auth.uid()) or is_admin());
+
+drop policy if exists catalog_assets_delete_owner_or_admin on public.catalog_assets;
+create policy catalog_assets_delete_owner_or_admin
+  on public.catalog_assets for delete
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin());
+
+-- ── catalog_asset_versions (plan 066) ───────────────────────────────────────
+-- Read: own versions, versions of every public asset (browse), admin.
+-- INSERT is the F2 shape: you may only publish a version onto an asset you
+-- own — publishing onto someone else's public asset is never possible
+-- (decision 6). DELETE exists so the asset cascade has a policy on every
+-- path; direct deletes are refused by the immutability trigger (05) because
+-- the owning asset still exists. No UPDATE policy at all (snapshots are
+-- immutable by design — same as page_versions).
+drop policy if exists catalog_asset_versions_select_public_or_owner on public.catalog_asset_versions;
+create policy catalog_asset_versions_select_public_or_owner
+  on public.catalog_asset_versions for select
+  to authenticated
+  using (
+    (owner_id = auth.uid())
+    or is_admin()
+    or exists (
+      select 1 from public.catalog_assets a
+      where a.id = asset_id and a.visibility = 'public'
+    )
+  );
+
+drop policy if exists catalog_asset_versions_insert_own on public.catalog_asset_versions;
+create policy catalog_asset_versions_insert_own
+  on public.catalog_asset_versions for insert
+  to authenticated
+  with check (
+    (owner_id = auth.uid())
+    and exists (
+      select 1 from public.catalog_assets a
+      where a.id = asset_id and a.owner_id = auth.uid()
+    )
+  );
+
+drop policy if exists catalog_asset_versions_delete_owner_or_admin on public.catalog_asset_versions;
+create policy catalog_asset_versions_delete_owner_or_admin
+  on public.catalog_asset_versions for delete
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin());
+
+-- ── catalog_installs (plan 066) ─────────────────────────────────────────────
+-- Owner-only like project_screens, with the same single-owner WITH CHECK
+-- shape: a write only lands when the row's owner owns the project AND the
+-- asset is theirs or PUBLIC AND the pinned version belongs to that asset —
+-- installing someone else's PRIVATE asset is denied at this layer (066
+-- task 5's RLS assertion). UPDATE keeps owner_id pinned (F7 shape); it is
+-- the explicit update/rollback flow re-pointing version_id — installs never
+-- change on their own.
+drop policy if exists catalog_installs_select_owner_or_admin on public.catalog_installs;
+create policy catalog_installs_select_owner_or_admin
+  on public.catalog_installs for select
+  to authenticated
+  using ((owner_id = auth.uid()) or is_admin());
+
+drop policy if exists catalog_installs_insert_own on public.catalog_installs;
+create policy catalog_installs_insert_own
+  on public.catalog_installs for insert
+  to authenticated
+  with check (
+    (owner_id = auth.uid())
+    and exists (
+      select 1 from public.projects p
+      where p.id = project_id and p.owner_id = auth.uid()
+    )
+    and exists (
+      select 1 from public.catalog_assets a
+      where a.id = asset_id and (a.owner_id = auth.uid() or a.visibility = 'public')
+    )
+    and exists (
+      select 1 from public.catalog_asset_versions v
+      where v.id = version_id and v.asset_id = asset_id
+    )
+  );
+
+drop policy if exists catalog_installs_update_owner on public.catalog_installs;
+create policy catalog_installs_update_owner
+  on public.catalog_installs for update
+  to authenticated
+  using (owner_id = auth.uid())
+  with check (
+    (owner_id = auth.uid())
+    and exists (
+      select 1 from public.projects p
+      where p.id = project_id and p.owner_id = auth.uid()
+    )
+    and exists (
+      select 1 from public.catalog_assets a
+      where a.id = asset_id and (a.owner_id = auth.uid() or a.visibility = 'public')
+    )
+    and exists (
+      select 1 from public.catalog_asset_versions v
+      where v.id = version_id and v.asset_id = asset_id
+    )
+  );
+
+drop policy if exists catalog_installs_delete_owner on public.catalog_installs;
+create policy catalog_installs_delete_owner
+  on public.catalog_installs for delete
   to authenticated
   using (owner_id = auth.uid());

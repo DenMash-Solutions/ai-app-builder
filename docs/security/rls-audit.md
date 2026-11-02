@@ -22,7 +22,7 @@ All row-level isolation held (cross-user reads/writes, role escalation, anon wri
 
 ## Policy inventory (post-fix)
 
-All five tables have RLS enabled; no views exist in `public`; no `public.*` table is in any realtime publication; the app does not use storage.
+All tables have RLS enabled; no views exist in `public`; no `public.*` table is in any realtime publication; the app does not use storage.
 
 | Table | Policy | Cmd | Roles | USING | WITH CHECK |
 | ----- | ------ | --- | ----- | ----- | ---------- |
@@ -50,6 +50,18 @@ All five tables have RLS enabled; no views exist in `public`; no `public.*` tabl
 | `project_screens` | `project_screens_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` **and** ui-ownership `exists (...)` ← single-owner invariant (065 decision 4) |
 | `project_screens` | `project_screens_update_owner` | UPDATE | authenticated | `owner_id = auth.uid()` ← F7 shape (no ownership takeover) | same double `exists (...)` as INSERT |
 | `project_screens` | `project_screens_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
+| `catalog_assets` | `catalog_assets_select_public_or_owner` | SELECT | authenticated | `owner_id = auth.uid() or visibility = 'public' or is_admin()` | — |
+| `catalog_assets` | `catalog_assets_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` |
+| `catalog_assets` | `catalog_assets_update_owner_or_admin` | UPDATE | authenticated | `owner_id = auth.uid() or is_admin()` | `owner_id = auth.uid() or is_admin()` ← F4/F7 shape (admin may edit, no ownership steal) |
+| `catalog_assets` | `catalog_assets_delete_owner_or_admin` | DELETE | authenticated | `owner_id = auth.uid() or is_admin()` | — |
+| `catalog_asset_versions` | `catalog_asset_versions_select_public_or_owner` | SELECT | authenticated | `owner_id = auth.uid() or is_admin() or exists (assets where id = asset_id and visibility = 'public')` | — |
+| `catalog_asset_versions` | `catalog_asset_versions_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** asset-ownership `exists (...)` ← F2 shape (never publish onto someone else's asset — 066 decision 6) |
+| `catalog_asset_versions` | `catalog_asset_versions_delete_owner_or_admin` | DELETE | authenticated | `owner_id = auth.uid() or is_admin()` | — *(direct deletes still refused by the `catalog_asset_versions_immutable` trigger while the asset exists — 066 decision 3)* |
+| `catalog_asset_versions` | *(no UPDATE policy — snapshots immutable by design, trigger-enforced)* | — | — | — | — |
+| `catalog_installs` | `catalog_installs_select_owner_or_admin` | SELECT | authenticated | `owner_id = auth.uid() or is_admin()` | — |
+| `catalog_installs` | `catalog_installs_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` **and** (asset own **or public**) `exists (...)` **and** version-belongs-to-asset `exists (...)` ← single-owner + private-install denial (066) |
+| `catalog_installs` | `catalog_installs_update_owner` | UPDATE | authenticated | `owner_id = auth.uid()` ← F7 shape | same triple `exists (...)` as INSERT |
+| `catalog_installs` | `catalog_installs_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
 
 `profiles` has no INSERT/UPDATE/DELETE policy at all → **privilege escalation via `UPDATE profiles SET role='admin'` is impossible** (battery: 0 rows). Signups get their row from the `handle_new_user` trigger.
 
@@ -60,10 +72,11 @@ All five tables have RLS enabled; no views exist in `public`; no `public.*` tabl
 | `is_admin()` | SECURITY DEFINER, reads own profile role for `auth.uid()` | `postgres`, `service_role`, **`authenticated`** (required by policies — see F5) |
 | `handle_new_user()` | trigger function on `auth.users` | `postgres`, `service_role` |
 | `rls_auto_enable()` | event-trigger function (`ensure_rls`: new tables auto-get RLS) | `postgres`, `service_role` |
+| `reject_catalog_version_mutation()` | trigger function on `catalog_asset_versions` (066 immutability) | default `PUBLIC` — trigger functions cannot be invoked directly, not `SECURITY DEFINER` |
 
 ### Grants (post-fix)
 
-`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all tables in `public` (RLS filters rows) — the `db/` set is 7 tables (`genui_records` is applied separately and also carries RLS + 4 policies). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
+`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all tables in `public` (RLS filters rows) — the `db/` set is 10 tables (`genui_records` is applied separately and also carries RLS + 4 policies). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
 
 ## Findings
 
@@ -175,6 +188,7 @@ Test fixtures (2 users, 2 uis, versions, published row) were removed afterwards;
 ## Advisories & logs
 
 - Advisories after fixes: 2 WARN — F5 accepted (above) and F6 (manual). The three original `*_security_definer_function_executable`/anon findings are cleared except the accepted one.
+- **Addendum 2026-11-02 (plan 066):** security advisors now show 4 WARN classes, no ERRORs and no missing-RLS findings — (1) F5 `is_admin()` accepted above; (2) F6 leaked-password, manual; (3) `function_search_path_mutable` on `genui_records_touch_updated_at` (the separate genui migration, outside the `db/` set); (4) `auth_allow_anonymous_sign_ins` fires on **every** table with a `to authenticated` USING policy (all 11 tables) because anonymous sign-ins are enabled project-wide — anonymous users share the `authenticated` role by design (the app signs in anonymously), so this is a project-wide posture, not a policy regression: the catalog policies are the same shape as the pre-existing ones. Lint reference: [0012](https://supabase.com/docs/guides/database/database-advisors?queryGroups=lint&lint=0012_auth_allow_anonymous_sign_ins).
 - 24 h logs: no failed logins, no 4xx/5xx auth responses, audit trail shows only the owner's own `login`/`token_refreshed`/`token_revoked` events from a single IP. `postgres_logs` anomalies are only this audit's own denial probes (`row-level security policy` / `permission denied for table site_settings`) plus checkpoints — nothing else.
 
 ## Residual notes

@@ -16,3 +16,12 @@ create event trigger ensure_rls
   on ddl_command_end
   when tag in ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
   execute function public.rls_auto_enable();
+
+-- Plan 066 decision 3: catalog versions are immutable at the DB layer.
+-- The function (02) refuses every UPDATE and any DELETE issued while the
+-- owning asset still exists; the asset's ON DELETE CASCADE passes because RI
+-- actions run after the parent row is gone.
+drop trigger if exists catalog_asset_versions_immutable on public.catalog_asset_versions;
+create trigger catalog_asset_versions_immutable
+  before update or delete on public.catalog_asset_versions
+  for each row execute function public.reject_catalog_version_mutation();

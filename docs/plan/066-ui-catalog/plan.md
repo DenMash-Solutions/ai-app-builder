@@ -94,15 +94,15 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 
 ### 1. Schema and immutability (db/)
 
-- [ ] `catalog_assets` migration (id, owner_id, name, description,
+- [x] `catalog_assets` migration (id, owner_id, name, description,
       type screen|component, visibility, latest_version_id, timestamps) +
       RLS per file pattern
-- [ ] `catalog_asset_versions` (asset_id, monotonic version, spec,
+- [x] `catalog_asset_versions` (asset_id, monotonic version, spec,
       changelog, created_at) with unique(asset, version) mirroring
       `page_versions`
-- [ ] DB-enforced version immutability — trigger or column permission
+- [x] DB-enforced version immutability — trigger or column permission
       (decision 3) — with a rejection test at that layer
-- [ ] Install rows: source asset id + version id pinned; ownership copied
+- [x] Install rows: source asset id + version id pinned; ownership copied
       to the installing project
 
 ### 2. Catalog library (lib/catalog/)
@@ -165,3 +165,4 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 | 2026-10-31 | plan drafted |
 | 2026-11-02 | clarifications answered (Insert-picker tab, screen install = uis row + membership in active project, catalog joins account sync); decisions 7-9 added, decision 3 resolved to a BEFORE UPDATE/DELETE trigger; scope + files + tasks updated |
 | 2026-11-02 | approved — recommended options accepted as decisions 7-9 |
+| 2026-11-02 | Task 1 done — migration `plan_066_catalog_schema` applied (live: 11 tables, 37 policies, 5 functions); DB rejection test passed (UPDATE refused, direct DELETE refused, spec unchanged, asset cascade cleans versions+installs); advisors: no ERRORs — 0012 fires on all 11 tables project-wide (anonymous sign-ins enabled, pre-existing shape), F5/F6/genui-search-path WARNs pre-existing |

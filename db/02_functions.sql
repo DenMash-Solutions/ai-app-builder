@@ -72,3 +72,32 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+-- Plan 066 decision 3: catalog versions are immutable at the DB layer.
+-- UPDATE is always refused. DELETE is refused while the owning asset still
+-- exists — the only legitimate delete path is the asset's own ON DELETE
+-- CASCADE, and RI actions run AFTER the parent row is gone, so the
+-- parent-exists check passes exactly for cascades and refuses every direct
+-- delete. (Truncating the table is separately denied: TRUNCATE is never
+-- granted to anon/authenticated — audit F1.)
+create or replace function public.reject_catalog_version_mutation()
+returns trigger
+language plpgsql
+set search_path to 'public'
+as $$
+begin
+  if tg_op = 'UPDATE' then
+    raise exception
+      'catalog_asset_versions is immutable (plan 066 decision 3): UPDATE refused for asset % version %',
+      old.asset_id, old.version
+      using errcode = 'check_violation';
+  end if;
+  if exists (select 1 from public.catalog_assets where id = old.asset_id) then
+    raise exception
+      'catalog_asset_versions is immutable (plan 066 decision 3): DELETE refused for asset % version % — delete the asset instead',
+      old.asset_id, old.version
+      using errcode = 'check_violation';
+  end if;
+  return old;
+end;
+$$;
