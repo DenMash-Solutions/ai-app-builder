@@ -15,6 +15,9 @@ export const REVISION_LABELS = {
   action: "action",
   freeform: "freeform",
   structure: "structure",
+  /** Catalog-driven content swaps (plan 066 Task 3: install update/rollback
+   *  and component re-expansion) — distinct from local structure edits. */
+  catalog: "catalog",
 } as const;
 
 export interface SpecRevision {

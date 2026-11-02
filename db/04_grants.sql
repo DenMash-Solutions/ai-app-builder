@@ -32,3 +32,13 @@ grant  execute on function public.is_admin() to postgres, service_role, authenti
 
 revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
 grant  execute on function public.rls_auto_enable() to postgres, service_role;
+
+-- Plan 066 decision 4: fork-on-edit. SECURITY INVOKER — RLS authorizes
+-- every statement — so only session-holding roles may execute; anon never
+-- forks (auth.uid() refuses before any write). Function signature pins the
+-- three parameters (uuid, uuid, uuid) so the grant targets exactly this
+-- overload.
+revoke execute on function public.fork_catalog_asset(uuid, uuid, uuid)
+  from public, anon;
+grant  execute on function public.fork_catalog_asset(uuid, uuid, uuid)
+  to authenticated, service_role;

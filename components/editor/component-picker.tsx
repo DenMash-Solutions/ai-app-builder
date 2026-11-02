@@ -33,6 +33,10 @@ interface ComponentPickerProps {
   onPick: (type: string) => void;
   /** Templates mode only — insert the picked template by id. */
   onPickTemplate?: (id: string) => void;
+  /** Catalog components (plan 066): install + insert the picked asset's
+   *  version. Declared here in Task 3 with the insert seam; the Task 4
+   *  catalog tab is the first caller (not destructured until then). */
+  onPickCatalogAsset?: (assetId: string, versionId: string) => void;
   /** Templates mode only — rename (trimmed, non-empty) / delete a row. */
   onRenameTemplate?: (id: string, name: string) => void;
   onDeleteTemplate?: (id: string) => void;

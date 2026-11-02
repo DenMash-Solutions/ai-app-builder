@@ -521,6 +521,62 @@ export function removeCatalogInstall(id: string): boolean {
 }
 
 /**
+ * Re-points an install's version pin (Task 3 update/rollback — the ONLY
+ * writer of `versionId` after creation; installs never change on their
+ * own). The new pin must be a version OF THE ASSET (the RLS WITH CHECK
+ * shape); unchanged pins and unknown ids are no-ops (`false`).
+ */
+export function updateCatalogInstallPin(
+  id: string,
+  versionId: string,
+): boolean {
+  const state = load();
+  const index = state.installs.findIndex((install) => install.id === id);
+  if (index === -1) return false;
+  const current = state.installs[index];
+  if (current.versionId === versionId) return false;
+  const pinned = state.versions.some(
+    (version) =>
+      version.id === versionId && version.assetId === current.assetId,
+  );
+  if (!pinned) return false;
+  cache = {
+    ...state,
+    installs: state.installs.map((install, i) =>
+      i === index ? { ...install, versionId, updatedAt: Date.now() } : install,
+    ),
+  };
+  persist();
+  return true;
+}
+
+/**
+ * Local mirror of the fork RPC's reference swap (decision 4): the DB row's
+ * `target_ui_id` already points at the forked copy — apply the same here so
+ * the session sees it before the next pull. Unknown ids are a no-op: an
+ * install synced from another device simply arrives with the new target.
+ */
+export function setCatalogInstallTarget(
+  id: string,
+  targetUiId: string,
+): boolean {
+  if (targetUiId.trim() === "") return false;
+  const state = load();
+  const index = state.installs.findIndex((install) => install.id === id);
+  if (index === -1) return false;
+  const current = state.installs[index];
+  if (current.targetUiId === targetUiId) return false;
+  cache = {
+    ...state,
+    installs: state.installs.map((install, i) =>
+      i === index ? { ...install, targetUiId, updatedAt: Date.now() } : install,
+    ),
+  };
+  persist();
+  return true;
+}
+
+/**
  * Insert-or-replace for the sync write path — the loop has already decided
  * LWW before calling (the `applyRemoteProject` discipline).
  */

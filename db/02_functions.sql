@@ -101,3 +101,139 @@ begin
   return old;
 end;
 $$;
+
+-- Plan 066 decision 4: fork-on-edit runs as ONE transaction server-side —
+-- read version → create copy → initial revision → swap reference — so a
+-- partial migration is impossible (the rejected client-side multi-step).
+-- SECURITY INVOKER (the default) on purpose: every statement runs under the
+-- caller's RLS, so the asset/version reads are own-or-public, the copy is
+-- stamped with auth.uid(), and the reference swap re-checks ownership via
+-- the catalog_installs / project_screens policies. Concurrency: the install
+-- row is locked FOR UPDATE, so two forks of the same install serialize and
+-- the loser swaps the winner's target instead of stranding it. Returns the
+-- created uis row (to_jsonb) so the client can adopt it without a second
+-- round trip; `membership_swapped` tells it whether anything is left to add.
+create or replace function public.fork_catalog_asset(
+  p_asset_id uuid,
+  p_version_id uuid default null,
+  p_project_id uuid default null
+)
+returns jsonb
+language plpgsql
+set search_path to 'public'
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_asset public.catalog_assets%rowtype;
+  v_version public.catalog_asset_versions%rowtype;
+  v_install_id uuid;
+  v_old_target uuid;
+  v_membership_swapped boolean := false;
+  v_ui_id uuid := gen_random_uuid();
+  v_base text;
+  v_slug text;
+  v_revisions jsonb;
+  v_row public.uis%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'plan 066 decision 4: fork requires a signed-in user'
+      using errcode = 'check_violation';
+  end if;
+  if p_asset_id is null then
+    raise exception 'plan 066 decision 4: asset id is required'
+      using errcode = 'check_violation';
+  end if;
+
+  -- RLS-scoped reads: another user's private asset is invisible here and
+  -- reads as not-found — identical to a missing row, no information leak.
+  select * into v_asset from public.catalog_assets where id = p_asset_id;
+  if not found then
+    raise exception 'plan 066 decision 4: asset % not found', p_asset_id
+      using errcode = 'check_violation';
+  end if;
+
+  if p_version_id is not null then
+    select * into v_version
+      from public.catalog_asset_versions
+     where id = p_version_id
+       and asset_id = p_asset_id;
+  else
+    select * into v_version
+      from public.catalog_asset_versions
+     where id = v_asset.latest_version_id
+       and asset_id = p_asset_id;
+  end if;
+  if not found then
+    raise exception
+      'plan 066 decision 4: version not found for asset %', p_asset_id
+      using errcode = 'check_violation';
+  end if;
+
+  -- Create copy: slug mirrors the client's uniqueSlugFrom (slugified name
+  -- capped at 40 + hyphen + first 8 id chars — the id tail makes collisions
+  -- impossible in practice, same argument as the local generator).
+  v_base := regexp_replace(
+    lower(
+      regexp_replace(
+        normalize(v_asset.name, NFD),
+        U&'[\0300-\036f]',
+        '',
+        'g')),
+    '[^a-z0-9]+', '-', 'g');
+  v_base := trim(both '-' from v_base);
+  v_base := left(regexp_replace(v_base, '-+$', ''), 40);
+  if v_base = '' then
+    v_base := 'ui'; -- RESERVED_SLUGS.ui — the client's empty-name fallback
+  end if;
+  v_slug := v_base || '-' || left(replace(v_ui_id::text, '-', ''), 8);
+
+  -- Initial revision: the version's spec as revision 0 (head 0), labeled
+  -- like every client-generated first revision (REVISION_LABELS.generate).
+  v_revisions := jsonb_build_array(jsonb_build_object(
+    'spec', v_version.spec,
+    'label', 'generate',
+    'createdAt', (extract(epoch from now()) * 1000)::bigint
+  ));
+
+  insert into public.uis (id, owner_id, name, slug, prompt, revisions, head)
+  values (v_ui_id, v_uid, v_asset.name, v_slug, v_asset.name, v_revisions, 0);
+
+  -- Swap reference: the active project's install (when one exists) points
+  -- at the fork now — install target and its membership row together, so
+  -- the project's drawer and its pin can never disagree mid-migration.
+  if p_project_id is not null then
+    select i.id, i.target_ui_id
+      into v_install_id, v_old_target
+      from public.catalog_installs i
+     where i.owner_id = v_uid
+       and i.project_id = p_project_id
+       and i.asset_id = p_asset_id
+     for update;
+
+    if found then
+      update public.catalog_installs
+         set target_ui_id = v_ui_id,
+             updated_at = now()
+       where id = v_install_id;
+
+      update public.project_screens
+         set screen_id = v_ui_id,
+             updated_at = now()
+       where owner_id = v_uid
+         and project_id = p_project_id
+         and screen_id = v_old_target;
+      v_membership_swapped := found;
+    end if;
+  end if;
+
+  select * into v_row from public.uis where id = v_ui_id;
+
+  return jsonb_build_object(
+    'uis_id', v_ui_id,
+    'version_id', v_version.id,
+    'install_id', v_install_id,
+    'membership_swapped', v_membership_swapped,
+    'uis_row', to_jsonb(v_row)
+  );
+end;
+$$;

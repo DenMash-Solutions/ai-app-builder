@@ -48,6 +48,13 @@ interface StructureTabProps {
   onDuplicate: (key: string) => void;
   /** Copy-expand a saved template under `parentKey` (plan 060 step 2). */
   onInsertTemplate: (template: ComponentTemplate, parentKey: string) => void;
+  /** Install + expand a catalog component under `parentKey` (plan 066
+   *  decision 2) — the picker's Task 4 catalog tab is the first caller. */
+  onInsertCatalogComponent?: (
+    assetId: string,
+    versionId: string,
+    parentKey: string,
+  ) => void;
 }
 
 /**
@@ -67,6 +74,7 @@ export function StructureTab({
   onMove,
   onDuplicate,
   onInsertTemplate,
+  onInsertCatalogComponent,
 }: StructureTabProps) {
   const t = useTranslations();
   const [picker, setPicker] = useState<PickerMode | null>(null);
@@ -102,6 +110,15 @@ export function StructureTab({
   const handlePickTemplate = (id: string) => {
     const template = templates.find((entry) => entry.id === id);
     if (template && insertTarget) onInsertTemplate(template, insertTarget);
+    setPicker(null);
+  };
+
+  // Catalog components resolve their rows in playground (the store's
+  // consumer) — this stays a dumb id pass-through like onPickTemplate.
+  const handlePickCatalogAsset = (assetId: string, versionId: string) => {
+    if (insertTarget) {
+      onInsertCatalogComponent?.(assetId, versionId, insertTarget);
+    }
     setPicker(null);
   };
 
@@ -292,6 +309,7 @@ export function StructureTab({
           }}
           onPick={handlePick}
           onPickTemplate={handlePickTemplate}
+          onPickCatalogAsset={handlePickCatalogAsset}
           onRenameTemplate={renameTemplate}
           onDeleteTemplate={removeTemplate}
         />

@@ -118,6 +118,12 @@ interface EditPanelProps {
   onDuplicate: (key: string) => void;
   /** Copy-expand a saved template under `parentKey` (plan 060 step 2). */
   onInsertTemplate: (template: ComponentTemplate, parentKey: string) => void;
+  /** Plan 066: catalog component install+insert, forwarded to StructureTab. */
+  onInsertCatalogComponent?: (
+    assetId: string,
+    versionId: string,
+    parentKey: string,
+  ) => void;
   /** True when this element is in the prompt scope (main-prompt chips). */
   inPromptScope: boolean;
   onTogglePromptScope: () => void;
@@ -157,6 +163,7 @@ export function EditPanel({
   onMove,
   onDuplicate,
   onInsertTemplate,
+  onInsertCatalogComponent,
   inPromptScope,
   onTogglePromptScope,
   promptScopeInstanceCount,
@@ -583,6 +590,7 @@ export function EditPanel({
               onMove={onMove}
               onDuplicate={onDuplicate}
               onInsertTemplate={onInsertTemplate}
+              onInsertCatalogComponent={onInsertCatalogComponent}
             />
           </>
         )}

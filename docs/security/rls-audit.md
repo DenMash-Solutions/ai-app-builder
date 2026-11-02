@@ -73,6 +73,7 @@ All tables have RLS enabled; no views exist in `public`; no `public.*` table is 
 | `handle_new_user()` | trigger function on `auth.users` | `postgres`, `service_role` |
 | `rls_auto_enable()` | event-trigger function (`ensure_rls`: new tables auto-get RLS) | `postgres`, `service_role` |
 | `reject_catalog_version_mutation()` | trigger function on `catalog_asset_versions` (066 immutability) | default `PUBLIC` — trigger functions cannot be invoked directly, not `SECURITY DEFINER` |
+| `fork_catalog_asset(uuid, uuid, uuid)` | SECURITY INVOKER fork RPC (066 decision 4) — plpgsql runs under the caller's RLS across `catalog_assets` / `catalog_asset_versions` / `uis` / `catalog_installs` / `project_screens` | `authenticated`, `service_role` — revoked from `PUBLIC`, `anon` (signed-in call required; anon EXECUTE denied at grant level, verified live) |
 
 ### Grants (post-fix)
 

@@ -118,13 +118,15 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 
 ### 3. Install, update, fork
 
-- [ ] Install = version-pinned snapshot copy: new `uis` row for screens,
+- [x] Install = version-pinned snapshot copy: new `uis` row for screens,
       expanded subtree for components (decision 1)
-- [ ] Explicit update flow: installed vs latest version, confirmation,
-      rollback to a previously installed version
-- [ ] Fork-on-edit as one RPC/transaction: read version → create copy →
+- [x] Explicit update flow logic: installed vs latest version detection,
+      pin re-point, rollback to a previously installed version —
+      **confirmation UI ships with the Task 4 catalog tab** (split decided
+      2026-11-02: Task 3 = library APIs + unit tests only)
+- [x] Fork-on-edit as one RPC/transaction: read version → create copy →
       initial revision → swap reference (decision 4), concurrency-safe
-- [ ] Insert seam in `components/playground/`: expansion at install with
+- [x] Insert seam in `components/playground/`: expansion at install with
       fresh keys + `data-template-id` provenance (062 decision 3)
 
 ### 4. Catalog UI
@@ -133,12 +135,15 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
       (all/mine/public/private, screens/components), owner, latest
       version, preview
 - [ ] Visibility toggle whose change never invalidates installations
+- [ ] Update confirmation dialog + update-available indicator for
+      installed assets (flow logic ships in Task 3)
 
 ### 5. Tests
 
-- [ ] Unit: version monotonicity, immutability rejected at the DB layer,
+- [x] Unit: version monotonicity, immutability rejected at the DB layer,
       install pinning survives a new latest version, fork gets independent
-      identity and revision 0
+      identity and revision 0 (coverage shipped with Tasks 1-3: rejection
+      test live, publish + pin + fork unit suites)
 - [ ] e2e: two projects install v1 → v2 published → both still render v1;
       fork in A leaves B unchanged; private install denied (service-client
       assertion); an install made on one device appears on another
@@ -149,7 +154,7 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 ## Verification
 
 - [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit: version monotonicity, immutability rejected at the DB layer,
+- [x] Unit: version monotonicity, immutability rejected at the DB layer,
       install pinning survives a new latest version, fork gets independent
       identity and revision 0
 - [ ] e2e: two projects install v1 → v2 published → both still render v1;
@@ -167,3 +172,5 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 | 2026-11-02 | approved — recommended options accepted as decisions 7-9 |
 | 2026-11-02 | Task 1 done — migration `plan_066_catalog_schema` applied (live: 11 tables, 37 policies, 5 functions); DB rejection test passed (UPDATE refused, direct DELETE refused, spec unchanged, asset cascade cleans versions+installs); advisors: no ERRORs — 0012 fires on all 11 tables project-wide (anonymous sign-ins enabled, pre-existing shape), F5/F6/genui-search-path WARNs pre-existing |
 | 2026-11-02 | Task 2 done — `lib/catalog/` store (CRUD, publish, install pins, id-keyed seed + `startTemplateSeeding`), `setTemplateSavedListener` seam, 3 sync loops with `immutableRows` (strict `>` + no delete pass) and version-collision renumber reconcile; tests: catalog 11, templates +1, sync +5 → gate 917 pass / 0 fail |
+| 2026-11-02 | Task 3 done — `lib/catalog/install.ts` (screen install = uis row + membership + pin; component expansion via `insertTemplate` with provenance; update/rollback = pin re-point + content swap through the revision stack, deleted copy → pin only; `getInstallStatus`), fork RPC `fork_catalog_asset` applied live (`plan_066_fork_catalog_asset`): authed DO-block test passed — revision-0 copy + slug mirror, install/membership swap twice, private asset / foreign version / unsigned refused, anon EXECUTE denied, privilege matrix verified; insert seam playground → edit-panel → structure-tab → component-picker; docs: db/README + rls-audit function ACL; tests: install 11, catalog +2 → gate 930 pass / 0 fail |
+| 2026-11-02 | Task 3 scope clarified — update/rollback flow logic stays in Task 3, its confirmation UI moves to Task 4 (catalog tab); Task 4 gains an update-confirmation + update-available checkbox |

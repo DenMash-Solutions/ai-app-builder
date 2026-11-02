@@ -80,6 +80,8 @@ import type {
   MoveDirection,
   PromptScopeTarget,
 } from "@/lib/editor";
+import { getCatalogAssets, getCatalogVersions } from "@/lib/catalog/catalog";
+import { insertCatalogComponent } from "@/lib/catalog/install";
 import { examplePropsFor } from "@/lib/playground/catalog";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
@@ -1400,6 +1402,37 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     );
   };
 
+  // Install + expand a catalog component (plan 066 decision 2): the pinned
+  // version's subtree goes in through the SAME structure path as templates
+  // (fresh keys + data-template-id provenance), and the install row pins
+  // the version against this host ui. Rows resolve here — the store's
+  // consumer — so the picker chain stays an id pass-through.
+  const handleInsertCatalogComponent = (
+    assetId: string,
+    versionId: string,
+    parentKey: string,
+  ) => {
+    if (!displayedSpec || !activeEntry || isStreaming) return;
+    const asset = getCatalogAssets().find((row) => row.id === assetId);
+    const version = getCatalogVersions().find((row) => row.id === versionId);
+    // catalog_installs.project_id is NOT NULL (Task 1 schema) — a screen in
+    // the legacy bucket has nowhere to record an install, so no insert.
+    if (!asset || !version || !activeEntry.projectId) return;
+    const result = insertCatalogComponent(displayedSpec, {
+      parentKey,
+      asset,
+      version,
+      hostUiId: activeEntry.id,
+      projectId: activeEntry.projectId,
+    });
+    if (!result) return;
+    commitStructure(
+      result.spec,
+      structureRevisionLabel(STRUCTURE_OPS.insert, asset.name),
+      result.key,
+    );
+  };
+
   const handleRemove = (key: string) => {
     if (!displayedSpec || !activeEntry || isStreaming) return;
     commitStructure(
@@ -2078,6 +2111,7 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
             onMove={handleMove}
             onDuplicate={handleDuplicate}
             onInsertTemplate={handleInsertTemplate}
+            onInsertCatalogComponent={handleInsertCatalogComponent}
             inPromptScope={selectionInScope}
             onTogglePromptScope={() => {
               if (effectiveKey) {

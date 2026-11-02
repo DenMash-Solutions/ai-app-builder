@@ -263,6 +263,71 @@ describe("catalog store (plan 066)", () => {
     expect(catalog.getCatalogInstalls()).toHaveLength(1);
   });
 
+  test("updateCatalogInstallPin re-points pins with the WITH CHECK shape", () => {
+    const first = catalog.createCatalogAsset({
+      name: "One",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+    const v2 = catalog.publishCatalogVersion(first.asset.id, makeSpec("v2"))!;
+    const other = catalog.createCatalogAsset({
+      name: "Two",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+    const install = catalog.addCatalogInstall({
+      projectId: "project-1",
+      assetId: first.asset.id,
+      versionId: first.version.id,
+    })!;
+
+    // The only writer of versionId after creation (Task 3 update/rollback).
+    expect(catalog.updateCatalogInstallPin(install.id, v2.id)).toBe(true);
+    expect(
+      catalog.getCatalogInstalls().find((row) => row.id === install.id)
+        ?.versionId,
+    ).toBe(v2.id);
+
+    // Rejections mirror the RLS WITH CHECK: a version of ANOTHER asset,
+    // an unknown version, an unknown install — and an unchanged pin is a
+    // no-op (idempotent), never a timestamp bump for nothing.
+    expect(catalog.updateCatalogInstallPin(install.id, other.version.id)).toBe(
+      false,
+    );
+    expect(catalog.updateCatalogInstallPin(install.id, "ghost")).toBe(false);
+    expect(catalog.updateCatalogInstallPin("ghost", v2.id)).toBe(false);
+    expect(catalog.updateCatalogInstallPin(install.id, v2.id)).toBe(false);
+    expect(
+      catalog.getCatalogInstalls().find((row) => row.id === install.id)
+        ?.versionId,
+    ).toBe(v2.id);
+  });
+
+  test("setCatalogInstallTarget mirrors the fork RPC's reference swap", () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "One",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+    const install = catalog.addCatalogInstall({
+      projectId: "project-1",
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: "ui-old",
+    })!;
+
+    expect(catalog.setCatalogInstallTarget(install.id, "ui-fork")).toBe(true);
+    expect(
+      catalog.getCatalogInstalls().find((row) => row.id === install.id)
+        ?.targetUiId,
+    ).toBe("ui-fork");
+
+    // Same value / unknown install / empty target: no-ops.
+    expect(catalog.setCatalogInstallTarget(install.id, "ui-fork")).toBe(false);
+    expect(catalog.setCatalogInstallTarget("ghost", "ui-x")).toBe(false);
+    expect(catalog.setCatalogInstallTarget(install.id, "   ")).toBe(false);
+  });
+
   test("adopting a colliding remote version renumbers the local row, never drops it", () => {
     const { asset } = catalog.createCatalogAsset({
       name: "Card",
