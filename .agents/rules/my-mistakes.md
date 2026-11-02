@@ -182,6 +182,12 @@
 **Lesson Reference**: `.agents/lessons/next-activity-state.md`
 **Prevention**: before designing a fix for an interleaved log → tag every entry (stable instance id + route/phase) and re-run; separate PROVEN observations from the inferred narrative when answering; if the fix depends on an ordering you have not observed, instrument first and say so
 
+### 31. Deep Fiber Forensics While the Pending Fix Was Never Re-Tested (NEW)
+
+**Problem**: plan 065's dialog bug — an already-written config fix (`htmlLimitedBots` under `PLAYWRIGHT_TEST`) sat unproven for hours while I built increasingly elaborate fiber/hook-dump probes to explain the mechanism; the fix only became verifiable after I finally killed the stale dev server (config changes need a restart — `reuseExistingServer` reuses the old one). The actual fix for the dialog turned out to be a one-line test wait (`toHaveURL`) that a single run of the real failing test would have isolated far earlier
+**Lesson Reference**: `.agents/lessons/dev-server-e2e-triage.md` sections 6-8
+**Prevention**: before writing any new probe → (1) is there an unapplied/unverified fix in the tree? activate it and re-run the REAL failing test first; (2) a fix that needs a config change needs the server restarted before "verifying"; (3) custom instrumentation earns its cost only AFTER the cheap runs (real test, fresh server, settle/wait experiments) are exhausted
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -327,6 +333,9 @@ When I see these → STOP and check lessons:
 - **NEW**: About to write `event.stopPropagation()` to cancel a library's Escape/dismiss → it may be capture-phase on `document` (React can't reach it) → `onEscapeKeyDown` + `preventDefault` (`radix-escape-capture.md`, mistake #28)
 - **NEW**: e2e counts/finds a leak, duplicate, or stray node after navigation → hidden `<Activity>` route copies are in the document — visibility-scope (`filter({visible:true})`), `getByRole` first (`next-activity-state.md`, mistake #29)
 - **NEW**: About to design a fix from a log interleaving multiple component instances → tag each entry (instance id + route/phase) first; untagged = inference, not proof (`next-activity-state.md`, mistake #30)
+- **NEW**: About to build another custom probe for an e2e failure → is there an unverified fix in the tree / is the running server older than the config? re-run the real failing test first (`dev-server-e2e-triage.md`, mistake #31)
+- **NEW**: Radix dialog/popover `open=true` but never in the DOM (or 0×0 mid-click) → pending Next navigation defers layout effects → `toHaveURL` before touching portals (`dev-server-e2e-triage.md` section 6)
+- **NEW**: Element count 0 while siblings render → root pointer re-pointed by a spread helper — walk from root, don't blame the renderer (`dev-server-e2e-triage.md` section 8)
 - **NEW**: `evaluate_script` returned `undefined` from a body that returns a string → `format:'script'` only parses a `() => …` (never calls it, zero side effects) — use `format:'function'` and assert the returned value (mistake #24)
 
 ## ⚡ Quick Recovery Commands

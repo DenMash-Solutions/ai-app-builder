@@ -192,6 +192,10 @@ Before writing ANY code, follow this exact sequence:
 - MCP probe dispatches an event and reads synchronously → React hasn't flushed; wait a tick → **[mcp-verification.md](../lessons/mcp-verification.md)**
 - Escape in an inline edit closes the whole dialog → Radix's document/capture listener already ran → `onEscapeKeyDown` + `preventDefault`, never `stopPropagation` → **[radix-escape-capture.md](../lessons/radix-escape-capture.md)**
 - A visible string absent from `take_snapshot` → a11y tree pruned non-semantic children (e.g. `listbox` non-options) → probe the DOM → **[radix-escape-capture.md](../lessons/radix-escape-capture.md)**
+- Radix dialog/popover `open=true` but never in the DOM (or a trigger goes 0×0 mid-click) → pending App Router transition defers layout effects → await the destination URL first → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)** section 6
+- Portal resolves visible, then React stamps `display:none !important` on it → Next `MetadataWrapper` hidden-div cascade → `htmlLimitedBots` under `PLAYWRIGHT_TEST` → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)** section 7
+- Element count 0 while siblings render → root pointer re-pointed by a spread helper (orphaned subtree) → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)** section 8
+- About to build another custom probe for an e2e failure → unverified fix in the tree? stale server? run the real failing test first (**my-mistakes.md #31**)
 
 ### **Green Flags** → Continue with confidence
 

@@ -1,8 +1,9 @@
 # Dev-Server Cache Poisoning & E2E Failure Triage
 
-Three hard-won diagnostics from the M3 verification run (2026-10-19): a build
-run corrupted the dev server's cache, and the resulting e2e failures pointed
-at the database — where nothing was wrong.
+Hard-won diagnostics from the M3 verification run (2026-10-19) and plan 065
+Task 5 (2026-11-02): a build run corrupted the dev server's cache, e2e
+failures pointed at an innocent database, and three more failures turned out
+to be Next.js navigation/metadata behavior, not app code.
 
 ## 1. Never `next build` while `next dev` serves the same `.next`
 
@@ -89,6 +90,82 @@ timestamp:
   `request.url` (`select=id,owner_id,updated_at` vs `select=*`) instead of
   trusting the code you wrote.
 
+## 6. Opening a Radix portal during a PENDING Next navigation → it never mounts (plan 065)
+
+**Symptom:** dialog state `open=true` flips and stays true, the whole fiber
+path commits (`DialogRoot → DialogContent → DialogPortal →
+Presence(present:true)`), but ZERO host DOM enters the document
+(`[data-slot="dialog-content"]` absent, `[data-radix-portal]` count 0). No
+`pageerror`, no console errors, and it **never self-heals** (polled 10s,
+dead the whole time). Sibling symptom: a trigger resolves visible then goes
+0×0 mid-click (the History-button flake).
+
+**Root cause (proven):** generate triggers a route navigation
+(`/en/ui` → `/en/ui/{uuid}`). Opening the drawer/dialog while that App
+Router transition is still in flight **defers the new subtree's layout
+effects** — Radix Presence's layout effect (which dispatches `MOUNT`) never
+runs, so its reducer stays `"unmounted"` and it renders `null`. The instant
+the URL settles the portal mounts (~500ms).
+
+**Diagnosis signature (fiber dump):** Presence fiber `present:true` but
+`hasChild:false`, hook linked list `[null, obj, obj, obj, obj, "unmounted", …]`
+(hooks[5] = the `useReducer` state), `prevPresentRef.current === false`,
+`lanes: 0`. Reading it: `present:true` + ref `false` = the layout effect
+never ran for the flip (this lesson); ref `true` = effect ran and the
+dispatch was lost (a different, worse bug — don't assume which without the
+dump).
+
+**Fix (test-side):** wait for the navigation before touching any portal —
+`await expect(page).toHaveURL(/\/ui\/[0-9a-f-]{36}$/)` after generate. The
+History-button 0×0 flake was the **same** root cause: the URL wait alone
+made it green; no retry helper was needed.
+
+## 7. Next's streaming-metadata `<div hidden>` cascades `display:none` onto open portals
+
+**Symptom:** a Radix popper/drawer wrapper reads `data-state="open"` with a
+normal rect, then ~400ms later gets inline `display: none !important`
+appended **by React itself** → 0×0 for the rest of the test ("element is
+not visible" forever). Stack:
+`CSSStyleDeclaration.setProperty ← hideInstance ←
+hideOrUnhideAllChildrenOnFiber ← hideOrUnhideNearestPortals`.
+
+**Root cause:** Next's streaming metadata renders `MetadataWrapper` as a
+bare `<div hidden>`; when it mounts, React's hidden-attr cascade
+recursively hides its subtree **and the nearest portals inside it** —
+including open Radix portals that were portaled into `<body>`.
+
+**Fix (e2e-only, shipped with plan 065):** `next.config.ts` sets
+`htmlLimitedBots: /.*/` gated on `process.env.PLAYWRIGHT_TEST === "true"`
+(it REPLACES Next's default bot list → no streaming metadata → no wrapper);
+`playwright.config.ts` webServer sets `PLAYWRIGHT_TEST=true`. Production
+keeps the default bot list + streaming metadata.
+
+**Gotchas:**
+- A `next.config.ts` change needs a **server restart** — Playwright's
+  `reuseExistingServer: true` happily reuses a server started BEFORE the
+  fix. Kill port 3000 first, or you'll "verify" against the old config.
+- Never `bun run build` while `next dev` serves the same `.next` (section 1).
+
+## 8. Element ABSENT while its siblings render → walk the root pointer, distrust helpers with side effects
+
+**Symptom (plan 065 fixture):** the heading renders, the sibling "Go to B"
+button does not exist anywhere in the DOM — count 0, not hidden — while the
+spec line that adds it applied without error.
+
+**Root cause:** the fixture spread `headingLines("a-heading", …)` — a helper
+whose FIRST line re-points `PATCH_PATH.root` at its key. Root ended as
+`"a-heading"`, so the stack (the real root) and everything reachable only
+through it (the nav button) were **orphans**: rendering follows root, and
+orphans simply don't exist.
+
+**Rule:**
+- Missing element, siblings fine → verify the ancestor chain from root
+  before suspecting the renderer; helpers that WRITE shared pointers
+  (root, active project, current id) are dangerous when spread into a
+  sequence that already set the same pointer.
+- Triage order: `querySelector` count 0 = orphaned/unrendered (spec/root
+  problem) vs count > 0 + 0×0 = visibility/timing problem (sections 6 and 7).
+
 ## Memory triggers
 
 - e2e failures started right after a build/restart → suspect `.next` cache
@@ -103,3 +180,13 @@ timestamp:
   (`toDateTime64` literals, `log_attributes['request.path']`), not the
   browser network panel
 - Log count looks wrong → wait and re-query (ingestion lag) before theorizing
+- Dialog/popover `open=true` but DOM never mounts (or a trigger goes 0×0
+  mid-click) → pending App Router transition defers layout effects → await
+  the destination URL first (section 6)
+- Portal resolves visible, then React itself stamps `display:none !important`
+  → `MetadataWrapper` hidden-div cascade → `htmlLimitedBots` under
+  `PLAYWRIGHT_TEST` (section 7)
+- Element absent (count 0) while siblings render → root pointer / helper
+  side effect (section 8)
+- Changing `next.config.ts` but behavior unchanged → is the running server
+  older than the config? (`reuseExistingServer` reuses stale servers)
