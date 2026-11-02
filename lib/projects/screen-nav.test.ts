@@ -402,6 +402,75 @@ describe("runNavigate (061-3 params + project namespace)", () => {
     expect(warnings).toHaveLength(0);
   });
 
+  test("the workspace-configured route builds the path (065)", () => {
+    const pushed: string[] = [];
+    const routed = MEMBERSHIPS.map((row) =>
+      row.screenId === "detail" ? { ...row, route: "items/{id}" } : row,
+    );
+    const base = {
+      entries: [GRID, DETAIL],
+      scope: "p1",
+      projects: PROJECTS,
+      memberships: routed,
+      navigate: (route: string) => pushed.push(route),
+    } as const;
+
+    // Both surfaces build what the URL resolver matches (membership rows).
+    runNavigate({ screen: "detail", id: 4 }, { ...base, surface: "editor" });
+    runNavigate(
+      { screen: "detail", id: 4 },
+      { ...base, surface: "preview", locale: "en" },
+    );
+
+    expect(pushed).toEqual(["/ui/detail/items/4", "/en/pokedex/items/4"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("the membership route wins over a stale spec route (065)", () => {
+    const pushed: string[] = [];
+    const routed = MEMBERSHIPS.map((row) =>
+      row.screenId === "detail" ? { ...row, route: "record/{id}" } : row,
+    );
+    // DETAIL.spec.route is "{id}" — pre-065 shape; the workspace contract
+    // (what toScreenListings teaches and resolveProjectRoute matches) wins.
+    runNavigate(
+      { screen: "detail", id: 4 },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "preview",
+        locale: "en",
+        projects: PROJECTS,
+        memberships: routed,
+        navigate: (route) => pushed.push(route),
+      },
+    );
+
+    expect(pushed).toEqual(["/en/pokedex/record/4"]);
+    expect(warnings).toHaveLength(0);
+  });
+
+  test("a member without a workspace route never builds from the spec (065)", () => {
+    const pushed: string[] = [];
+    // m-detail carries no route: the spec pattern must not leak a path the
+    // resolver would reject — the bare slug (exact-slug precedence) serves.
+    runNavigate(
+      { screen: "detail", id: 4 },
+      {
+        entries: [GRID, DETAIL],
+        scope: "p1",
+        surface: "preview",
+        locale: "en",
+        projects: PROJECTS,
+        memberships: MEMBERSHIPS,
+        navigate: (route) => pushed.push(route),
+      },
+    );
+
+    expect(pushed).toEqual(["/en/pokedex/pokemon-detail"]);
+    expect(warnings.join(" ")).toContain("do not build");
+  });
+
   test("the home screen serves the bare namespace; siblings keep their slug", () => {
     const pushed: string[] = [];
     const navigate = (route: string) => pushed.push(route);

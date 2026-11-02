@@ -77,11 +77,20 @@ export const ACTIONS = {
 
 export const SWITCHER_LABELS = LOCALE_LABELS;
 
-/** Top-bar project switcher copy (plan 061 A1). */
+/** Top-bar project switcher copy (plan 061 A1) + workspace panel copy
+ *  (plan 065 decision 14 — the drawer's expandable project section). */
 export const PROJECTS = {
   switcher: en.projects.switch,
   create: en.projects.create,
   namePlaceholder: en.projects.createPlaceholder,
+  expandWorkspace: en.projects.expandWorkspace,
+  addScreen: en.projects.addScreen,
+  setHome: en.projects.setHome,
+  unsetHome: en.projects.unsetHome,
+  routeEdit: en.projects.routeEdit,
+  removeScreen: en.projects.removeScreen,
+  rowActions: (name: string): string =>
+    en.projects.rowActions.replace("{name}", name),
 } as const;
 
 export const RENAME = {

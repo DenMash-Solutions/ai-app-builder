@@ -10,6 +10,16 @@ const nextConfig: NextConfig = {
   // Native oxide scanner + the compile engine must not be bundled into the
   // /api/tailwind route (server-side on-demand Tailwind).
   serverExternalPackages: ["@tailwindcss/node", "@tailwindcss/oxide"],
+  // E2E only (plan 065 Task 5): streaming metadata renders Next's
+  // `MetadataWrapper` as `<div hidden>`; when it mounts, React's hide
+  // cascade (`hideInstance` → `hideOrUnhideNearestPortals`) copies
+  // `display: none !important` onto open Radix portals (popover/drawer/
+  // dialog), which then measure 0×0 and stall Playwright visibility waits.
+  // Opt EVERY request out of streaming metadata removes the wrapper
+  // entirely — `htmlLimitedBots` REPLACES Next's default bot list, and this
+  // branch only exists when Playwright starts the server (PLAYWRIGHT_TEST),
+  // so production keeps streaming metadata and the default bot list.
+  ...(process.env.PLAYWRIGHT_TEST === "true" ? { htmlLimitedBots: /.*/ } : {}),
 };
 
 export default withNextIntl(nextConfig);

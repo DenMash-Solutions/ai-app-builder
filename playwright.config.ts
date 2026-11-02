@@ -49,5 +49,8 @@ export default defineConfig({
     url: BASE_URL,
     reuseExistingServer: true,
     timeout: 120_000,
+    env: {
+      PLAYWRIGHT_TEST: "true",
+    },
   },
 });

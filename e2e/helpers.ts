@@ -90,10 +90,12 @@ export async function readHistoryStorage(page: Page): Promise<StoredEntry[]> {
   }, STORAGE_KEY);
 }
 
-/** A project as stored locally (plans 061 A1 / 064). */
+/** A project as stored locally (plans 061 A1 / 064) — the full `Project`
+ *  row (065: the preview client resolves the bare namespace by `slug`). */
 export interface StoredProject {
   id: string;
   name: string;
+  slug: string;
   state: Record<string, unknown>;
 }
 
@@ -105,11 +107,90 @@ export async function readStoredProjects(page: Page): Promise<StoredProject[]> {
 }
 
 /**
+ * Next serves streaming metadata behind a `<div hidden>` in the App Router's
+ * head slot (`MetadataWrapper`); when that wrapper mounts — it does so in
+ * waves once the page has navigated/streamed — React's hide cascade
+ * (`hideInstance` via `hideOrUnhideNearestPortals`) copies
+ * `display: none !important` onto the open Radix popover's popper wrapper.
+ * The popover then reads `data-state="open"` but measures 0×0, and Playwright
+ * waits for visibility forever (plan 065 Task 5). Strip styles an earlier
+ * wave applied and neutralise later writes for the rest of the page session.
+ * The canvas root is deliberately NOT shielded: React's Suspense boundaries
+ * hide stale content there on purpose, and un-hiding it duplicates controls.
+ */
+export async function shieldFromHeadSlotHides(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const SHIELDED =
+      "[data-radix-popper-content-wrapper], [data-radix-popper-content-wrapper] *, [data-slot='drawer-content'], [data-slot='drawer-content'] *, [data-slot='dialog-content'], [data-slot='dialog-content'] *";
+    const strip = (): void => {
+      for (const el of document.querySelectorAll<HTMLElement>(SHIELDED)) {
+        // Only strip if the element should be visible (has data-state="open")
+        // - this distinguishes React's malicious hide from Radix's legitimate close
+        if (
+          el.style.display === "none" &&
+          (el.getAttribute("data-state") === "open" ||
+            el.closest("[data-state='open']"))
+        ) {
+          el.style.removeProperty("display");
+        }
+      }
+    };
+    const w = window as unknown as { __HIDE_SHIELD__?: boolean };
+    if (!w.__HIDE_SHIELD__) {
+      w.__HIDE_SHIELD__ = true;
+      // React only reaches the element through the style getter, so tag it
+      // there (the descriptor lives on HTMLElement.prototype, not Element).
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        "style",
+      );
+      if (descriptor?.get) {
+        const get = descriptor.get;
+        Object.defineProperty(HTMLElement.prototype, "style", {
+          ...descriptor,
+          get(this: HTMLElement) {
+            const style = get.call(this) as CSSStyleDeclaration & {
+              __el?: Element;
+            };
+            style.__el = this;
+            return style;
+          },
+        });
+      }
+      const proto = CSSStyleDeclaration.prototype;
+      const setProperty = proto.setProperty;
+      proto.setProperty = function (
+        this: CSSStyleDeclaration & { __el?: Element },
+        property: string,
+        value: string,
+        priority?: string,
+      ): void {
+        // Only block `display: none !important` from React's hideInstance
+        // when the element should be visible (has data-state="open")
+        if (
+          property === "display" &&
+          value === "none" &&
+          priority === "important" &&
+          this.__el?.matches(SHIELDED) &&
+          (this.__el.getAttribute("data-state") === "open" ||
+            this.__el.closest("[data-state='open']"))
+        ) {
+          return;
+        }
+        setProperty.call(this, property, value, priority);
+      };
+    }
+    strip();
+  });
+}
+
+/**
  * Creates a project through the top-bar switcher's inline input and waits
  * for the pill to name it — the creation seam both project suites exercise
  * (anonymous 061-4 and authenticated 064).
  */
 export async function createProject(page: Page, name: string): Promise<void> {
+  await shieldFromHeadSlotHides(page);
   await page
     .getByRole(ROLE.button, { name: PROJECTS.switcher })
     .filter({ visible: true })

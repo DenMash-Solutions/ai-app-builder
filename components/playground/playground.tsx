@@ -729,16 +729,26 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
           );
     // Record path (061-3, §B): `/ui/<ref>/<param>` overlays LAST — the URL
     // path wins over the query — and, unlike the window-guarded urlSync
-    // overlay, it applies during SSR too. Only the spec's own `route`
-    // pattern captures (`{id}`); an unmatchable path seeds nothing.
-    const pattern = specRoutePattern(displayedSpec);
+    // overlay, it applies during SSR too. Captures come from the MEMBERSHIP
+    // route when the entry is a project member (065 — the same contract
+    // `buildNavigateRoute` pushed and `resolveProjectRoute` matches); the
+    // spec's own `route` pattern stays the project-less fallback. An
+    // unmatchable path seeds nothing.
+    const row = activeEntry?.projectId
+      ? memberships.find(
+          (candidate) =>
+            candidate.projectId === activeEntry.projectId &&
+            candidate.screenId === activeEntry.id,
+        )
+      : undefined;
+    const pattern = row ? row.route : specRoutePattern(displayedSpec);
     return overlayPathState(
       withUrl,
       pattern && routeParamPath
         ? matchRoutePattern(pattern, routeParamPath)
         : null,
     );
-  }, [displayedSpec, contentLang, routeParamPath, activeEntry?.projectId]);
+  }, [displayedSpec, contentLang, routeParamPath, activeEntry, memberships]);
   // The design's own switcher writes state.locale at runtime — treat that as
   // a content-language selection so canvas and pill always agree (the pill's
   // onChange does the same in reverse). Only real tags the spec carries

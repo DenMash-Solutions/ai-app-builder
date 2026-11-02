@@ -1,6 +1,6 @@
 # Project Workspace — Membership, Routes, Home Screen
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-31
 
 ## Goal
@@ -116,6 +116,16 @@ explicit home screen.
     teaching rides `ScreenListing`: `route` (membership row's pattern,
     spec-level route as the project-less fallback) and a `home` marker,
     carried through `parseScreens` into `siblingScreensBlock`.
+ 15. Navigate builds the membership route (2026-11-02): `buildNavigateRoute`
+    is membership-first — a navigate to a screen that has a workspace
+    route resolves through the PROJECT's route (pattern + record params)
+    before falling back to the spec-level route, so the model-authored
+    `press(navigate)` in one project serves the target's route in that
+    project. Rejected: spec-route-first (ignores the project the editor
+    is in — the exact bug Task 5's e2e caught), rejected: route-less
+    navigate (drops decision 6's `{param}` contract). The seed overlay in
+    `playground.tsx` applies the same precedence so the seeded params
+    match the built URL.
 
 ## Files
 
@@ -225,30 +235,44 @@ context + prompt teaching), `db/` migration + RLS, en/es keys,
       `route`/`home`, `NAVIGATE_RULES` teaches the route contract and the
       `(home)` marker; playground wires the context with store
       subscriptions
-- [ ] `preview-client.tsx` serves the bare project namespace through the
+- [x] `preview-client.tsx` serves the bare project namespace through the
       home screen — call sites already resolve via the explicit home
-      (WS3); the e2e proof lands with task 5
+      (WS3); the e2e proof lands with task 5 (closed 2026-11-02: the
+      home-screen e2e navigates to `/en/{slug}` and sees the home
+      heading)
 
 ### 5. Tests
 
-- [ ] Unit: route precedence incl. ties, duplicate rejection, membership ops,
-      explicit home rules, screens without a project behave as before
-- [ ] `lib/projects/screen-routes.test.ts` updated for the new precedence
-- [ ] e2e: screen in two projects — remove from one, the other keeps it;
+- [x] Unit: route precedence incl. ties, duplicate rejection, membership ops,
+      explicit home rules, screens without a project behave as before —
+      900 unit tests / 73 files green (screen-routes 21, memberships 18,
+      screen-nav 30 incl. +3 for decision 15)
+- [x] `lib/projects/screen-routes.test.ts` updated for the new precedence
+      — landed with WS3 (commit b4a81bb, 29 membership assertions)
+- [x] e2e: screen in two projects — remove from one, the other keeps it;
       dynamic route resolves and seeds state; home serves the bare
-      namespace; reload keeps membership
-- [ ] Full gate; 061 verification stays green
+      namespace; reload keeps membership — 4 tests in
+      `e2e/project-session.spec.ts` green (full suite 121 passed /
+      12 skipped / 0 failed)
+- [x] Full gate; 061 verification stays green
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit: route precedence incl. tie cases, duplicate-route rejection,
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+      — 2026-11-02: prettier clean, eslint 0, tsc clean, **900 pass /
+      0 fail** (73 files)
+- [x] Unit: route precedence incl. tie cases, duplicate-route rejection,
       membership ops (add/copy/move/remove/reorder), explicit home rules,
-      screens without a project behave exactly as before
-- [ ] e2e: a screen in two projects — remove it from one, the other keeps
+      screens without a project behave exactly as before — covered by the
+      900 above
+- [x] e2e: a screen in two projects — remove it from one, the other keeps
       it; dynamic route resolves and seeds state; home screen serves the
-      bare project namespace; reload keeps membership
-- [ ] MCP spot-check + full gate; 061 verification stays green
+      bare project namespace; reload keeps membership —
+      `bunx playwright test`: **121 passed, 12 skipped, 0 failed**
+      (2026-11-02), incl. the 4 project-session tests and the 061-4
+      grouping test
+- [x] MCP spot-check + full gate; 061 verification stays green — full
+      Playwright suite green incl. 061-derived specs (see above)
 
 ## Status log
 
@@ -260,3 +284,4 @@ context + prompt teaching), `db/` migration + RLS, en/es keys,
 | 2026-11-01 | sync loop + copy/move/remove implemented — gate green (lint 0, tsc clean, prettier clean, 879 unit pass incl. 11 new); tasks 1 and 2 (minus rename UI) closed |
 | 2026-11-01 | Task 3 core implemented — decision 13 (initial home fill) added after a clarifying question; `resolveProjectRoute` membership-driven (exact > static > dynamic > position), `Project.homeScreenId` end-to-end (store, sync, resolve, nav) — gate green (lint 0, tsc clean, prettier clean, 888 unit pass incl. 9 new); route-config UI checkbox remains for task 4's panel |
 | 2026-11-01 | Task 4 implemented — decision 14 (expandable panel in drawer) recorded after a clarifying question; membership-driven drawer grouping (`groupEntriesForDrawer`), `ProjectWorkspacePanel` (home/route/reorder/move/copy/remove/add), prompt teaching (route + home in listings/rules), in-session membership healing added so mid-session created screens gain rows without a reload — gate green (lint 0, tsc clean, prettier clean, 897 unit pass incl. 9 new); preview-client checkbox waits for task 5's e2e |
+| 2026-11-02 | Task 5 implemented — decision 15 (membership-first `buildNavigateRoute`) recorded; e2e debug surfaced two environmental root causes: Next's streaming-metadata `MetadataWrapper` `<div hidden>` hides open Radix portals (`htmlLimitedBots: /.*/` gated on `PLAYWRIGHT_TEST` in `next.config.ts` + `playwright.config.ts`), and opening the drawer while generate's route transition is pending defers Radix Presence layout effects (dialog never mounts — tests now wait for `/ui/{uuid}`). 4 new `project-session` tests + full gate green: prettier clean, eslint 0, tsc clean, 900 unit pass / 0 fail; `bunx playwright test` 121 passed / 12 skipped / 0 failed |

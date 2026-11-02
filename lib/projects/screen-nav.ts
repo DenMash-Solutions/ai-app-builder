@@ -27,7 +27,7 @@
  */
 import { getByPath } from "@json-render/core";
 import { getActiveProjectId, type Project } from "./projects";
-import type { ProjectMembership } from "./memberships";
+import { getProjectMemberships, type ProjectMembership } from "./memberships";
 import {
   buildRoutePath,
   projectHomeScreenId,
@@ -243,7 +243,7 @@ function resolveNavParam(
 }
 
 /**
- * The route for a resolved screen + params (decision 9):
+ * The route for a resolved screen + params (decision 9, reworked 065):
  *
  * - editor → `/ui/<ref>[/<built>]` (its optional catch-all carries params
  *   for any screen, project or not),
@@ -254,6 +254,14 @@ function resolveNavParam(
  * - preview, no project → today's `/{locale}/{slug}` (+ built path when a
  *   pattern exists).
  *
+ * The pattern itself is the MEMBERSHIP row's configured route when the
+ * target is a member — `toScreenListings` lists exactly that contract to
+ * the model, and `resolveProjectRoute` matches only membership routes for
+ * project screens, so a spec-level pattern would build a URL the resolver
+ * rejects. The spec-level pattern stays the fallback for screens with no
+ * row (project-less screens, the pre-065 shape). Injected rows in tests,
+ * store default in production — the same seam as `projectHomeScreenId`.
+ *
  * Params that cannot build (no pattern, missing/unresolvable value) are
  * **dropped with a warning** and the bare route is pushed — loud but safe.
  */
@@ -263,7 +271,17 @@ function buildNavigateRoute(
   context: NavigateContext,
 ): string | null {
   const wanted = Object.keys(params).length > 0;
-  const pattern = specRoutePattern(target.spec);
+  const rows =
+    context.memberships ??
+    (typeof target.projectId === "string" && target.projectId !== ""
+      ? getProjectMemberships(target.projectId)
+      : undefined);
+  const row = rows?.find(
+    (candidate) =>
+      candidate.projectId === target.projectId &&
+      candidate.screenId === target.id,
+  );
+  const pattern = row ? row.route : specRoutePattern(target.spec);
   const built =
     wanted && pattern !== null ? buildRoutePath(pattern, params) : null;
   if (wanted && built === null) {
