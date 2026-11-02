@@ -1,6 +1,6 @@
 # UI Catalog — Versioned Screens and Components
 
-**Status:** draft
+**Status:** approved
 **Date:** 2026-10-31
 
 ## Goal
@@ -25,6 +25,8 @@ and fork-on-edit.
 - Catalog UI reusing the existing template UI (search, visibility toggle,
   install)
 - Lazy migration of the `genui-component-templates` localStorage library
+- Account sync of catalog assets, versions and installs (decision 9 —
+  added 2026-11-02; without it installs don't survive device changes)
 
 ### Out of scope
 
@@ -49,7 +51,10 @@ and fork-on-edit.
 3. Version immutability enforced in the database (trigger or column
    permission), not only in app code — rejected: soft immutability, because
    requirement: a published installation must remain valid even if the
-   catalog asset is later changed.
+   catalog asset is later changed. **Resolved 2026-11-02: a
+   `BEFORE UPDATE/DELETE` trigger that raises** — rejected: column
+   permissions, because Postgres has no clean per-column DML grant and the
+   trigger is directly testable at the DB layer.
 4. Fork-on-edit runs as one transaction/RPC: read version → create copy →
    initial revision → swap reference — rejected: client-side multi-step,
    because partial migration was explicitly forbidden.
@@ -59,12 +64,31 @@ and fork-on-edit.
 6. Public assets are visible to everyone but installable as copies only;
    editing someone else's asset is never possible — rejected: shared-edit
    assets, because per-owner revisions (`uis` is owner-scoped) can't merge.
+7. Catalog UI lives as a **tab in the existing Insert picker** (user-
+   selected 2026-11-02) — search, filters, install beside the current
+   templates list in the same dialog. Rejected: a history-drawer section
+   (insertion already happens in the picker), rejected: a separate
+   `/catalog` route (extra navigation for an insertion flow).
+8. Installing a **screen** asset creates a new `uis` row at revision 0
+   **plus a `project_screens` membership row in the ACTIVE project** via
+   065's store (user-selected 2026-11-02), so it lands in that project's
+   drawer group immediately. Rejected: standalone row without membership
+   (the user would have to add it manually; the install intent is "into
+   what I'm working on").
+9. Catalog tables **join the account sync loop** (user-selected
+   2026-11-02): assets, versions and installs pull/push alongside 065's
+   third loop, following the 064 cross-device pattern. Rejected: device-
+   local catalog (install state would be lost across devices and
+   contradicts 064's cross-device expectation).
 
 ## Files
 
-`db/` migration + RLS for assets/versions/installs,
-`lib/editor/templates.ts` (+tests), new `lib/catalog/`, catalog UI panel,
-`components/playground/` insert seams, en/es keys, `e2e/` catalog spec.
+`db/` migration + RLS for assets/versions/installs (+ immutability
+trigger, `docs/security/rls-audit.md` inventory),
+`lib/editor/templates.ts` (+tests), new `lib/catalog/`,
+`lib/history/sync.ts` + `components/sync/sync-engine.tsx` (catalog sync),
+catalog tab in `components/editor/component-picker.tsx`, en/es keys,
+`e2e/` catalog spec.
 
 ## Tasks
 
@@ -88,6 +112,9 @@ and fork-on-edit.
       bump `latest_version_id`, optional changelog
 - [ ] Lazy seed of the `genui-component-templates` localStorage library into
       catalog rows without duplicates (decision 5)
+- [ ] Catalog sync: pull/push `catalog_assets` / `catalog_asset_versions` /
+      installs in `lib/history/sync.ts` (third-loop pattern from 065),
+      idempotent on conflict (decision 9)
 
 ### 3. Install, update, fork
 
@@ -102,8 +129,9 @@ and fork-on-edit.
 
 ### 4. Catalog UI
 
-- [ ] Panel reusing the existing template UI: search, filters (all/mine/
-      public/private, screens/components), owner, latest version, preview
+- [ ] Catalog tab in the Insert picker (decision 7): search, filters
+      (all/mine/public/private, screens/components), owner, latest
+      version, preview
 - [ ] Visibility toggle whose change never invalidates installations
 
 ### 5. Tests
@@ -113,7 +141,8 @@ and fork-on-edit.
       identity and revision 0
 - [ ] e2e: two projects install v1 → v2 published → both still render v1;
       fork in A leaves B unchanged; private install denied (service-client
-      assertion)
+      assertion); an install made on one device appears on another
+      (064 pattern, decision 9)
 - [ ] Signed-out local template library still works; migration seeds without
       duplicates; full gate
 
@@ -134,3 +163,5 @@ and fork-on-edit.
 | Date | Event |
 | ---- | ----- |
 | 2026-10-31 | plan drafted |
+| 2026-11-02 | clarifications answered (Insert-picker tab, screen install = uis row + membership in active project, catalog joins account sync); decisions 7-9 added, decision 3 resolved to a BEFORE UPDATE/DELETE trigger; scope + files + tasks updated |
+| 2026-11-02 | approved — recommended options accepted as decisions 7-9 |
