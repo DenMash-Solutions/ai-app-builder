@@ -35,6 +35,8 @@ import type { SelectBuilder, SyncClient } from "./sync";
 import {
   CATALOG_STORAGE_KEY,
   addCatalogInstall,
+  applyRemoteCatalogAsset,
+  applyRemoteCatalogVersion,
   createCatalogAsset,
   getCatalogAssets,
   getCatalogInstalls,
@@ -439,8 +441,11 @@ describe("sync", () => {
       columns: "id, owner_id, updated_at",
       filters: [{ kind: "eq", column: "owner_id", values: ["owner-1"] }],
     });
-    // Phase 2: full rows fetched ONLY for the id that wins the compare.
-    expect(state.selects[1].columns).toBe("*");
+    // Phase 2: full rows fetched ONLY for the id that wins the compare —
+    // the spec's EXPLICIT fullColumns list (never `SELECT *`).
+    expect(state.selects[1].columns).toBe(
+      "id, owner_id, name, slug, prompt, revisions, head, created_at, updated_at",
+    );
     expect(state.selects[1].filters).toEqual([
       { kind: "in", column: "id", values: [id] },
     ]);
@@ -1223,6 +1228,7 @@ describe("catalog loops (plan 066)", () => {
       type: "component",
       visibility: "public",
       latestVersionId: "bbbbbbbb-4444-4888-8999-dddddddddddd",
+      ownerId: "owner-1",
       createdAt: 1700000000000,
       updatedAt: 1700000009000,
     };
@@ -1244,6 +1250,7 @@ describe("catalog loops (plan 066)", () => {
       version: 2,
       spec: makeSpec("v2"),
       changelog: "tweaks",
+      ownerId: "owner-1",
       createdAt: 1700000001000,
       updatedAt: 1700000008000,
     };
@@ -1329,6 +1336,21 @@ describe("catalog loops (plan 066)", () => {
     );
     expect(versionSelects.length).toBeGreaterThan(0);
 
+    // Phase-2 full-column pins (066 explicit-column rule): the exact
+    // columns each mapper reads, never `*`.
+    const assetSelects = state.selects.filter(
+      (select) =>
+        select.columns ===
+        "id, owner_id, name, description, type, visibility, latest_version_id, created_at, updated_at",
+    );
+    expect(assetSelects.length).toBeGreaterThan(0);
+    const versionFullSelects = state.selects.filter(
+      (select) =>
+        select.columns ===
+        "id, owner_id, asset_id, version, spec, changelog, created_at, updated_at",
+    );
+    expect(versionFullSelects.length).toBeGreaterThan(0);
+
     expect(getSyncStatus()).toBe("saved");
     stops.forEach((stop) => stop());
     expect(getSyncStatus()).toBe("idle");
@@ -1381,6 +1403,67 @@ describe("catalog loops (plan 066)", () => {
     expect(installOut?.target_ui_id).toBe("ui-1");
 
     expect(state.deletes).toHaveLength(0); // nothing was removed
+    stops.forEach((stop) => stop());
+  });
+
+  test("browse-adopted foreign rows never push and never delete (d11)", async () => {
+    const { asset: local } = createCatalogAsset({
+      name: "Mine",
+      type: "component",
+      spec: makeSpec("v1"),
+    })!;
+
+    // The decision-11 browse path: foreign public rows adopted into the
+    // store with their REAL ownerId (the sync pull never brings them —
+    // phase 1 filters to our own).
+    const foreignAsset: CatalogAsset = {
+      id: "eeeeeeee-4444-4888-9999-0000000000e1",
+      name: "Foreign",
+      description: null,
+      type: "component",
+      visibility: "public",
+      latestVersionId: "ffffffff-4444-4888-9999-0000000000f1",
+      ownerId: "other-user",
+      createdAt: 1000,
+      updatedAt: 2000,
+    };
+    const foreignVersion: CatalogAssetVersion = {
+      id: "ffffffff-4444-4888-9999-0000000000f1",
+      assetId: foreignAsset.id,
+      version: 1,
+      spec: makeSpec("foreign"),
+      changelog: null,
+      ownerId: "other-user",
+      createdAt: 1000,
+      updatedAt: 2000,
+    };
+    applyRemoteCatalogAsset(foreignAsset);
+    applyRemoteCatalogVersion(foreignVersion);
+
+    const client = makeClient(state);
+    const stops = [
+      startTableSync(client, "owner-1", catalogAssetsSyncSpec, {
+        debounceMs: 1,
+      }),
+      startTableSync(client, "owner-1", catalogVersionsSyncSpec, {
+        debounceMs: 1,
+      }),
+    ];
+    await sleep(30);
+
+    const pushedIds = state.upserts.flat().map((row) => row.id);
+    expect(pushedIds).toContain(local.id);
+    // The ownedBy guard: adopted rows are never upserted (the upsert would
+    // re-stamp owner_id = us — a silent ownership transfer).
+    expect(pushedIds).not.toContain(foreignAsset.id);
+    expect(pushedIds).not.toContain(foreignVersion.id);
+    expect(state.deletes).toHaveLength(0);
+
+    // Removing the adopted row locally must NOT become a remote delete —
+    // the loop remembers it was never ours (the delete-pass guard).
+    removeCatalogAsset(foreignAsset.id);
+    await sleep(30);
+    expect(state.deletes.flat()).not.toContain(foreignAsset.id);
     stops.forEach((stop) => stop());
   });
 

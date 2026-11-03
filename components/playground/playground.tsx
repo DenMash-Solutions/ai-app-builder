@@ -81,7 +81,13 @@ import type {
   PromptScopeTarget,
 } from "@/lib/editor";
 import { getCatalogAssets, getCatalogVersions } from "@/lib/catalog/catalog";
-import { insertCatalogComponent } from "@/lib/catalog/install";
+import {
+  forkCatalogAsset,
+  insertCatalogComponent,
+  installScreenAsset,
+  type ForkClient,
+} from "@/lib/catalog/install";
+import { createClient } from "@/lib/supabase/client";
 import { examplePropsFor } from "@/lib/playground/catalog";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
@@ -256,6 +262,11 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
   const t = useTranslations();
   const locale = useLocale();
   const router = useRouter();
+  // Fork-on-edit's Supabase slice (066 decision 4): the real client
+  // satisfies ForkClient structurally, but TS's checker explodes on
+  // supabase's generic builders against the narrow interface (TS2589) —
+  // one cast at the single integration point (the SyncEngine discipline).
+  const forkClient = useMemo(() => createClient() as unknown as ForkClient, []);
   const routeRef = initialRef ?? null;
   const routeParamPath =
     initialParam && initialParam.length > 0 ? initialParam.join("/") : null;
@@ -1433,6 +1444,41 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     );
   };
 
+  // Task 4: a screen install materializes the copy in the active project —
+  // navigate to the new screen immediately so the install IS the entry
+  // point (same guards as the component insert: streaming, legacy bucket).
+  const handleInstallCatalogScreen = (assetId: string, versionId: string) => {
+    if (!activeEntry || isStreaming) return;
+    const asset = getCatalogAssets().find((row) => row.id === assetId);
+    const version = getCatalogVersions().find((row) => row.id === versionId);
+    // catalog_installs.project_id is NOT NULL (Task 1 schema) — a screen
+    // in the legacy bucket has nowhere to record an install.
+    if (!asset || !version || !activeEntry.projectId) return;
+    const result = installScreenAsset({
+      asset,
+      version,
+      projectId: activeEntry.projectId,
+    });
+    if (!result) return;
+    router.push(`/ui/${result.entry.id}`);
+  };
+
+  // Task 4: fork creates the working copy in ONE RPC transaction (decision
+  // 4) — navigate to it immediately so editing continues there. The picker
+  // has already closed; errors are swallowed inside (null = refused).
+  const handleForkCatalogAsset = (assetId: string, versionId: string) => {
+    void (async () => {
+      const result = await forkCatalogAsset(forkClient, {
+        assetId,
+        versionId,
+        // Empty string would reach the RPC as '' (a uuid cast error) — map
+        // it to undefined so the parameter travels as null.
+        projectId: activeEntry?.projectId || undefined,
+      });
+      if (result) router.push(`/ui/${result.uisId}`);
+    })();
+  };
+
   const handleRemove = (key: string) => {
     if (!displayedSpec || !activeEntry || isStreaming) return;
     commitStructure(
@@ -2112,6 +2158,9 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
             onDuplicate={handleDuplicate}
             onInsertTemplate={handleInsertTemplate}
             onInsertCatalogComponent={handleInsertCatalogComponent}
+            catalogProjectId={activeEntry?.projectId ?? ""}
+            onInstallCatalogScreen={handleInstallCatalogScreen}
+            onForkCatalogAsset={handleForkCatalogAsset}
             inPromptScope={selectionInScope}
             onTogglePromptScope={() => {
               if (effectiveKey) {

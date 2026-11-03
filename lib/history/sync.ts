@@ -303,6 +303,10 @@ export interface SyncSpec<T extends { id: string; updatedAt: number }> {
   table: string;
   /** Slim columns of BOTH phases — must include `id, owner_id, updated_at`. */
   slimColumns: string;
+  /** Full-row columns of pull's phase 2 (plan 055 A). Explicit — the
+   *  repo forbids `SELECT *`; each spec lists exactly what its mapper
+   *  reads. */
+  fullColumns: string;
   /** Local working copy (the loop never touches storage itself). */
   read(): T[];
   /** Adopt a remote row that won the LWW compare (already decided by the
@@ -314,6 +318,12 @@ export interface SyncSpec<T extends { id: string; updatedAt: number }> {
   toEntity(row: unknown): T | null;
   /** Entity → upsert row (the `owner_id` stamp happens here). */
   toRow(entity: T, ownerId: string): Record<string, unknown>;
+  /** Entity-level ownership guard (066 decision 11): `false` marks an
+   *  adopted foreign row — excluded from the push payload AND from
+   *  `syncedIds`, so it can never be upserted or deleted locally (RLS
+   *  would refuse both anyway; this keeps the loop out of the offline
+   *  error path). Absent = the loop's pull filter already owns the table. */
+  ownedBy?(entity: T, ownerId: string): boolean;
   /** Runs against the push's slim view before the payload is built: fixes
    *  up local data colliding with remote rows (slug uniqueness, 064
    *  decision 5). Absent for entries — their namespaces reconcile today. */
@@ -344,6 +354,10 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let syncedIds = new Set<string>();
+  // Adopted foreign rows (066 decision 11): session-lifetime set, only
+  // ever ADDED to — an entity deleted between two pushes must still be
+  // remembered as not-ours so the delete pass skips it.
+  const foreignIds = new Set<string>();
   let chain: Promise<void> = Promise.resolve();
 
   const isOnline = () =>
@@ -376,7 +390,10 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     }
     if (needIds.length === 0) return;
 
-    const full = await client.from(spec.table).select("*").in("id", needIds);
+    const full = await client
+      .from(spec.table)
+      .select(spec.fullColumns)
+      .in("id", needIds);
     if (stopped || full.error) return;
     // Re-read AFTER the awaits: a local write newer than phase 1's snapshot
     // must still win the compare (never clobber what was typed mid-pull).
@@ -442,6 +459,13 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     const localIds = new Set(local.map((entity) => entity.id));
     const payload = local
       .filter((entity) => {
+        // Entity-level guard first (decision 11): a row adopted from the
+        // public browse carries its REAL owner — pushing or deleting it
+        // would write to someone else's data.
+        if (spec.ownedBy && !spec.ownedBy(entity, ownerId)) {
+          foreignIds.add(entity.id);
+          return false;
+        }
         const remote = remoteById.get(entity.id);
         // Belt to pull's braces: never overwrite a row another account
         // owns — the upsert stamps owner_id = us and would steal it (F7).
@@ -477,6 +501,7 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     if (!spec.immutableRows) {
       const removed = [...syncedIds].filter((id) => {
         if (localIds.has(id)) return false;
+        if (foreignIds.has(id)) return false; // adopted — never ours to delete
         // A stale local copy of another account's row must not delete it.
         const remote = remoteById.get(id);
         return !remote || remote.owner_id === ownerId;
@@ -494,7 +519,9 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
       }
     }
 
-    syncedIds = localIds;
+    // Foreign rows were never synced, so they must not enter the local-
+    // removal detector either (decision 11: ownedBy guards push AND delete).
+    syncedIds = new Set([...localIds].filter((id) => !foreignIds.has(id)));
     setLoopStatus(spec.table, "saved");
   }
 
@@ -555,6 +582,8 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
 export const entriesSyncSpec: SyncSpec<HistoryEntry> = {
   table: "uis",
   slimColumns: "id, owner_id, updated_at",
+  fullColumns:
+    "id, owner_id, name, slug, prompt, revisions, head, created_at, updated_at",
   read: getHistory,
   apply: (remote, local) =>
     applyRemoteEntry(
@@ -574,6 +603,8 @@ export const entriesSyncSpec: SyncSpec<HistoryEntry> = {
 export const projectsSyncSpec: SyncSpec<Project> = {
   table: "projects",
   slimColumns: "id, owner_id, updated_at, slug",
+  fullColumns:
+    "id, owner_id, name, slug, home_screen_id, status, state, created_at, updated_at",
   read: getProjects,
   apply: (remote) => applyRemoteProject(remote),
   subscribe: subscribeProjects,
@@ -655,6 +686,8 @@ export function membershipToRow(
 export const membershipsSyncSpec: SyncSpec<ProjectMembership> = {
   table: "project_screens",
   slimColumns: "id, owner_id, updated_at, project_id, screen_id, route",
+  fullColumns:
+    "id, owner_id, project_id, screen_id, route, position, created_at, updated_at",
   read: getMemberships,
   apply: (remote) => applyRemoteMembership(remote),
   subscribe: subscribeMemberships,
@@ -706,6 +739,7 @@ export function rowToCatalogAsset(raw: unknown): CatalogAsset | null {
       type: raw.type,
       visibility: raw.visibility,
       latestVersionId: raw.latest_version_id,
+      ownerId: raw.owner_id,
       createdAt,
       updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
     },
@@ -769,6 +803,7 @@ export function rowToCatalogVersion(raw: unknown): CatalogAssetVersion | null {
       version: raw.version,
       spec: raw.spec,
       changelog: raw.changelog,
+      ownerId: raw.owner_id,
       createdAt,
       updatedAt: Number.isFinite(updatedAt) ? updatedAt : createdAt,
     },
@@ -861,11 +896,17 @@ export function installToRow(
 export const catalogAssetsSyncSpec: SyncSpec<CatalogAsset> = {
   table: "catalog_assets",
   slimColumns: "id, owner_id, updated_at",
+  fullColumns:
+    "id, owner_id, name, description, type, visibility, latest_version_id, created_at, updated_at",
   read: getCatalogAssets,
   apply: (remote) => applyRemoteCatalogAsset(remote),
   subscribe: subscribeCatalog,
   toEntity: rowToCatalogAsset,
   toRow: assetToRow,
+  // Decision 11: a browse-adopted foreign row carries its REAL owner —
+  // never push it, never let it enter the delete pass.
+  ownedBy: (entity, ownerId) =>
+    entity.ownerId === "" || entity.ownerId === ownerId,
 };
 
 /** The `catalog_asset_versions` loop (066 decision 9): `immutableRows` —
@@ -876,12 +917,16 @@ export const catalogAssetsSyncSpec: SyncSpec<CatalogAsset> = {
 export const catalogVersionsSyncSpec: SyncSpec<CatalogAssetVersion> = {
   table: "catalog_asset_versions",
   slimColumns: "id, owner_id, updated_at, asset_id, version",
+  fullColumns:
+    "id, owner_id, asset_id, version, spec, changelog, created_at, updated_at",
   read: getCatalogVersions,
   apply: (remote) => applyRemoteCatalogVersion(remote),
   subscribe: subscribeCatalog,
   toEntity: rowToCatalogVersion,
   toRow: versionToRow,
   reconcile: reconcileCatalogVersions,
+  ownedBy: (entity, ownerId) =>
+    entity.ownerId === "" || entity.ownerId === ownerId,
   immutableRows: true,
 };
 
@@ -893,6 +938,8 @@ export const catalogVersionsSyncSpec: SyncSpec<CatalogAssetVersion> = {
 export const catalogInstallsSyncSpec: SyncSpec<CatalogInstall> = {
   table: "catalog_installs",
   slimColumns: "id, owner_id, updated_at",
+  fullColumns:
+    "id, owner_id, project_id, asset_id, version_id, target_ui_id, target_key, created_at, updated_at",
   read: getCatalogInstalls,
   apply: (remote) => applyRemoteCatalogInstall(remote),
   subscribe: subscribeCatalog,

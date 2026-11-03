@@ -124,6 +124,11 @@ interface EditPanelProps {
     versionId: string,
     parentKey: string,
   ) => void;
+  /** Plan 066 Task 4: active project + screen-install/fork seams forwarded
+   *  to StructureTab (the catalog tab navigates through playground). */
+  catalogProjectId: string;
+  onInstallCatalogScreen?: (assetId: string, versionId: string) => void;
+  onForkCatalogAsset?: (assetId: string, versionId: string) => void;
   /** True when this element is in the prompt scope (main-prompt chips). */
   inPromptScope: boolean;
   onTogglePromptScope: () => void;
@@ -164,6 +169,9 @@ export function EditPanel({
   onDuplicate,
   onInsertTemplate,
   onInsertCatalogComponent,
+  catalogProjectId,
+  onInstallCatalogScreen,
+  onForkCatalogAsset,
   inPromptScope,
   onTogglePromptScope,
   promptScopeInstanceCount,
@@ -591,6 +599,9 @@ export function EditPanel({
               onDuplicate={onDuplicate}
               onInsertTemplate={onInsertTemplate}
               onInsertCatalogComponent={onInsertCatalogComponent}
+              catalogProjectId={catalogProjectId}
+              onInstallCatalogScreen={onInstallCatalogScreen}
+              onForkCatalogAsset={onForkCatalogAsset}
             />
           </>
         )}

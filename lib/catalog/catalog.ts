@@ -63,6 +63,11 @@ export interface CatalogAsset {
    *  it; no FK by design (the asset and version tables sync as independent
    *  loops — Task 1 schema note). */
   latestVersionId: string | null;
+  /** Entity owner (decision 11): `""` for locally-created rows (the push
+   *  stamps the session user); a real user id on rows adopted from the
+   *  public browse — those are never pushed or deleted locally
+   *  (`SyncSpec.ownedBy`). */
+  ownerId: string;
   createdAt: number;
   /** Publish/metadata change — the LWW stamp the sync compares. */
   updatedAt: number;
@@ -75,6 +80,8 @@ export interface CatalogAssetVersion {
   version: number;
   spec: Spec;
   changelog: string | null;
+  /** Same ownership contract as `CatalogAsset.ownerId` (decision 11). */
+  ownerId: string;
   createdAt: number;
   /** Mirrors `createdAt` (rows never update) — the sync loop's shape. */
   updatedAt: number;
@@ -137,6 +144,13 @@ function asOptionalId(value: unknown): string | null {
   return nonEmptyId(value) ? value : null;
 }
 
+/** Entity owner as stored: a non-empty string passes through, anything
+ *  else (corrupt/missing — pre-decision-11 rows) reads as `""` — the
+ *  locally-created claim the push stamps over. */
+function asOwnerId(value: unknown): string {
+  return nonEmptyId(value) ? value : "";
+}
+
 function isValidAsset(value: unknown): value is CatalogAsset {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<CatalogAsset>;
@@ -188,6 +202,7 @@ export function sanitizeCatalogAssets(raw: unknown): CatalogAsset[] {
     // Fail closed: a corrupt visibility reads as private, never public.
     visibility: asVisibility(stored.visibility),
     latestVersionId: asOptionalId(stored.latestVersionId),
+    ownerId: asOwnerId(stored.ownerId),
     createdAt: stored.createdAt,
     updatedAt:
       typeof stored.updatedAt === "number"
@@ -207,6 +222,7 @@ export function sanitizeCatalogVersions(raw: unknown): CatalogAssetVersion[] {
       typeof stored.changelog === "string" && stored.changelog.trim() !== ""
         ? stored.changelog
         : null,
+    ownerId: asOwnerId(stored.ownerId),
     createdAt: stored.createdAt,
     updatedAt:
       typeof stored.updatedAt === "number"
@@ -274,6 +290,13 @@ export function getCatalogInstalls(): CatalogInstall[] {
   return load().installs;
 }
 
+/** Whole-state snapshot for `useSyncExternalStore` (the Task 4 catalog
+ *  tab) — the cache reference is stable between writes, so React's Object.is
+ *  compare sees no change until a persist replaces it. */
+export function getCatalogState(): CatalogState {
+  return load();
+}
+
 /** Server snapshot — the client re-renders with the stored catalog after hydration. */
 export function getServerCatalog(): CatalogState {
   return EMPTY;
@@ -339,6 +362,7 @@ export function createCatalogAsset(request: {
     version: 1,
     spec: cloneSpec(request.spec),
     changelog: null,
+    ownerId: "",
     createdAt: now,
     updatedAt: now,
   };
@@ -349,6 +373,7 @@ export function createCatalogAsset(request: {
     type: request.type,
     visibility: asVisibility(request.visibility),
     latestVersionId: version.id,
+    ownerId: "",
     createdAt: now,
     updatedAt: now,
   };
@@ -455,6 +480,7 @@ export function publishCatalogVersion(
       typeof changelog === "string" && changelog.trim() !== ""
         ? changelog.trim()
         : null,
+    ownerId: "",
     createdAt: now,
     updatedAt: now,
   };
@@ -477,6 +503,10 @@ export function publishCatalogVersion(
  * installing from a mismatched pin is rejected (`null`).
  */
 export function addCatalogInstall(request: {
+  /** Explicit id for the fork-RPC mirror (decision 10c): when the server
+   *  created the install, the client re-creates it LOCALLY under the SAME
+   *  id so both stores agree before the next pull. Absent → fresh UUID. */
+  id?: string;
   projectId: string;
   assetId: string;
   versionId: string;
@@ -486,6 +516,14 @@ export function addCatalogInstall(request: {
   const { projectId, assetId, versionId } = request;
   if (projectId.trim() === "") return null;
   const state = load();
+  // Idempotent mirror: a install already carrying the requested id is the
+  // row the RPC created (or a pull beat us to it) — return it untouched.
+  if (request.id !== undefined) {
+    const existing = state.installs.find(
+      (install) => install.id === request.id,
+    );
+    if (existing) return existing;
+  }
   if (!state.assets.some((asset) => asset.id === assetId)) return null;
   const pinned = state.versions.some(
     (version) => version.id === versionId && version.assetId === assetId,
@@ -493,7 +531,7 @@ export function addCatalogInstall(request: {
   if (!pinned) return null;
   const now = Date.now();
   const install: CatalogInstall = {
-    id: crypto.randomUUID(),
+    id: request.id ?? crypto.randomUUID(),
     projectId,
     assetId,
     versionId,
@@ -565,11 +603,22 @@ export function setCatalogInstallTarget(
   const index = state.installs.findIndex((install) => install.id === id);
   if (index === -1) return false;
   const current = state.installs[index];
-  if (current.targetUiId === targetUiId) return false;
+  // Decision 10a mirror: the RPC swap also clears target_key (the old key
+  // belonged to the old target) — apply both or neither.
+  if (current.targetUiId === targetUiId && current.targetKey === null) {
+    return false;
+  }
   cache = {
     ...state,
     installs: state.installs.map((install, i) =>
-      i === index ? { ...install, targetUiId, updatedAt: Date.now() } : install,
+      i === index
+        ? {
+            ...install,
+            targetUiId,
+            targetKey: null,
+            updatedAt: Date.now(),
+          }
+        : install,
     ),
   };
   persist();
@@ -731,6 +780,7 @@ export function seedCatalogFromTemplates(
         elements: structuredClone(template.subtree.elements),
       },
       changelog: null,
+      ownerId: "",
       createdAt: stamp,
       updatedAt: stamp,
     };
@@ -741,6 +791,7 @@ export function seedCatalogFromTemplates(
       type: CATALOG_TYPES.component,
       visibility: CATALOG_VISIBILITIES.private,
       latestVersionId: version.id,
+      ownerId: "",
       createdAt: stamp,
       updatedAt: stamp,
     };

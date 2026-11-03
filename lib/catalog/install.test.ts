@@ -562,4 +562,150 @@ describe("install/update/fork flows (plan 066 task 3)", () => {
     ).toBeNull();
     expect(baseline()).toBe(before);
   });
+
+  test("fork mirrors an RPC-created install under the same id (10c)", async () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "Shared",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+    // The project has NO install for the asset — the RPC creates one.
+    expect(catalog.getCatalogInstalls()).toHaveLength(0);
+
+    const serverInstallId = "f0000000-0000-4000-8000-000000000009";
+    const forkedId = "f0000000-0000-4000-8000-000000000008";
+    const client = makeForkClient({
+      data: {
+        uis_id: forkedId,
+        version_id: version.id,
+        install_id: serverInstallId,
+        membership_swapped: false,
+        uis_row: forkUisRow(forkedId),
+      },
+    });
+
+    const result = await flows.forkCatalogAsset(client, {
+      assetId: asset.id,
+      projectId: PROJECT,
+    });
+
+    expect(result?.installId).toBe(serverInstallId);
+    // Local mirror under the SAME id — both stores agree before the next pull.
+    const install = catalog
+      .getCatalogInstalls()
+      .find((row) => row.id === serverInstallId);
+    expect(install).toBeDefined();
+    expect(install!.projectId).toBe(PROJECT);
+    expect(install!.versionId).toBe(version.id);
+    expect(install!.targetUiId).toBe(forkedId);
+    expect(install!.targetKey).toBeNull(); // cleared with the swap (10a)
+  });
+
+  test("update swaps the WHOLE spec when target_key was cleared (10a)", () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "Card",
+      type: catalog.CATALOG_TYPES.component,
+      spec: makeComponentSpec("v1"),
+    })!;
+    const v2 = catalog.publishCatalogVersion(
+      asset.id,
+      makeComponentSpec("v2"),
+    )!;
+    // A forked copy: the install points at a STANDALONE ui row with
+    // target_key cleared — the target IS the working copy.
+    const copy = history.createEntry(
+      "Working copy",
+      makeSpec("draft"),
+      PROJECT,
+    );
+    history.addEntry(copy);
+    const install = catalog.addCatalogInstall({
+      projectId: PROJECT,
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: copy.id,
+      targetKey: null,
+    })!;
+
+    const result = flows.updateCatalogInstall(install.id, v2.id);
+    expect(result?.applied).toBe(true);
+    const updated = history.getHistory().find((row) => row.id === copy.id)!;
+    // Whole-spec swap, NOT a re-expansion inside the copy.
+    expect(updated.spec).toEqual(makeComponentSpec("v2"));
+    expect(updated.revisions.at(-1)?.label).toBe("catalog:v2");
+  });
+
+  test("publish-update takes the working copy's current spec (screen)", () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "Detail",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+    const installed = flows.installScreenAsset({
+      asset,
+      version,
+      projectId: PROJECT,
+    })!;
+    const edited = {
+      root: "root",
+      elements: { root: { type: "Card", props: { title: "edited" } } },
+    };
+    history.replaceEntrySpec(installed.entry.id, edited, "edit");
+
+    const published = flows.publishCatalogInstallUpdate(
+      installed.install.id,
+      "",
+    );
+    expect(published).not.toBeNull();
+    expect(published!.version).toBe(2);
+    // The version snapshots the copy's CURRENT spec, not the pinned v1.
+    expect(published!.spec).toEqual(edited);
+    expect(catalog.getAssetVersions(asset.id)).toHaveLength(2);
+    expect(
+      catalog.getCatalogAssets().find((row) => row.id === asset.id)
+        ?.latestVersionId,
+    ).toBe(published!.id);
+
+    // Missing install / missing copy: null, nothing written.
+    expect(flows.publishCatalogInstallUpdate("ghost", "")).toBeNull();
+    const orphan = catalog.addCatalogInstall({
+      projectId: PROJECT,
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: null,
+    })!;
+    expect(flows.publishCatalogInstallUpdate(orphan.id, "")).toBeNull();
+  });
+
+  test("publish-update extracts the subtree and refuses foreign assets", () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "Badge",
+      type: catalog.CATALOG_TYPES.component,
+      spec: makeComponentSpec("v1"),
+    })!;
+    const host = history.createEntry("Host", makeHostSpec(), PROJECT);
+    history.addEntry(host);
+    const install = catalog.addCatalogInstall({
+      projectId: PROJECT,
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: host.id,
+      targetKey: "card-1",
+    })!;
+
+    const published = flows.publishCatalogInstallUpdate(install.id, "");
+    expect(published).not.toBeNull();
+    // The EXPANDED SUBTREE only — never the whole host spec.
+    expect(published!.spec.root).toBe("card-1");
+    expect(Object.keys(published!.spec.elements)).toEqual(["card-1"]);
+
+    // Decision 11 guard: a browse-adopted FOREIGN asset publishes only
+    // under its owner's session (else the F2 insert policy refuses the
+    // push — an offline loop).
+    catalog.applyRemoteCatalogAsset({ ...asset, ownerId: "other-user" });
+    expect(flows.publishCatalogInstallUpdate(install.id, "me")).toBeNull();
+    expect(
+      flows.publishCatalogInstallUpdate(install.id, "other-user"),
+    ).not.toBeNull();
+  });
 });

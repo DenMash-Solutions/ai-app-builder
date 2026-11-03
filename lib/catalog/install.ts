@@ -28,6 +28,7 @@ import {
   getCatalogAssets,
   getCatalogInstalls,
   getCatalogVersions,
+  publishCatalogVersion,
   setCatalogInstallTarget,
   updateCatalogInstallPin,
 } from "@/lib/catalog/catalog";
@@ -41,6 +42,7 @@ import {
   findParentKey,
   insertTemplate,
   removeElement,
+  subtreeKeys,
 } from "@/lib/editor/structure";
 import {
   addEntry,
@@ -227,17 +229,18 @@ function swapInstallContent(
   if (!host) return false;
   const label = catalogRevisionLabel(version);
 
-  if (asset.type === CATALOG_TYPES.screen) {
-    // The target IS the installed screen: swap its whole spec through the
+  const rootKey = install.targetKey;
+  if (asset.type === CATALOG_TYPES.screen || rootKey === null) {
+    // The target IS the working copy: swap its whole spec through the
     // revision stack (append — the previous version stays undoable).
+    // True for screens, and for any install the fork repointed at a
+    // standalone copy with target_key cleared alongside (decision 10a).
     return replaceEntrySpec(host.id, version.spec, label) !== null;
   }
 
   // Component: re-expand at the old root's position. The subtree root must
   // still exist and have a parent (a removed component or a screen whose
   // root WAS the component cannot be swapped in place — pin only).
-  const rootKey = install.targetKey;
-  if (!rootKey) return false;
   const parentKey = findParentKey(host.spec, rootKey);
   if (parentKey === null) return false;
   const index = childIndexOf(host.spec, rootKey);
@@ -251,6 +254,46 @@ function swapInstallContent(
   });
   if (!expanded) return false;
   return replaceEntrySpec(host.id, expanded.spec, label) !== null;
+}
+
+/**
+ * Publish-update affordance (066 Task 4): the working copy's CURRENT spec
+ * → the asset's next immutable version via `publishCatalogVersion`. The
+ * working copy is the install target — a whole spec for screens and for
+ * forked copies whose `target_key` was cleared (decision 10a); the subtree
+ * at `target_key` for a component expansion (the saveTemplate extraction
+ * discipline). `sessionOwnerId` guards adoption (decision 11): publishing
+ * onto a FOREIGN asset would push a version the F2 insert policy refuses
+ * — an offline loop — so only `""`-owned (local) or session-owned assets
+ * pass. `null` = no such install/asset/target, or the copy no longer
+ * holds the root (nothing is written in that case).
+ */
+export function publishCatalogInstallUpdate(
+  installId: string,
+  sessionOwnerId: string,
+): CatalogAssetVersion | null {
+  const install = getCatalogInstalls().find((row) => row.id === installId);
+  if (!install) return null;
+  const asset = getCatalogAssets().find((row) => row.id === install.assetId);
+  if (!asset) return null;
+  if (asset.ownerId !== "" && asset.ownerId !== sessionOwnerId) return null;
+  const target = getHistory().find((entry) => entry.id === install.targetUiId);
+  if (!target) return null;
+
+  const rootKey = install.targetKey;
+  let spec: Spec;
+  if (rootKey === null) {
+    spec = target.spec; // publishCatalogVersion clones before storing
+  } else {
+    if (!target.spec.elements[rootKey]) return null;
+    const elements: Spec["elements"] = {};
+    for (const member of subtreeKeys(target.spec, rootKey)) {
+      const memberElement = target.spec.elements[member];
+      if (memberElement) elements[member] = structuredClone(memberElement);
+    }
+    spec = { root: rootKey, elements };
+  }
+  return publishCatalogVersion(asset.id, spec, null);
 }
 
 export interface ForkClient {
@@ -328,7 +371,25 @@ export async function forkCatalogAsset(
     if (entry.id === row.uis_id) applyRemoteEntry(entry);
   }
 
-  if (installId) setCatalogInstallTarget(installId, row.uis_id);
+  if (installId) {
+    // Decision 10c mirror: the RPC may have CREATED the install (the
+    // project had none) — recreate it locally under the SAME id so both
+    // stores agree; an existing row just gets the reference swap (target
+    // + cleared target_key, the 10a mirror).
+    const local = getCatalogInstalls().find((item) => item.id === installId);
+    if (local) {
+      setCatalogInstallTarget(installId, row.uis_id);
+    } else if (projectId && projectId.trim() !== "") {
+      addCatalogInstall({
+        id: installId,
+        projectId,
+        assetId,
+        versionId: row.version_id,
+        targetUiId: row.uis_id,
+        targetKey: null,
+      });
+    }
+  }
   let membershipAdded = false;
   if (projectId && projectId.trim() !== "" && !membershipSwapped) {
     membershipAdded = addScreenToProject(projectId, row.uis_id) !== null;

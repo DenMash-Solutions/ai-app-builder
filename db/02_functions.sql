@@ -113,6 +113,11 @@ $$;
 -- the loser swaps the winner's target instead of stranding it. Returns the
 -- created uis row (to_jsonb) so the client can adopt it without a second
 -- round trip; `membership_swapped` tells it whether anything is left to add.
+-- Decision 10 refinements: the swap clears `target_key` (it belonged to the
+-- old target), the membership swap runs only for screen installs (a
+-- component install's target is its HOST — swapping would hijack the host's
+-- drawer row), and a project with no install gets one created (asset →
+-- working-copy link, so it syncs cross-device).
 create or replace function public.fork_catalog_asset(
   p_asset_id uuid,
   p_version_id uuid default null,
@@ -128,6 +133,8 @@ declare
   v_version public.catalog_asset_versions%rowtype;
   v_install_id uuid;
   v_old_target uuid;
+  v_old_target_key text;
+  v_check uuid;
   v_membership_swapped boolean := false;
   v_ui_id uuid := gen_random_uuid();
   v_base text;
@@ -202,8 +209,8 @@ begin
   -- at the fork now — install target and its membership row together, so
   -- the project's drawer and its pin can never disagree mid-migration.
   if p_project_id is not null then
-    select i.id, i.target_ui_id
-      into v_install_id, v_old_target
+    select i.id, i.target_ui_id, i.target_key
+      into v_install_id, v_old_target, v_old_target_key
       from public.catalog_installs i
      where i.owner_id = v_uid
        and i.project_id = p_project_id
@@ -211,18 +218,45 @@ begin
      for update;
 
     if found then
+      -- Decision 10a: the swap clears target_key — the old key belonged to
+      -- the old target (a stale key would name an element in a spec the
+      -- install no longer points at).
       update public.catalog_installs
          set target_ui_id = v_ui_id,
+             target_key = null,
              updated_at = now()
        where id = v_install_id;
 
-      update public.project_screens
-         set screen_id = v_ui_id,
-             updated_at = now()
-       where owner_id = v_uid
-         and project_id = p_project_id
-         and screen_id = v_old_target;
-      v_membership_swapped := found;
+      -- Decision 10b: only a SCREEN install swaps the membership row. A
+      -- component install's target is its HOST ui — repointing the host's
+      -- drawer row at the fork would hijack it.
+      if v_old_target_key is null then
+        update public.project_screens
+           set screen_id = v_ui_id,
+               updated_at = now()
+         where owner_id = v_uid
+           and project_id = p_project_id
+           and screen_id = v_old_target;
+        v_membership_swapped := found;
+      end if;
+    else
+      -- Decision 10c: no install for this asset in the project — create
+      -- one so the asset → working-copy link syncs cross-device. Guard on
+      -- project ownership first: without it a foreign project id would
+      -- trip the installs WITH CHECK mid-fork and abort the whole
+      -- transaction (the copy would never be created).
+      select id into v_check
+        from public.projects
+       where id = p_project_id
+         and owner_id = v_uid;
+      if found then
+        insert into public.catalog_installs
+          (id, owner_id, project_id, asset_id, version_id, target_ui_id,
+           target_key)
+        values (gen_random_uuid(), v_uid, p_project_id, p_asset_id,
+                v_version.id, v_ui_id, null)
+        returning id into v_install_id;
+      end if;
     end if;
   end if;
 

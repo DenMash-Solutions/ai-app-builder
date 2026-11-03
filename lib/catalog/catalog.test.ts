@@ -326,6 +326,100 @@ describe("catalog store (plan 066)", () => {
     expect(catalog.setCatalogInstallTarget(install.id, "ui-fork")).toBe(false);
     expect(catalog.setCatalogInstallTarget("ghost", "ui-x")).toBe(false);
     expect(catalog.setCatalogInstallTarget(install.id, "   ")).toBe(false);
+
+    // Decision 10a mirror: a component install's target_key clears WITH the
+    // reference swap (the old key belonged to the old target).
+    const component = catalog.addCatalogInstall({
+      projectId: "project-1",
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: "host-1",
+      targetKey: "card-1",
+    })!;
+    expect(catalog.setCatalogInstallTarget(component.id, "ui-fork-2")).toBe(
+      true,
+    );
+    const mirrored = catalog
+      .getCatalogInstalls()
+      .find((row) => row.id === component.id);
+    expect(mirrored?.targetUiId).toBe("ui-fork-2");
+    expect(mirrored?.targetKey).toBeNull();
+  });
+
+  test("addCatalogInstall takes an explicit id for the fork-RPC mirror", () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "One",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+    const explicit = "99999999-9999-4999-8999-999999999999";
+    const install = catalog.addCatalogInstall({
+      id: explicit,
+      projectId: "project-1",
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: "ui-fork",
+    })!;
+    expect(install.id).toBe(explicit);
+
+    // Same id again = the mirror no-op (a pull or an earlier mirror already
+    // created the row) — returned untouched, never duplicated.
+    const again = catalog.addCatalogInstall({
+      id: explicit,
+      projectId: "project-1",
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: "other",
+    })!;
+    expect(again.id).toBe(explicit);
+    expect(again.targetUiId).toBe("ui-fork");
+    expect(catalog.getCatalogInstalls()).toHaveLength(1);
+  });
+
+  test("sanitize backfills ownerId — missing reads as the local claim", () => {
+    // Pre-decision-11 storage rows carry no ownerId: they read as "" (the
+    // locally-created claim the push stamps over); real ids pass through.
+    const [asset] = catalog.sanitizeCatalogAssets([
+      {
+        id: "aaaaaaaa-4444-4888-8999-0000000000a9",
+        name: "Old row",
+        description: null,
+        type: "component",
+        visibility: "public",
+        latestVersionId: null,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+    expect(asset.ownerId).toBe("");
+
+    const [foreign] = catalog.sanitizeCatalogAssets([
+      {
+        id: "aaaaaaaa-4444-4888-8999-0000000000b9",
+        name: "Foreign row",
+        description: null,
+        type: "component",
+        visibility: "public",
+        latestVersionId: null,
+        ownerId: "user-x",
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+    expect(foreign.ownerId).toBe("user-x");
+
+    const [version] = catalog.sanitizeCatalogVersions([
+      {
+        id: "bbbbbbbb-4444-4888-8999-0000000000c9",
+        assetId: asset.id,
+        version: 1,
+        spec: makeSpec("v1"),
+        changelog: null,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+    expect(version.ownerId).toBe("");
   });
 
   test("adopting a colliding remote version renumbers the local row, never drops it", () => {
@@ -343,6 +437,7 @@ describe("catalog store (plan 066)", () => {
       version: 2,
       spec: makeSpec("remote two"),
       changelog: null,
+      ownerId: "",
       createdAt: 5000,
       updatedAt: 5000,
     };

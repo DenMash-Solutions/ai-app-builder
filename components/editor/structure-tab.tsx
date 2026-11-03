@@ -1,6 +1,21 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/auth/auth-provider";
+import {
+  getServerCatalog,
+  getCatalogState,
+  subscribeCatalog,
+  updateCatalogAsset,
+} from "@/lib/catalog/catalog";
+import { adoptPublicCatalog } from "@/lib/catalog/browse";
+import {
+  publishCatalogInstallUpdate,
+  updateCatalogInstall,
+} from "@/lib/catalog/install";
+import { createClient } from "@/lib/supabase/client";
+import type { SyncClient } from "@/lib/history/sync";
 import type { ComponentTemplate, MoveDirection } from "@/lib/editor";
 import {
   MOVE_DIRECTIONS,
@@ -23,6 +38,7 @@ import {
   Group,
   LayoutTemplate,
   Plus,
+  Store,
   Trash2,
   Ungroup,
 } from "lucide-react";
@@ -55,6 +71,12 @@ interface StructureTabProps {
     versionId: string,
     parentKey: string,
   ) => void;
+  /** Active project — scopes catalog install rows/status to it (Task 4). */
+  catalogProjectId: string;
+  /** Catalog screen row: install + caller navigates to the new screen. */
+  onInstallCatalogScreen?: (assetId: string, versionId: string) => void;
+  /** Catalog row fork/edit: caller runs the RPC and navigates. */
+  onForkCatalogAsset?: (assetId: string, versionId: string) => void;
 }
 
 /**
@@ -75,8 +97,12 @@ export function StructureTab({
   onDuplicate,
   onInsertTemplate,
   onInsertCatalogComponent,
+  catalogProjectId,
+  onInstallCatalogScreen,
+  onForkCatalogAsset,
 }: StructureTabProps) {
   const t = useTranslations();
+  const { user } = useAuth();
   const [picker, setPicker] = useState<PickerMode | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   // Live view of the visitor-level library — saves/renames/deletes in any
@@ -86,6 +112,24 @@ export function StructureTab({
     getTemplates,
     getServerTemplates,
   );
+  // Live catalog store for the catalog tab (Task 4) — same discipline.
+  const catalog = useSyncExternalStore(
+    subscribeCatalog,
+    getCatalogState,
+    getServerCatalog,
+  );
+  const supabase = useMemo(() => createClient(), []);
+
+  // Decision 11: opening the catalog tab adopts foreign public rows (RLS
+  // scopes the query to own + public) with their real ownerId — idempotent,
+  // LWW-guarded, fire-and-forget; the store subscription re-renders rows.
+  useEffect(() => {
+    if (picker !== PICKER_MODES.catalog || !user) return;
+    // One cast at the single integration point (the TS2589 adapter
+    // discipline — same as components/sync/sync-engine.tsx).
+    const client = supabase as unknown as SyncClient;
+    void adoptPublicCatalog(client, user.id);
+  }, [picker, user, supabase]);
 
   const children = element.children ?? [];
   const ownMarkers = elementMarkers(element);
@@ -115,10 +159,12 @@ export function StructureTab({
 
   // Catalog components resolve their rows in playground (the store's
   // consumer) — this stays a dumb id pass-through like onPickTemplate.
+  // Without a container the pick is a no-op and the picker STAYS OPEN —
+  // the catalog tab is reachable regardless of insertTarget (screens don't
+  // need one), so closing here would silently swallow the click.
   const handlePickCatalogAsset = (assetId: string, versionId: string) => {
-    if (insertTarget) {
-      onInsertCatalogComponent?.(assetId, versionId, insertTarget);
-    }
+    if (!insertTarget) return;
+    onInsertCatalogComponent?.(assetId, versionId, insertTarget);
     setPicker(null);
   };
 
@@ -157,6 +203,18 @@ export function StructureTab({
         >
           <LayoutTemplate className="h-3.5 w-3.5" />
           {t("editor.structure.templates")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={ACTION_BUTTON_CLASS}
+          aria-label={t("editor.structure.catalog")}
+          title={t("editor.structure.catalog")}
+          onClick={() => setPicker(PICKER_MODES.catalog)}
+        >
+          <Store className="h-3.5 w-3.5" />
+          {t("editor.structure.catalog")}
         </Button>
         <Button
           type="button"
@@ -299,17 +357,40 @@ export function StructureTab({
           mode={picker}
           open
           items={
-            picker === PICKER_MODES.templates
+            picker === PICKER_MODES.templates || picker === PICKER_MODES.catalog
               ? []
               : pickerItems(picker === PICKER_MODES.group)
           }
           templates={templates}
+          catalogAssets={catalog.assets}
+          catalogVersions={catalog.versions}
+          catalogInstalls={catalog.installs}
+          catalogProjectId={catalogProjectId}
+          catalogOwnerId={user?.id ?? ""}
           onOpenChange={(open) => {
             if (!open) setPicker(null);
           }}
           onPick={handlePick}
           onPickTemplate={handlePickTemplate}
           onPickCatalogAsset={handlePickCatalogAsset}
+          onModeChange={setPicker}
+          onInstallCatalogScreen={(assetId, versionId) => {
+            setPicker(null);
+            onInstallCatalogScreen?.(assetId, versionId);
+          }}
+          onForkCatalogAsset={(assetId, versionId) => {
+            setPicker(null);
+            onForkCatalogAsset?.(assetId, versionId);
+          }}
+          onToggleCatalogVisibility={(assetId, visibility) => {
+            updateCatalogAsset(assetId, { visibility });
+          }}
+          onUpdateCatalogInstall={(installId, versionId) => {
+            updateCatalogInstall(installId, versionId);
+          }}
+          onPublishCatalogUpdate={(installId) => {
+            publishCatalogInstallUpdate(installId, user?.id ?? "");
+          }}
           onRenameTemplate={renameTemplate}
           onDeleteTemplate={removeTemplate}
         />
