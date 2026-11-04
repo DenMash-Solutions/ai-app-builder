@@ -282,7 +282,15 @@ function healFromHistory(): void {
       persist();
     } else if (!sameRows(backfilled.rows, current)) {
       cache = backfilled.rows; // storage is authoritative — no persist
-    } else {
+    }
+    // Reverse alignment (membership landed BEFORE its entry — the ordering
+    // noted in this file's backfill comment): the heal fires on every
+    // history commit, so the entry's arrival is the hook that claims it.
+    // Runs before the no-change return — that path is exactly when the row
+    // already exists and only the pointer is missing. Idempotent: a pointer
+    // already set is never rewritten, so re-entry terminates.
+    stampClaimedPointers(cache);
+    if (!backfilled.changed && sameRows(backfilled.rows, current)) {
       return;
     }
     // Initial fills (decision 13) after the cache is set — same order as
@@ -318,6 +326,10 @@ function load(): ProjectMembership[] {
   const backfilled = backfillFromEntries(rows, getHistory(), getProjects());
   cache = backfilled.rows;
   if (backfilled.changed) persist();
+  // Same reverse alignment at load time: a device that synced BEFORE the
+  // adoption path stamped pointers holds rows that will never change again
+  // (so `applyRemoteMembership` never re-fires) — one pass here heals it.
+  stampClaimedPointers(cache);
   // Initial home fills (decision 13) AFTER the cache is set — the setter
   // persists the projects store, whose listeners may re-enter this module.
   for (const seed of backfilled.homeSeeds) {
@@ -650,6 +662,49 @@ function pairKey(row: { projectId: string; screenId: string }): string {
 }
 
 /**
+ * Pointer alignment, membership → ENTRY (the remote mirror of the local
+ * path in `addScreenToProject`): stamp `entry.projectId` for an entry a
+ * membership row claims but this device holds no born-into pointer for.
+ *
+ * Why it is needed: `uis` rows carry no project column, so an ADOPTED entry
+ * starts pointer-less (`entriesSyncSpec.apply` only preserves a pointer this
+ * device already had) and `backfillFromEntries` only ever runs the other
+ * direction. Without this pass a fresh device holds the membership AND the
+ * install row yet scopes nothing by project — `screensInScope`, the prompt
+ * sibling list and the catalog picker's install status all read
+ * `entry.projectId` and see nothing (plan 066 task 5, cross-device). The
+ * membership-first ordering is real: `project_screens` may land before its
+ * `uis` row, at which point adoption finds no entry to stamp.
+ *
+ * Decision 12 discipline: only a pointer-LESS entry is stamped — born-into
+ * history is never rewritten by a later claim, so a screen already grouped
+ * keeps its pointer. Among competing rows the earliest claim wins
+ * (`createdAt`, then `id`): the project that first claimed the screen is
+ * the one `addScreenToProject` would have stamped. `setEntryProject` stamps
+ * no `updatedAt` (the pointer is device-local, nothing to sync), so this
+ * can never create a push loop.
+ */
+function stampClaimedPointers(rows: readonly ProjectMembership[]): void {
+  if (rows.length === 0) return;
+  const earliest = new Map<string, ProjectMembership>();
+  for (const row of rows) {
+    const held = earliest.get(row.screenId);
+    if (
+      held === undefined ||
+      row.createdAt < held.createdAt ||
+      (row.createdAt === held.createdAt && row.id < held.id)
+    ) {
+      earliest.set(row.screenId, row);
+    }
+  }
+  for (const entry of getHistory()) {
+    if (entry.projectId !== undefined) continue;
+    const claim = earliest.get(entry.id);
+    if (claim !== undefined) setEntryProject(entry.id, claim.projectId);
+  }
+}
+
+/**
  * Adopt a remote row that won the LWW compare (the loop has already
  * decided) — insert-or-replace, preserving the row's own timestamps.
  *
@@ -684,6 +739,12 @@ export function applyRemoteMembership(remote: ProjectMembership): void {
     );
   cache = sanitizeMemberships([...next, adopted]);
   persist();
+  // Pointer alignment on adoption (the remote twin of addScreenToProject's
+  // decision-12 stamp): the claimed entry may already be here with no
+  // born-into pointer — without this the freshly adopted row groups nothing
+  // on THIS device. No-op when the entry is not in yet (it stamps via the
+  // heal pass when it lands) or already carries a pointer.
+  stampClaimedPointers([adopted]);
 }
 
 /**

@@ -21,7 +21,11 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: ["**/authed.spec.ts", "**/signout.spec.ts"],
+      testIgnore: [
+        "**/authed.spec.ts",
+        "**/catalog.spec.ts",
+        "**/signout.spec.ts",
+      ],
     },
     // Dedicated e2e identities (never a personal session), logged in via
     // the storage states global-setup saved.
@@ -31,7 +35,7 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         storageState: "e2e/.state/admin.json",
       },
-      testMatch: "**/authed.spec.ts",
+      testMatch: ["**/authed.spec.ts", "**/catalog.spec.ts"],
       dependencies: ["chromium"],
     },
     {

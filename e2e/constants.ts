@@ -346,6 +346,45 @@ export const EDITOR = {
       .replace("{path}", path),
 } as const;
 
+/** UI catalog (plan 066): picker catalog tab, row actions, update dialog. */
+export const CATALOG = {
+  /** Structure-tab button that opens the picker on the catalog tab. */
+  open: en.editor.structure.catalog,
+  tab: en.editor.picker.tabCatalog,
+  templatesTab: en.editor.picker.tabTemplates,
+  search: en.editor.picker.catalogSearch,
+  empty: en.editor.picker.catalogEmpty,
+  noMatches: en.editor.picker.noMatches,
+  scopeAll: en.editor.picker.scopeAll,
+  scopeMine: en.editor.picker.scopeMine,
+  scopePublic: en.editor.picker.scopePublic,
+  scopePrivate: en.editor.picker.scopePrivate,
+  screensFilter: en.editor.picker.screensFilter,
+  componentsFilter: en.editor.picker.componentsFilter,
+  typeScreen: en.editor.picker.typeScreen,
+  typeComponent: en.editor.picker.typeComponent,
+  ownerYou: en.editor.picker.ownerYou,
+  ownerLabel: (id: string): string =>
+    en.editor.picker.ownerLabel.replace("{id}", id),
+  installedChip: en.editor.picker.installedChip,
+  updateAvailable: en.editor.picker.updateAvailable,
+  versionChip: (version: number): string =>
+    en.editor.picker.versionChip.replace("{version}", String(version)),
+  forkEdit: en.editor.picker.forkEdit,
+  makePublic: en.editor.picker.makePublic,
+  makePrivate: en.editor.picker.makePrivate,
+  publishUpdate: en.editor.picker.publishUpdate,
+  update: en.editor.picker.update,
+  updateTitle: (name: string): string =>
+    en.editor.picker.updateTitle.replace("{name}", name),
+  updateTo: (version: number): string =>
+    en.editor.picker.updateTo.replace("{version}", String(version)),
+  rollbackTo: (version: number): string =>
+    en.editor.picker.rollbackTo.replace("{version}", String(version)),
+  updateCancel: en.editor.picker.updateCancel,
+  updateNoVersions: en.editor.picker.updateNoVersions,
+} as const;
+
 export const PROMPTS = {
   ...EXAMPLE_PROMPTS,
   customBilling: "A billing settings page with a table",

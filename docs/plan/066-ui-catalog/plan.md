@@ -1,6 +1,6 @@
 # UI Catalog — Versioned Screens and Components
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-31
 
 ## Goal
@@ -194,23 +194,23 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
       install pinning survives a new latest version, fork gets independent
       identity and revision 0 (coverage shipped with Tasks 1-3: rejection
       test live, publish + pin + fork unit suites)
-- [ ] e2e: two projects install v1 → v2 published → both still render v1;
+- [x] e2e: two projects install v1 → v2 published → both still render v1;
       fork in A leaves B unchanged; private install denied (service-client
       assertion); an install made on one device appears on another
       (064 pattern, decision 9)
-- [ ] Signed-out local template library still works; migration seeds without
+- [x] Signed-out local template library still works; migration seeds without
       duplicates; full gate
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
 - [x] Unit: version monotonicity, immutability rejected at the DB layer,
       install pinning survives a new latest version, fork gets independent
       identity and revision 0
-- [ ] e2e: two projects install v1 → v2 published → both still render v1;
+- [x] e2e: two projects install v1 → v2 published → both still render v1;
       fork in A leaves B unchanged; private asset install denied by RLS
       (service-client assertion)
-- [ ] Local template library still works signed out; migration seeds without
+- [x] Local template library still works signed out; migration seeds without
       duplicates; full gate
 
 ## Status log
@@ -226,3 +226,4 @@ catalog tab in `components/editor/component-picker.tsx`, en/es keys,
 | 2026-11-02 | Task 3 scope clarified — update/rollback flow logic stays in Task 3, its confirmation UI moves to Task 4 (catalog tab); Task 4 gains an update-confirmation + update-available checkbox |
 | 2026-11-02 | Task 4 scope clarified — publish-update action on own rows added to Task 4; screen install + fork navigate to the new screen; row preview = type + element-count chip (full render rejected); decisions 10 (fork refinements: target_key clear, screen-only membership swap, install-create when absent) and 11 (public browse = adopt into sync store + `ownedBy` push/delete guard) added; explicit-column rule recorded (never `SELECT *`; sync pull phase 2 moves to per-spec `fullColumns`) |
 | 2026-11-02 | Task 4 done — catalog tab in the Insert picker (decision 7: Templates ↔ Catalog tab strip, search, scope/type filter chips, owner + latest-version + type/element-count chips, fork/visibility/publish/update row actions), update confirmation dialog (nested — Radix highest-layer Escape only) + update-available chip (older version = rollback), visibility toggle, publish-update via `publishCatalogInstallUpdate` (whole spec / subtree extraction, foreign-asset guard), screen install + fork navigate to the new screen; public browse (decision 11): `ownerId` on asset/version + mappers + sanitize backfill, `lib/catalog/browse.ts` tab-open adoption (explicit columns, LWW), `SyncSpec.fullColumns` replaces phase-2 `SELECT *` on all 6 specs, `ownedBy` push + delete guard via session-lifetime `foreignIds`; fork RPC v2 re-applied live (`plan_066_fork_catalog_asset_v2`, via Management API — session MCP unavailable): DO-block passed 10a target_key clear, 10b screen-only membership swap (component fork leaves the host row), 10c install-create — caught + fixed a missing `id` in the insert — foreign private / foreign version / unsigned refused, anon EXECUTE denied, zero leftover rows; raw-string audit: filter literals → `CATALOG_SCOPES`/`CATALOG_TYPE_FILTERS` object constants; en/es key parity; tests: browse +5, install +4, catalog +2, sync +1 → gate 942 pass / 0 fail |
+| 2026-11-04 | Task 5 done — `e2e/catalog.spec.ts` (5 tests: two-project pin, fork isolation, private-vs-public install RLS, device A→B, idempotent template migration) + `e2e/db.ts` helpers with a 45s remote-install gate; suite green serially but 3/10 failed under parallel load. Root cause found with request-body capture: a multi-row push is ONE statement, so a single row whose `uis` parent was not remote yet (`42501` from the WITH CHECK that requires it, or `23503` FK) refused the entire batch — which carried rows from several concurrent sessions (12-row `project_screens`, 6-row `catalog_installs`) — stranding every healthy row, retries included. Fix: `lib/history/sync.ts` retries a refused batch row by row, keeps a steady capped retry after the fast budget (a stranded row still converges once its parent lands), and guards the chain so a rejected task cannot silently skip every later push; 3 new unit tests. Verification: full e2e 138 passed (1.1m), stress 5 workers × 2 repeats 10/10, gate 948 pass / 0 fail |

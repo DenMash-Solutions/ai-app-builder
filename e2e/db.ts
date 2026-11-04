@@ -1,5 +1,12 @@
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Spec } from "@json-render/core";
+import {
+  CATALOG_VISIBILITIES,
+  type CatalogAssetType,
+  type CatalogVisibility,
+} from "@/lib/catalog/catalog";
 import landingFixture from "./fixtures/landing-fixture.json";
 import themeFixture from "./fixtures/theme-fixture.json";
 import { BASE_URL, E2E_STATE_DIR, canSeed, e2eEnv, statePath } from "./env";
@@ -318,7 +325,33 @@ export async function sweepTestRows(ownerId: string): Promise<number> {
       );
     }
   }
-  return ids.length + projectIds.length;
+
+  // Catalog assets (plan 066 Task 5): name-scoped like every other marker —
+  // deleting the asset cascades its versions AND installs, so one pass is a
+  // complete catalog cleanup.
+  const catalogResult = await svc
+    .from("catalog_assets")
+    .select("id")
+    .eq("owner_id", ownerId)
+    .like("name", `${TEST_PROMPT_PREFIX}%`);
+  if (catalogResult.error) {
+    throw new Error(
+      `[e2e] catalog leftover sweep failed: ${catalogResult.error.message}`,
+    );
+  }
+  const catalogIds = (catalogResult.data ?? []).map((row) => String(row.id));
+  if (catalogIds.length > 0) {
+    const { error: catalogDeleteError } = await svc
+      .from("catalog_assets")
+      .delete()
+      .in("id", catalogIds);
+    if (catalogDeleteError) {
+      throw new Error(
+        `[e2e] catalog leftover sweep delete failed: ${catalogDeleteError.message}`,
+      );
+    }
+  }
+  return ids.length + projectIds.length + catalogIds.length;
 }
 
 /**
@@ -352,6 +385,34 @@ export async function deleteTestProject(
       `[e2e] project cleanup of ${projectId} failed: ${error.message}`,
     );
   }
+}
+
+/**
+ * Service-role seed of a PROJECT row owned by a given user — RLS fixtures
+ * need a project the CALLER owns without driving the UI (plan 066 Task 5,
+ * the catalog_installs WITH CHECK needs `p.owner_id = auth.uid()`). The name
+ * carries the `E2E ` marker so the leftover sweep also covers it. Slug is
+ * per-test unique (projects_slug_check is 1..64 chars, unique per owner).
+ */
+export async function seedOwnedProject(request: {
+  ownerId: string;
+  name: string;
+}): Promise<{ projectId: string }> {
+  if (!canSeed) {
+    throw new Error("[e2e] seedOwnedProject needs SUPABASE_SERVICE_ROLE_KEY");
+  }
+  const svc = serviceClient();
+  const projectId = randomUUID();
+  const { error } = await svc.from("projects").insert({
+    id: projectId,
+    owner_id: request.ownerId,
+    name: request.name,
+    slug: `e2e-rls-${projectId.slice(0, 8)}`,
+  });
+  if (error) {
+    throw new Error(`[e2e] project seed failed: ${error.message}`);
+  }
+  return { projectId };
 }
 
 /**
@@ -415,6 +476,227 @@ export async function waitForRemoteRow(
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Polls until the membership row (`project_screens`) exists in the account —
+ * the "membership push landed" gate for the cross-device catalog test (plan
+ * 066 task 5): device B can only adopt (and pointer-align) a row that was
+ * pushed. Same reasoning as `waitForRemoteProject`: the UI dot can't gate
+ * this (debounce plus admin-sized pulls stretch the cycle). Best-effort
+ * silent without the service-role key, like the other helpers.
+ */
+export async function waitForRemoteMembership(
+  screenId: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  if (!canSeed) return;
+  const svc = serviceClient();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data, error } = await svc
+      .from("project_screens")
+      .select("id")
+      .eq("screen_id", screenId)
+      .limit(1);
+    if (!error && data && data.length > 0) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `[e2e] account membership row for screen ${screenId} missing ` +
+          `after ${timeoutMs}ms${error ? ` (${error.message})` : ""}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/** Ids of a catalog asset seeded by `seedCatalogAsset` (asset + pinned v1). */
+export interface SeededCatalogAsset {
+  assetId: string;
+  versionId: string;
+}
+
+/**
+ * Seeds a catalog asset with its FIRST immutable version through the service
+ * role (plan 066 Task 5). No production UI creates assets (the only caller is
+ * the component-typed template seed), so the suite owns the rows it installs.
+ * The name carries the `E2E ` marker the leftover sweep matches — deleting the
+ * asset cascades its versions and installs. Throws without the service key:
+ * every catalog e2e test needs it.
+ */
+export async function seedCatalogAsset(request: {
+  ownerId: string;
+  name: string;
+  type: CatalogAssetType;
+  visibility?: CatalogVisibility;
+  spec: Spec;
+}): Promise<SeededCatalogAsset> {
+  if (!canSeed) {
+    throw new Error("[e2e] seedCatalogAsset needs SUPABASE_SERVICE_ROLE_KEY");
+  }
+  const svc = serviceClient();
+  const assetId = randomUUID();
+  const versionId = randomUUID();
+  const { error: assetError } = await svc.from("catalog_assets").insert({
+    id: assetId,
+    owner_id: request.ownerId,
+    name: request.name,
+    description: null,
+    type: request.type,
+    visibility: request.visibility ?? CATALOG_VISIBILITIES.private,
+    latest_version_id: versionId,
+  });
+  if (assetError) {
+    throw new Error(`[e2e] catalog asset seed failed: ${assetError.message}`);
+  }
+  const { error: versionError } = await svc
+    .from("catalog_asset_versions")
+    .insert({
+      id: versionId,
+      asset_id: assetId,
+      owner_id: request.ownerId,
+      version: 1,
+      spec: request.spec,
+      changelog: null,
+    });
+  if (versionError) {
+    throw new Error(
+      `[e2e] catalog version seed failed: ${versionError.message}`,
+    );
+  }
+  return { assetId, versionId };
+}
+
+/**
+ * Appends the next immutable version of a seeded asset and re-points
+ * `latest_version_id` — the "author published v2" half of the pinning test,
+ * done at the DB layer because no UI flow creates the FIRST asset row.
+ * Returns the new version id.
+ */
+export async function publishSeededCatalogVersion(
+  assetId: string,
+  spec: Spec,
+  changelog: string | null = null,
+): Promise<string> {
+  if (!canSeed) {
+    throw new Error("[e2e] publishSeededCatalogVersion needs the service key");
+  }
+  const svc = serviceClient();
+  const { data: assetRow, error: assetReadError } = await svc
+    .from("catalog_assets")
+    .select("owner_id")
+    .eq("id", assetId)
+    .single();
+  if (assetReadError || !assetRow) {
+    throw new Error(
+      `[e2e] catalog asset ${assetId} unreadable: ${
+        assetReadError?.message ?? "missing"
+      }`,
+    );
+  }
+  const { data: versions, error: readError } = await svc
+    .from("catalog_asset_versions")
+    .select("version")
+    .eq("asset_id", assetId)
+    .order("version", { ascending: false })
+    .limit(1);
+  if (readError) {
+    throw new Error(`[e2e] version read failed: ${readError.message}`);
+  }
+  const next = (versions?.[0]?.version ?? 0) + 1;
+  const versionId = randomUUID();
+  const { error: insertError } = await svc
+    .from("catalog_asset_versions")
+    .insert({
+      id: versionId,
+      asset_id: assetId,
+      owner_id: String(assetRow.owner_id),
+      version: next,
+      spec,
+      changelog,
+    });
+  if (insertError) {
+    throw new Error(`[e2e] version publish failed: ${insertError.message}`);
+  }
+  const { error: bumpError } = await svc
+    .from("catalog_assets")
+    .update({
+      latest_version_id: versionId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", assetId);
+  if (bumpError) {
+    throw new Error(`[e2e] latest_version bump failed: ${bumpError.message}`);
+  }
+  return versionId;
+}
+
+/**
+ * Polls until a project holds an install of the asset — the DB-level gate for
+ * "the install landed" (the picker closes and navigation fire immediately,
+ * but the account row is what a second device reads). Returns the install id
+ * so a test can assert its pinned version later.
+ */
+export async function waitForRemoteCatalogInstall(
+  assetId: string,
+  projectId: string,
+  // Must exceed the sync loop's FULL bounded-retry window, not just its
+  // first attempts: a fresh install can be pushed before its `uis` parent
+  // row lands (FK 409), and `scheduleRetry` backs off 1.6s → 3.2s → 6.4s →
+  // 10s → 10s (MAX_PUSH_FAILURES = 5, capped at 10s) ≈ 31s before giving
+  // up. Under a full parallel suite the parent upload is slow enough that a
+  // 20s gate failed a test that converges fine standalone.
+  timeoutMs = 45_000,
+): Promise<{ installId: string; versionId: string; targetUiId: string }> {
+  if (!canSeed) return { installId: "", versionId: "", targetUiId: "" };
+  const svc = serviceClient();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data, error } = await svc
+      .from("catalog_installs")
+      .select("id, version_id, target_ui_id")
+      .eq("asset_id", assetId)
+      .eq("project_id", projectId)
+      .limit(1);
+    if (!error && data && data.length > 0) {
+      return {
+        installId: String(data[0].id),
+        versionId: String(data[0].version_id),
+        targetUiId: data[0].target_ui_id ? String(data[0].target_ui_id) : "",
+      };
+    }
+    if (Date.now() > deadline) {
+      // Dump what DID land for this asset — "wrong project" and "not pushed
+      // at all" are different bugs and the bare timeout can't tell them apart.
+      const { data: all } = await svc
+        .from("catalog_installs")
+        .select("id, project_id, version_id, target_ui_id")
+        .eq("asset_id", assetId);
+      throw new Error(
+        `[e2e] catalog install for ${assetId} / ${projectId} missing ` +
+          `after ${timeoutMs}ms${error ? ` (${error.message})` : ""} — ` +
+          `asset installs: ${JSON.stringify(all ?? [])}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Service-role safety net for ONE seeded catalog asset (by id). UI-driven
+ * cleanup runs first; this covers crash paths. Silent without the service key.
+ */
+export async function deleteSeededCatalogAsset(
+  assetId: string | undefined,
+): Promise<void> {
+  if (!assetId || !canSeed) return;
+  const svc = serviceClient();
+  const { error } = await svc.from("catalog_assets").delete().eq("id", assetId);
+  if (error) {
+    console.warn(
+      `[e2e] catalog cleanup of ${assetId} failed: ${error.message}`,
+    );
   }
 }
 

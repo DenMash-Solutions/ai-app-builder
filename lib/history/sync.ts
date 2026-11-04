@@ -88,6 +88,25 @@ const loopStates = new Map<string, SyncStatus>();
 /** One "Upload now" path across every running loop (064 decision 1). */
 const flushes = new Set<() => void>();
 
+/** Push-retry policy (066 Task 5): a failed push used to park the loop at
+ *  "offline" until an UNRELATED local change re-scheduled it — rows whose
+ *  push lost a parent-row race (`catalog_installs`/`project_screens` before
+ *  the `uis` row they reference lands: `23503` FK, or `42501` because both
+ *  WITH CHECK policies require that parent to exist) then stayed local
+ *  forever with no pending work to wake the loop. Each failure now schedules
+ *  a backoff retry; the budget resets on a successful push or on new local
+ *  activity.
+ *
+ *  After the FAST budget the loop keeps polling at the capped delay instead
+ *  of stopping (066 Task 5 e2e proof: under load the parent can land later
+ *  than the ~31s fast window, and a stranded child row never converged).
+ *  The steady phase is rate-limited by MAX_PUSH_RETRY_MS and bounded by
+ *  MAX_SLOW_RETRIES, so a permanently rejected row still stops (~5 min
+ *  total) rather than polling forever. */
+const MAX_PUSH_FAILURES = 5;
+const MAX_PUSH_RETRY_MS = 10_000;
+const MAX_SLOW_RETRIES = 30;
+
 export function getSyncStatus(): SyncStatus {
   return status;
 }
@@ -348,11 +367,17 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
   client: SyncClient,
   ownerId: string,
   spec: SyncSpec<T>,
-  options: { debounceMs?: number } = {},
+  options: { debounceMs?: number; maxRetryMs?: number } = {},
 ): () => void {
   const debounceMs = options.debounceMs ?? 800;
+  /** Retry ceiling — an option so a unit test can compress the whole fast +
+   *  steady schedule into a few milliseconds. */
+  const maxRetryMs = options.maxRetryMs ?? MAX_PUSH_RETRY_MS;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** Failed pushes so far — drawn down by `scheduleRetry`, reset by
+   *  `schedule` (local activity) and by a successful push. */
+  let pushFailures = 0;
   let syncedIds = new Set<string>();
   // Adopted foreign rows (066 decision 11): session-lifetime set, only
   // ever ADDED to — an entity deleted between two pushes must still be
@@ -441,6 +466,7 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     if (stopped) return;
     if (error) {
       setLoopStatus(spec.table, "offline");
+      scheduleRetry();
       return;
     }
     const slimRows = (data ?? []).filter(isSlimRow);
@@ -490,8 +516,20 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
         .upsert(payload);
       if (stopped) return;
       if (upsertError) {
-        setLoopStatus(spec.table, "offline");
-        return;
+        // A multi-row upsert is ONE statement, so a single row whose parent
+        // is not remote yet (42501 from a WITH CHECK that requires it, or
+        // 23503) refuses the WHOLE batch and strands every healthy row with
+        // it — the e2e payloads carried rows from several concurrent
+        // sessions (12-row project_screens, 6-row catalog_installs batches,
+        // one poisoned row each). Retry row by row so a doomed row can only
+        // strand itself.
+        const stranded = await pushRowsOneByOne(payload);
+        if (stopped) return;
+        if (stranded) {
+          setLoopStatus(spec.table, "offline");
+          scheduleRetry();
+          return;
+        }
       }
     }
 
@@ -514,6 +552,7 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
         if (stopped) return;
         if (deleteError) {
           setLoopStatus(spec.table, "offline");
+          scheduleRetry();
           return;
         }
       }
@@ -522,7 +561,23 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     // Foreign rows were never synced, so they must not enter the local-
     // removal detector either (decision 11: ownedBy guards push AND delete).
     syncedIds = new Set([...localIds].filter((id) => !foreignIds.has(id)));
+    pushFailures = 0;
     setLoopStatus(spec.table, "saved");
+  }
+
+  /** Per-row retry after a refused batch upsert (see the push call site):
+   *  returns true when at least one row is still refused, so the loop keeps
+   *  its retry/offline behavior for that row alone. */
+  async function pushRowsOneByOne(
+    payload: Record<string, unknown>[],
+  ): Promise<boolean> {
+    let refused = false;
+    for (const row of payload) {
+      const { error } = await client.from(spec.table).upsert([row]);
+      if (stopped) return false;
+      if (error) refused = true;
+    }
+    return refused;
   }
 
   async function run(): Promise<void> {
@@ -532,24 +587,62 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     await push();
   }
 
+  /** One bounded retry after a failed push (see MAX_PUSH_FAILURES): the
+   *  delay backs off with the attempt count so a parent row another loop is
+   *  still uploading (`uis`, `projects`) gets there first. Reuses `timer`,
+   *  so a local change or `flush` supersedes it as usual. */
+  function scheduleRetry(): void {
+    const totalBudget = MAX_PUSH_FAILURES + MAX_SLOW_RETRIES;
+    if (stopped || pushFailures >= totalBudget) return;
+    pushFailures += 1;
+    if (timer) clearTimeout(timer);
+    // Fast exponential phase, then a steady slow poll (see the policy note
+    // above): the child row converges once its parent lands.
+    const delay =
+      pushFailures <= MAX_PUSH_FAILURES
+        ? Math.min(debounceMs * 2 ** pushFailures, maxRetryMs)
+        : maxRetryMs;
+    timer = setTimeout(() => {
+      timer = null;
+      enqueue(push);
+    }, delay);
+  }
+
+  /** Chain one task; a REJECTED task must never poison the chain. `push()`/
+   *  `pull()` normally surface failures as `{ error }`, but a transport-level
+   *  throw (aborted fetch, DNS blip) rejects the promise — and an unhandled
+   *  rejection leaves the chain permanently rejected, so every later
+   *  `chain.then(...)` is silently skipped: the loop looks alive while nothing
+   *  syncs (066 Task 5 e2e: an install row that never landed, forever). */
+  function enqueue(task: () => Promise<void>): void {
+    chain = chain.then(task).catch(() => {
+      setLoopStatus(spec.table, "offline");
+      scheduleRetry();
+    });
+  }
+
+  /** Change subscription — every change schedules the debounced push and
+   *  earns a FRESH retry budget (new local activity, new attempts). */
   function schedule(): void {
+    pushFailures = 0;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      chain = chain.then(() => push());
+      enqueue(push);
     }, debounceMs);
   }
 
   // "Upload now" affordance: skips the debounce and pushes on the next tick.
   const flush = () => {
+    pushFailures = 0;
     if (timer) clearTimeout(timer);
     timer = null;
-    chain = chain.then(() => push());
+    enqueue(push);
   };
   flushes.add(flush);
 
   setLoopStatus(spec.table, "syncing");
-  chain = chain.then(() => run());
+  enqueue(run);
 
   const unsubscribe = spec.subscribe(schedule);
   const handleOnline = () => schedule();

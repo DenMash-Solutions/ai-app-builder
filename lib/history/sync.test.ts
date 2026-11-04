@@ -9,6 +9,7 @@ import {
 } from "./history";
 import type { HistoryEntry } from "./history";
 import {
+  entriesSyncSpec,
   entryToRow,
   flushSync,
   getSyncStatus,
@@ -89,6 +90,13 @@ interface MockState {
   deletes: string[][];
   /** Every awaited select, in order — column/filter pins (plan 055 A). */
   selects: RecordedSelect[];
+  /** Number of leading upserts that fail instead of landing rows (retry
+   *  policy tests). Every attempt is still recorded, so a test can count
+   *  them. */
+  upsertFailures?: number;
+  /** Refuse every multi-row upsert, like a batch carrying one row whose
+   *  parent is not remote yet; per-row upserts still land. */
+  failBatchUpserts?: boolean;
 }
 
 /** Explicitly annotated so the self-references in `eq`/`in` don't trip
@@ -152,6 +160,15 @@ function makeClient(state: MockState): SyncClient {
       select: (columns?: string) => select(table, columns),
       upsert: async (rows: Record<string, unknown>[]) => {
         state.upserts.push(rows);
+        if (state.failBatchUpserts === true && rows.length > 1) {
+          return { error: { message: "42501 batch refused" } };
+        }
+        if ((state.upsertFailures ?? 0) > 0) {
+          state.upsertFailures = (state.upsertFailures ?? 0) - 1;
+          // The real refusal this policy exists for (066 Task 5): an install
+          // pushed before its `uis` parent is remote.
+          return { error: { message: "42501 parent row missing" } };
+        }
         for (const payload of rows) {
           const row: Record<string, unknown> = { ...payload, __table: table };
           const index = state.rows.findIndex(
@@ -1572,5 +1589,80 @@ describe("catalog loops (plan 066)", () => {
     expect(state.upserts.slice(upsertsBefore).flat()).toHaveLength(0);
 
     stops.forEach((stop) => stop());
+  });
+});
+
+describe("push retry policy", () => {
+  let state: MockState;
+
+  beforeEach(() => {
+    clearHistory();
+    state = { rows: [], upserts: [], deletes: [], selects: [] };
+  });
+
+  afterEach(() => {
+    clearHistory();
+  });
+
+  test("a row stranded by a failed push still converges after the fast budget", async () => {
+    // Six failed upserts = the entire FAST budget (the first push plus
+    // MAX_PUSH_FAILURES retries). The pre-fix policy stopped there, so a row
+    // whose push lost the parent-row race (42501/23503 until the `uis` row
+    // lands) never left the device — this pins the steady phase that fixes it.
+    state.upsertFailures = 6;
+    const entry = createEntry("stranded", makeSpec("v1"));
+    addEntry(entry);
+
+    const stop = startTableSync(makeClient(state), "owner-1", entriesSyncSpec, {
+      debounceMs: 1,
+      maxRetryMs: 2,
+    });
+    await sleep(200);
+
+    expect(state.upserts.flat().some((row) => row.id === entry.id)).toBe(true);
+    expect(getSyncStatus()).toBe("saved");
+    stop();
+  });
+
+  test("a refused batch retries row by row so one bad row cannot strand the rest", async () => {
+    state.failBatchUpserts = true;
+    const first = createEntry("healthy", makeSpec("v1"));
+    addEntry(first);
+    const second = createEntry("healthy two", makeSpec("v1"));
+    addEntry(second);
+
+    const stop = startTableSync(makeClient(state), "owner-1", entriesSyncSpec, {
+      debounceMs: 1,
+      maxRetryMs: 2,
+    });
+    await sleep(80);
+
+    // The batch went first (atomic statement), then the per-row pass landed
+    // the healthy rows instead of stranding them behind the refused one.
+    expect(state.upserts.some((rows) => rows.length === 2)).toBe(true);
+    expect(
+      state.upserts.some((rows) => rows.length === 1 && rows[0].id === first.id),
+    ).toBe(true);
+    expect(getSyncStatus()).toBe("saved");
+    stop();
+  });
+
+  test("a permanently refused row stops after the fast + steady budget", async () => {
+    // The steady phase must not poll forever: once the fast + steady budget
+    // is spent the loop goes quiet (a permanently refused row stops).
+    state.upsertFailures = 1000;
+    addEntry(createEntry("rejected", makeSpec("v1")));
+
+    const stop = startTableSync(makeClient(state), "owner-1", entriesSyncSpec, {
+      debounceMs: 1,
+      maxRetryMs: 2,
+    });
+    await sleep(300);
+    const attempts = state.upserts.length;
+    await sleep(120);
+
+    expect(state.upserts).toHaveLength(attempts);
+    expect(getSyncStatus()).toBe("offline");
+    stop();
   });
 });

@@ -482,6 +482,82 @@ describe("membership store", () => {
     expect(cleared).not.toBeNull();
   });
 
+  test("adopting a membership stamps a pointer-less entry (remote alignment)", () => {
+    const project = seedProject("Align-adopt");
+    const screenId = seedEntry("align-adopt-screen");
+    // The adopted `uis` copy carries no project column — a device that did
+    // not create the screen starts with no pointer at all (061/064).
+    expect(
+      getHistory().find((entry) => entry.id === screenId)?.projectId,
+    ).toBeUndefined();
+
+    store.applyRemoteMembership({
+      id: "remote-align-adopt",
+      projectId: project.id,
+      screenId,
+      route: null,
+      position: 0,
+      createdAt: 1,
+      updatedAt: Date.now() + 10000,
+    });
+
+    // Without the stamp the membership groups nothing on THIS device:
+    // screensInScope and the catalog picker's install scoping both read
+    // entry.projectId (plan 066 task 5's cross-device failure).
+    expect(getHistory().find((entry) => entry.id === screenId)?.projectId).toBe(
+      project.id,
+    );
+  });
+
+  test("alignment never rewrites an existing born-into pointer (d12)", () => {
+    const bornInto = seedProject("Align-born");
+    const later = seedProject("Align-later");
+    const screenId = seedEntry("align-owned-screen", bornInto.id);
+
+    store.applyRemoteMembership({
+      id: "remote-align-later",
+      projectId: later.id,
+      screenId,
+      route: null,
+      position: 0,
+      createdAt: 1,
+      updatedAt: Date.now() + 10000,
+    });
+
+    // A later claim (a screen added to a second project) must not move the
+    // pointer — born-into history is never rewritten (decision 12).
+    expect(getHistory().find((entry) => entry.id === screenId)?.projectId).toBe(
+      bornInto.id,
+    );
+  });
+
+  test("a membership that lands BEFORE its entry claims it on arrival", () => {
+    const project = seedProject("Align-early");
+    // Fixed id so the row can name an entry that does not exist YET — the
+    // `project_screens` loop may pull before the `uis` loop adopts.
+    const screenId = "11111111-2222-4333-8444-555555555599";
+    store.getMemberships(); // load + subscribe the heal pass
+    store.applyRemoteMembership({
+      id: "remote-align-early",
+      projectId: project.id,
+      screenId,
+      route: null,
+      position: 0,
+      createdAt: 1,
+      updatedAt: Date.now() + 10000,
+    });
+    expect(getHistory().some((entry) => entry.id === screenId)).toBe(false);
+
+    // The entry arrives later (the `uis` loop's adoption commits history,
+    // which is the hook the heal pass listens to).
+    const arriving = createEntry("align-early-screen", makeSpec("early"));
+    addEntry({ ...arriving, id: screenId });
+
+    expect(getHistory().find((entry) => entry.id === screenId)?.projectId).toBe(
+      project.id,
+    );
+  });
+
   test("reconcileProjectRoutes: re-keys pair twins, clears owned routes, leaves the rest", () => {
     const project = seedProject("Reconcile");
     const s1 = seedEntry("r1");
