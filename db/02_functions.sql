@@ -9,8 +9,16 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $$
+declare
+  v_username text;
 begin
-  insert into public.profiles (id, email) values (new.id, new.email)
+  -- Plan 068 decision 1: a new account claims its handle at signup, so the
+  -- profile row lands already named. The app validates shape and reserved
+  -- segments first; this only normalizes, and a taken handle fails the
+  -- signup itself (unique index) rather than leaving a half-claimed account.
+  v_username := nullif(lower(btrim(new.raw_user_meta_data ->> 'username')), '');
+  insert into public.profiles (id, email, username)
+  values (new.id, new.email, v_username)
   on conflict (id) do nothing;
   return new;
 end;
@@ -270,4 +278,75 @@ begin
     'uis_row', to_jsonb(v_row)
   );
 end;
+$$;
+
+-- ── usernames (plan 068) ────────────────────────────────────────────────────
+-- profiles has NO write policy on purpose (a self-update policy would let a
+-- user set role = 'admin'), and table-level grants rule out narrowing it by
+-- column. The claim therefore goes through this SECURITY DEFINER function,
+-- which can only ever write `username` for the calling session's own row.
+create or replace function public.claim_username(p_username text)
+returns text
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_uid      uuid := auth.uid();
+  v_username text := lower(btrim(coalesce(p_username, '')));
+  v_current  text;
+begin
+  if v_uid is null then
+    raise exception 'claim_username requires a session'
+      using errcode = '42501';
+  end if;
+
+  select p.username into v_current from public.profiles p where p.id = v_uid;
+  if not found then
+    raise exception 'no profile row for the current user'
+      using errcode = '42501';
+  end if;
+
+  -- Re-claiming the current handle is a no-op success (change flows retry).
+  if v_current is not distinct from v_username then
+    return v_current;
+  end if;
+
+  update public.profiles set username = v_username where id = v_uid;
+  return v_username;
+end;
+$$;
+
+-- Advisory only (decision 3): the unique index is the truth, so a race between
+-- two claims still ends with exactly one winner. Shape is not re-validated as
+-- a claim concern — the caller does that, and the CHECK rejects junk anyway.
+create or replace function public.username_available(p_username text)
+returns boolean
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select
+    char_length(btrim(coalesce(p_username, ''))) > 0
+    and not exists (
+      select 1
+      from public.profiles p
+      where p.username = lower(btrim(coalesce(p_username, '')))
+    );
+$$;
+
+-- Public read of a profile by handle (decision 6). Returns id + username and
+-- nothing else: making profiles publicly selectable instead would expose
+-- `email` to every visitor, because grants are table-level.
+create or replace function public.public_profile(p_username text)
+returns table (id uuid, username text)
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select p.id, p.username
+  from public.profiles p
+  where p.username = lower(btrim(coalesce(p_username, '')));
 $$;

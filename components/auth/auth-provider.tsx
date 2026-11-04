@@ -17,16 +17,22 @@ interface AuthContextValue {
   /** null while signed out — `loading` distinguishes "unknown yet" from "anonymous". */
   user: User | null;
   role: UserRole | null;
+  /** Public handle (plan 068); null until claimed. */
+  username: string | null;
   loading: boolean;
   /** Ends the Supabase session (local history is never touched). */
   signOut: () => Promise<void>;
+  /** Re-reads role + username after they change server-side (e.g. a claim). */
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   role: null,
+  username: null,
   loading: true,
   signOut: async () => {},
+  refreshProfile: async () => {},
 });
 
 /**
@@ -38,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,7 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       const nextUser = session?.user ?? null;
       setUser(nextUser);
-      if (!nextUser) setRole(null);
+      if (!nextUser) {
+        setRole(null);
+        setUsername(null);
+      }
       setLoading(false);
     });
 
@@ -59,27 +69,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase]);
 
-  // Role lives in `profiles` (RLS: readable by its owner). Fetched outside the
-  // auth callback to avoid blocking the auth state machine.
+  // Role and username live in `profiles` (RLS: readable by its owner). Fetched
+  // outside the auth callback to avoid blocking the auth state machine.
+  const readProfile = useCallback(async () => {
+    if (!user) return null;
+    const { data } = await supabase
+      .from("profiles")
+      .select("role, username")
+      .eq("id", user.id)
+      .single();
+    return {
+      role: (data?.role === "admin" ? "admin" : "user") as UserRole,
+      username: typeof data?.username === "string" ? data.username : null,
+    };
+  }, [supabase, user]);
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
-    void supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single()
-      .then(({ data }) => {
-        if (!cancelled) {
-          setRole(data?.role === "admin" ? "admin" : "user");
-        }
-      });
+    void readProfile().then((profile) => {
+      if (cancelled || !profile) return;
+      setRole(profile.role);
+      setUsername(profile.username);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [supabase, user]);
+  }, [user, readProfile]);
+
+  const refreshProfile = useCallback(async () => {
+    const profile = await readProfile();
+    if (!profile) return;
+    setRole(profile.role);
+    setUsername(profile.username);
+  }, [readProfile]);
 
   const signOut = useCallback(async () => {
     // Session only — local history lives in this browser and is never
@@ -88,8 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   const value = useMemo(
-    () => ({ user, role, loading, signOut }),
-    [user, role, loading, signOut],
+    () => ({ user, role, username, loading, signOut, refreshProfile }),
+    [user, role, username, loading, signOut, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -5,13 +5,43 @@
 
 -- ── profiles ────────────────────────────────────────────────────────────────
 -- One row per auth user, created by the on_auth_user_created trigger (05).
+-- `username` (plan 068) is the public handle: lowercase, SLUG_PATTERN-shaped,
+-- globally unique, NULL until the account claims one. The RESERVED segment
+-- list is checked in code (lib/slug.ts, same rule as projects at line ~76) —
+-- a SQL copy would drift, so the database enforces shape and uniqueness only.
 create table if not exists public.profiles (
   id         uuid primary key references auth.users (id) on delete cascade,
   role       text not null default 'user',
   created_at timestamptz not null default now(),
   email      text,
+  username   text,
   constraint profiles_role_check check (role in ('user', 'admin'))
 );
+
+-- Idempotent upgrade for projects created before plan 068 (create table if
+-- not exists leaves an existing table untouched).
+alter table public.profiles add column if not exists username text;
+
+-- NULLs stay distinct in a unique index, so any number of unclaimed accounts
+-- coexist while two claims of the same handle collide (decision 3).
+create unique index if not exists profiles_username_key
+  on public.profiles (username);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'profiles_username_check'
+  ) then
+    alter table public.profiles
+      add constraint profiles_username_check check (
+        username is null
+        or (
+          char_length(username) between 3 and 48
+          and username ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+        )
+      );
+  end if;
+end $$;
 
 -- ── uis ─────────────────────────────────────────────────────────────────────
 -- The user's playground drafts; revisions jsonb is the version stack.

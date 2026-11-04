@@ -42,3 +42,20 @@ revoke execute on function public.fork_catalog_asset(uuid, uuid, uuid)
   from public, anon;
 grant  execute on function public.fork_catalog_asset(uuid, uuid, uuid)
   to authenticated, service_role;
+
+-- Plan 068: the username RPCs. claim_username writes, so only a session may
+-- call it (anon is revoked explicitly — the function also refuses without
+-- auth.uid(), but the ACL is the outer gate). The two read helpers are
+-- anonymous by design: signup checks availability before an account exists,
+-- and the public profile route resolves a handle to an owner id.
+revoke execute on function public.claim_username(text) from public, anon;
+grant  execute on function public.claim_username(text)
+  to authenticated, service_role;
+
+revoke execute on function public.username_available(text) from public;
+grant  execute on function public.username_available(text)
+  to anon, authenticated, service_role;
+
+revoke execute on function public.public_profile(text) from public;
+grant  execute on function public.public_profile(text)
+  to anon, authenticated, service_role;

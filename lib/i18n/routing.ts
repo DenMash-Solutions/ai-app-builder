@@ -16,7 +16,13 @@ export const LOCALE_LABELS: Record<Locale, string> = {
  * outside LOCALES may be content-only locale paths (decision 11, checked in
  * `proxy.ts`).
  */
-export const APP_SEGMENTS = ["ui", "admin", "login", "signup"] as const;
+/**
+ * `user` (plan 068) belongs here for a second reason: a content path with two
+ * segments whose first segment is not an app segment is rewritten to
+ * /_not-found when the second segment is not a canonical language tag
+ * (`proxy.ts`), which is exactly `/en/user/<username>/ui`.
+ */
+export const APP_SEGMENTS = ["ui", "admin", "login", "signup", "user"] as const;
 
 export const routing = defineRouting({
   locales: LOCALES,

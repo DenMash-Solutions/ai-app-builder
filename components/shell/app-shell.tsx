@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AtSign,
   ChevronsUpDown,
   Globe,
   LayoutGrid,
@@ -11,9 +12,13 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  UsernameBanner,
+  UsernameClaimDialog,
+} from "@/components/auth/username-claim";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -86,7 +91,12 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* `SidebarInset` is the `<main>` landmark for the shelled surfaces —
           the canvas pages inside it render plain containers, not mains. */}
-        <SidebarInset>{children}</SidebarInset>
+        <SidebarInset>
+          {/* Plan 068: signed-in accounts without a handle get one prompt in
+              the chrome; the account menu stays the permanent entry point. */}
+          <UsernameBanner />
+          {children}
+        </SidebarInset>
 
         {/* Mobile-only opener; the header trigger closes the sheet. */}
         <MobileOpenTrigger />
@@ -274,9 +284,13 @@ function NavItems() {
 
 function AccountBlock() {
   const t = useTranslations("shell");
-  const { user, role, loading, signOut } = useAuth();
+  // The username copy lives in its own namespace — `t` above is scoped to
+  // "shell" and would resolve `shell.username.*` (missing-message throw).
+  const tUsername = useTranslations("username");
+  const { user, role, username, loading, signOut } = useAuth();
   const { isMobile } = useSidebar();
   const router = useRouter();
+  const [claimOpen, setClaimOpen] = useState(false);
 
   if (loading) {
     return (
@@ -310,35 +324,16 @@ function AccountBlock() {
   };
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              aria-label={t("account.menu", { email: user.email ?? "" })}
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <span
-                aria-hidden="true"
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary"
+    <>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton
+                size="lg"
+                aria-label={t("account.menu", { email: user.email ?? "" })}
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               >
-                {(user.email ?? "?").charAt(0).toUpperCase()}
-              </span>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.email}</span>
-              </div>
-              <ChevronsUpDown aria-hidden="true" className="ml-auto size-4" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
-            side={isMobile ? "bottom" : "right"}
-            align="end"
-            sideOffset={4}
-          >
-            <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <span
                   aria-hidden="true"
                   className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary"
@@ -347,29 +342,61 @@ function AccountBlock() {
                 </span>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.email}</span>
-                  {role && (
-                    <span className="truncate text-xs text-muted-foreground">
-                      {role === "admin"
-                        ? t("account.roleAdmin")
-                        : t("account.roleMember")}
-                    </span>
-                  )}
                 </div>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              data-testid="sign-out"
-              onClick={() => {
-                void handleSignOut();
-              }}
+                <ChevronsUpDown aria-hidden="true" className="ml-auto size-4" />
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+              side={isMobile ? "bottom" : "right"}
+              align="end"
+              sideOffset={4}
             >
-              <LogOut aria-hidden="true" />
-              {t("account.signOut")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+              <DropdownMenuLabel className="p-0 font-normal">
+                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary"
+                  >
+                    {(user.email ?? "?").charAt(0).toUpperCase()}
+                  </span>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">{user.email}</span>
+                    {role && (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {role === "admin"
+                          ? t("account.roleAdmin")
+                          : t("account.roleMember")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="username-menu-item"
+                onSelect={() => setClaimOpen(true)}
+              >
+                <AtSign aria-hidden="true" />
+                <span className="truncate">
+                  {username ? `@${username}` : tUsername("claim.menu")}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="sign-out"
+                onClick={() => {
+                  void handleSignOut();
+                }}
+              >
+                <LogOut aria-hidden="true" />
+                {t("account.signOut")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarMenuItem>
+      </SidebarMenu>
+      <UsernameClaimDialog open={claimOpen} onOpenChange={setClaimOpen} />
+    </>
   );
 }

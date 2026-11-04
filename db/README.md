@@ -9,7 +9,7 @@ project state after the RLS audit (`docs/security/rls-audit.md`).
 | # | File | What it does |
 | - | ---- | ------------ |
 | 1 | `01_schema.sql` | 10 public tables (`profiles`, `uis`, `page_versions`, `published_pages`, `site_settings`, `projects`, `project_screens`, `catalog_assets`, `catalog_asset_versions`, `catalog_installs`), constraints, defaults — plus `genui_records` from `supabase/migrations/0001_genui_records.sql` (applied separately, RLS + 4 policies) |
-| 2 | `02_functions.sql` | `handle_new_user()` (signup trigger fn), `is_admin()` (RLS helper), `rls_auto_enable()` (event trigger fn), `reject_catalog_version_mutation()` (066 immutability fn), `fork_catalog_asset()` (066 fork-on-edit RPC) |
+| 2 | `02_functions.sql` | `handle_new_user()` (signup trigger fn), `is_admin()` (RLS helper), `rls_auto_enable()` (event trigger fn), `reject_catalog_version_mutation()` (066 immutability fn), `fork_catalog_asset()` (066 fork-on-edit RPC), `claim_username()` / `username_available()` / `public_profile()` (068 username RPCs) |
 | 3 | `03_rls.sql` | Enable RLS on all tables + the full policy set (post-audit) |
 | 4 | `04_grants.sql` | Table DML grants, TRUNCATE/TRIGGER/REFERENCES revokes, function EXECUTE ACLs |
 | 5 | `05_triggers.sql` | `on_auth_user_created` (auth signup → profile row), `ensure_rls` event trigger |
@@ -57,9 +57,9 @@ select count(*) from pg_class
  where relnamespace = 'public'::regnamespace and relkind = 'r';        -- 11
 select count(*) from pg_policies where schemaname = 'public';           -- 37
 select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
- where n.nspname = 'public';                                            -- 5
--- (4 from db/02 + genui_records_touch_updated_at from the separate
--- genui migration)
+ where n.nspname = 'public';                                            -- 8
+-- (7 from db/02 — including the 068 username RPCs — plus
+-- genui_records_touch_updated_at from the separate genui migration)
 select relname from pg_class
  where relnamespace = 'public'::regnamespace and relkind = 'r'
    and not relrowsecurity;                                              -- 0 rows
@@ -69,3 +69,9 @@ select relname from pg_class
 
 Policy or grant changes must update **both** `db/03_rls.sql` /
 `db/04_grants.sql` **and** the inventory in `docs/security/rls-audit.md`.
+
+`profiles` still has **no write policy** after 068: a handle is claimed through
+`claim_username()` (SECURITY DEFINER, writes only the caller's own `username`),
+and visitors read `public_profile()` instead of the table, so `email` never
+becomes publicly selectable. Keep the reserved-segment list in `lib/slug.ts` —
+it is deliberately not duplicated in SQL.

@@ -144,6 +144,28 @@ export const BANNER = {
   dismiss: en.signupBanner.dismiss,
 } as const;
 
+export const USERNAME = {
+  menu: en.username.claim.menu,
+  claimTitle: en.username.claim.title,
+  changeTitle: en.username.claim.change,
+  submit: en.username.claim.submit,
+  placeholder: en.username.placeholder,
+  available: en.username.available,
+  taken: en.username.issues.taken,
+  reserved: en.username.issues.reserved,
+  bannerTitle: en.username.claim.bannerTitle,
+  bannerCta: en.username.claim.bannerCta,
+  esMenu: es.username.claim.menu,
+  esBannerTitle: es.username.claim.bannerTitle,
+  esClaimTitle: es.username.claim.title,
+  /** Profile page copy — `{username}` interpolated by the caller. */
+  profileTitle: (username: string): string =>
+    en.profile.title.replace("{username}", username),
+  esProfileTitle: (username: string): string =>
+    es.profile.title.replace("{username}", username),
+  emptyProfile: en.profile.empty,
+} as const;
+
 export const PUBLISH = {
   signupCta: en.publish.signupCta,
   slugLabel: en.publish.slugLabel,

@@ -4,6 +4,8 @@ export const RESERVED_SLUGS = {
   admin: "admin",
   login: "login",
   signup: "signup",
+  /** Plan 068: the public profile route lives at /user/<username>/ui. */
+  user: "user",
 } as const;
 
 export const SLUG_MAX_LENGTH = 48;

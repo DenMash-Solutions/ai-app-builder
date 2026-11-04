@@ -17,6 +17,9 @@
     },
     "auth": {
       "email": "",
+      "username": "",
+      "usernameStatus": "",
+      "usernameError": "",
       "password": "",
       "confirm": "",
       "error": "",
@@ -42,6 +45,8 @@
       "children": [
         "heading",
         "email",
+        "username",
+        "usernameStatus",
         "password",
         "confirm",
         "error",
@@ -71,6 +76,37 @@
           { "type": "email", "message": { "$state": "/checks/emailInvalid" } }
         ]
       }
+    },
+    "username": {
+      "type": "Input",
+      "props": {
+        "label": { "$state": "/copy/usernameLabel" },
+        "name": "username",
+        "type": "text",
+        "placeholder": { "$state": "/copy/usernamePlaceholder" },
+        "value": { "$bindState": "/auth/username" },
+        "checks": [
+          {
+            "type": "required",
+            "message": { "$state": "/checks/usernameRequired" }
+          }
+        ]
+      },
+      "on": {
+        "change": {
+          "action": "auth.checkUsername",
+          "params": { "username": { "$state": "/auth/username" } }
+        }
+      }
+    },
+    "usernameStatus": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/auth/usernameError" },
+        "className": "text-sm text-muted-foreground"
+      },
+      "visible": { "$state": "/auth/usernameError" },
+      "children": []
     },
     "password": {
       "type": "Input",
@@ -142,6 +178,7 @@
           "action": "auth.signup",
           "params": {
             "email": { "$state": "/auth/email" },
+            "username": { "$state": "/auth/username" },
             "password": { "$state": "/auth/password" }
           }
         }

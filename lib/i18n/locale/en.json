@@ -133,6 +133,41 @@
     "switchLink": "Sign in",
     "sentText": "Check your email to confirm your account, then sign in."
   },
+  "username": {
+    "label": "Username",
+    "placeholder": "your-name",
+    "hint": "Lowercase letters, numbers and hyphens. This is your public profile address.",
+    "cancel": "Cancel",
+    "available": "Available",
+    "issues": {
+      "empty": "Choose a username",
+      "tooShort": "At least 3 characters",
+      "tooLong": "At most 48 characters",
+      "pattern": "Use lowercase letters, numbers and single hyphens",
+      "reserved": "That word is reserved",
+      "taken": "That username is taken"
+    },
+    "errors": { "generic": "Could not save that username. Try again." },
+    "claim": {
+      "title": "Claim your username",
+      "description": "Your username is your public profile address: /user/your-name/ui.",
+      "submit": "Claim username",
+      "change": "Change username",
+      "menu": "Username",
+      "bannerTitle": "Pick a username",
+      "bannerText": "Claim a username to get a public profile for the UIs you publish.",
+      "bannerCta": "Claim",
+      "bannerDismiss": "Dismiss"
+    }
+  },
+  "profile": {
+    "title": "UIs by {username}",
+    "description": "Published UIs by {username}.",
+    "empty": "No published UIs yet.",
+    "missing": "No profile for @{username}.",
+    "claimCta": "Claim this username",
+    "open": "Open {name}"
+  },
   "auth": {
     "loading": "Loading…",
     "checks": {

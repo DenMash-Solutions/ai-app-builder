@@ -35,6 +35,8 @@ export default function SignupPage() {
           description: t("signup.description"),
           emailLabel: t("signup.emailLabel"),
           emailPlaceholder: t("signup.emailPlaceholder"),
+          usernameLabel: t("username.label"),
+          usernamePlaceholder: t("username.placeholder"),
           passwordLabel: t("signup.passwordLabel"),
           confirmLabel: t("signup.confirmLabel"),
           submit: t("signup.submit"),
@@ -45,6 +47,7 @@ export default function SignupPage() {
         checks: {
           emailRequired: t("auth.checks.emailRequired"),
           emailInvalid: t("auth.checks.emailInvalid"),
+          usernameRequired: t("username.issues.empty"),
           passwordRequired: t("auth.checks.passwordRequired"),
           minLength: t("auth.checks.minLength"),
           passwordsMustMatch: t("auth.checks.passwordsMustMatch"),

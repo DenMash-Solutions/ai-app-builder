@@ -21,6 +21,9 @@ alter table public.catalog_installs        enable row level security;
 -- ── profiles ────────────────────────────────────────────────────────────────
 -- No write policies at all: rows are created by the signup trigger, and an
 -- authenticated user must never be able to UPDATE their own role to 'admin'.
+-- Plan 068 keeps that rule: the username is claimed through the SECURITY
+-- DEFINER function claim_username (02), never through a profiles UPDATE
+-- policy, and public reads go through public_profile (id + username only).
 drop policy if exists profiles_select_own_or_admin on public.profiles;
 create policy profiles_select_own_or_admin
   on public.profiles for select

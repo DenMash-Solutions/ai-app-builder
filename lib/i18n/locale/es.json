@@ -133,6 +133,43 @@
     "switchLink": "Iniciar sesión",
     "sentText": "Revisa tu correo para confirmar tu cuenta y luego inicia sesión."
   },
+  "username": {
+    "label": "Nombre de usuario",
+    "placeholder": "tu-nombre",
+    "hint": "Letras minúsculas, números y guiones. Es la dirección de tu perfil público.",
+    "cancel": "Cancelar",
+    "available": "Disponible",
+    "issues": {
+      "empty": "Elige un nombre de usuario",
+      "tooShort": "Al menos 3 caracteres",
+      "tooLong": "Como máximo 48 caracteres",
+      "pattern": "Usa letras minúsculas, números y guiones simples",
+      "reserved": "Esa palabra está reservada",
+      "taken": "Ese nombre de usuario ya está en uso"
+    },
+    "errors": {
+      "generic": "No se pudo guardar el nombre de usuario. Inténtalo de nuevo."
+    },
+    "claim": {
+      "title": "Reclama tu nombre de usuario",
+      "description": "Tu nombre de usuario es la dirección de tu perfil público: /user/tu-nombre/ui.",
+      "submit": "Reclamar nombre",
+      "change": "Cambiar nombre",
+      "menu": "Nombre de usuario",
+      "bannerTitle": "Elige un nombre de usuario",
+      "bannerText": "Reclama un nombre de usuario para tener un perfil público con las UIs que publiques.",
+      "bannerCta": "Reclamar",
+      "bannerDismiss": "Descartar"
+    }
+  },
+  "profile": {
+    "title": "UIs de {username}",
+    "description": "UIs publicadas por {username}.",
+    "empty": "Todavía no hay UIs publicadas.",
+    "missing": "No existe el perfil @{username}.",
+    "claimCta": "Reclamar este nombre",
+    "open": "Abrir {name}"
+  },
   "auth": {
     "loading": "Cargando…",
     "checks": {

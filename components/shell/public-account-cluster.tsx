@@ -1,8 +1,10 @@
 "use client";
 
-import { Globe, LayoutGrid, LogOut } from "lucide-react";
+import { useState } from "react";
+import { AtSign, Globe, LayoutGrid, LogOut } from "lucide-react";
 import { hasLocale, useLocale, useTranslations } from "next-intl";
 import { useAuth } from "@/components/auth/auth-provider";
+import { UsernameClaimDialog } from "@/components/auth/username-claim";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,7 +28,11 @@ import { LOCALES, routing } from "@/lib/i18n/routing";
  */
 export function PublicAccountCluster() {
   const t = useTranslations("shell");
-  const { user, role, loading, signOut } = useAuth();
+  // Username copy has its own namespace (nesting it under `shell` would need
+  // the keys duplicated there).
+  const tUsername = useTranslations("username");
+  const { user, role, username, loading, signOut } = useAuth();
+  const [claimOpen, setClaimOpen] = useState(false);
   const router = useRouter();
   const locale = useLocale();
   const appLocale = hasLocale(LOCALES, locale) ? locale : routing.defaultLocale;
@@ -89,6 +95,17 @@ export function PublicAccountCluster() {
               {t("nav.livePages")}
             </DropdownMenuItem>
           )}
+          {/* Plan 068 decision Q1: the landing's account menu is the same
+              entry point as the shell's. */}
+          <DropdownMenuItem
+            data-testid="public-username-menu-item"
+            onSelect={() => setClaimOpen(true)}
+          >
+            <AtSign aria-hidden="true" />
+            <span className="truncate">
+              {username ? `@${username}` : tUsername("claim.menu")}
+            </span>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
@@ -100,6 +117,7 @@ export function PublicAccountCluster() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <UsernameClaimDialog open={claimOpen} onOpenChange={setClaimOpen} />
     </div>
   );
 }
