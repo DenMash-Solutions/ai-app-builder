@@ -23,7 +23,7 @@ import {
   type HistoryEntry,
 } from "@/lib/history";
 import { purgeProjectData } from "@/lib/projects/purge-data";
-import { isReservedSlug } from "@/lib/slug";
+import { isReservedRoute } from "@/lib/routes/registry";
 import type { Spec } from "@json-render/core";
 
 export const PROJECT_STORAGE_KEY = "genui-projects";
@@ -128,7 +128,7 @@ function uniqueSlug(
   );
   for (const slug of extraTaken) taken.add(slug);
   const isFree = (slug: string): boolean =>
-    !taken.has(slug) && !isReservedSlug(slug);
+    !taken.has(slug) && !isReservedRoute(slug);
   if (isFree(wanted)) return wanted;
   let suffix = 2;
   while (!isFree(`${wanted}-${suffix}`)) suffix += 1;
@@ -144,7 +144,7 @@ function uniqueSlug(
  * a reserved segment is rejected rather than silently re-suffixed.
  */
 export function projectNameError(name: string): "reserved" | null {
-  return isReservedSlug(slugifyProjectName(name)) ? "reserved" : null;
+  return isReservedRoute(slugifyProjectName(name)) ? "reserved" : null;
 }
 
 /**

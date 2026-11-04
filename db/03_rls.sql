@@ -17,6 +17,9 @@ alter table public.project_screens enable row level security;
 alter table public.catalog_assets          enable row level security;
 alter table public.catalog_asset_versions  enable row level security;
 alter table public.catalog_installs        enable row level security;
+alter table public.route_claims            enable row level security;
+alter table public.route_redirects         enable row level security;
+alter table public.published_entry_points  enable row level security;
 
 -- ── profiles ────────────────────────────────────────────────────────────────
 -- No write policies at all: rows are created by the signup trigger, and an
@@ -350,5 +353,66 @@ create policy catalog_installs_update_owner
 drop policy if exists catalog_installs_delete_owner on public.catalog_installs;
 create policy catalog_installs_delete_owner
   on public.catalog_installs for delete
+  to authenticated
+  using (owner_id = auth.uid());
+
+-- ── route_claims (plan 069) ─────────────────────────────────────────────────
+-- RLS on, deliberately NO policies: the table is written only by the definer
+-- triggers in 02 (screen publish, handle change) and read only through
+-- `route_available()`. Every client statement is filtered to zero rows, which
+-- is what keeps the arbiter unforgeable — there is no "insert my claim direct"
+-- path that could skip the reserved/ownership checks in the trigger.
+comment on table public.route_claims is
+  'Plan 069: single arbiter of the /{locale}/{value} namespace. Definer-trigger writes only; no policies.';
+
+-- ── route_redirects (plan 069) ──────────────────────────────────────────────
+-- Public read: a renamed project must answer its old URL for anonymous
+-- visitors. No write policies — rows are created by the handle trigger and
+-- removed with their project (ON DELETE CASCADE).
+drop policy if exists route_redirects_select_everyone on public.route_redirects;
+create policy route_redirects_select_everyone
+  on public.route_redirects for select
+  to public
+  using (true);
+
+-- ── published_entry_points (plan 069) ───────────────────────────────────────
+-- Public read only while the owning project is published. `project_is_published`
+-- is a definer helper for the same reason `is_admin()` is: the projects policy
+-- is owner-only, so an inline EXISTS would be filtered by RLS for every
+-- visitor and the live routes would read as empty (silent 404s).
+drop policy if exists published_entry_points_select_when_published
+  on public.published_entry_points;
+create policy published_entry_points_select_when_published
+  on public.published_entry_points for select
+  to public
+  using (project_is_published(project_id));
+
+-- Owner writes, mirroring the projects F7 shape: the WITH CHECK forbids
+-- re-stamping owner_id and refuses a membership in someone else's project.
+drop policy if exists published_entry_points_insert_own
+  on public.published_entry_points;
+create policy published_entry_points_insert_own
+  on public.published_entry_points for insert
+  to authenticated
+  with check (
+    owner_id = auth.uid()
+    and exists (
+      select 1 from public.projects p
+      where p.id = project_id and p.owner_id = auth.uid()
+    )
+  );
+
+drop policy if exists published_entry_points_update_own
+  on public.published_entry_points;
+create policy published_entry_points_update_own
+  on public.published_entry_points for update
+  to authenticated
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists published_entry_points_delete_own
+  on public.published_entry_points;
+create policy published_entry_points_delete_own
+  on public.published_entry_points for delete
   to authenticated
   using (owner_id = auth.uid());

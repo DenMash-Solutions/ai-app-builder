@@ -350,3 +350,167 @@ as $$
   from public.profiles p
   where p.username = lower(btrim(coalesce(p_username, '')));
 $$;
+
+-- ── route claims (plan 069) ─────────────────────────────────────────────────
+
+-- Is this project's projection servable? SECURITY DEFINER for the same reason
+-- is_admin() is: an RLS policy on published_entry_points needs to read
+-- projects, whose own policy is owner-only, and running the subquery as the
+-- caller would filter the project out and hide every live route.
+create or replace function public.project_is_published(p_project_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select exists (
+    select 1 from public.projects p
+    where p.id = p_project_id and p.status = 'published'
+  );
+$$;
+
+-- Advisory availability probe for the publish dialog (the claim itself is the
+-- authority). Anon by design: the dialog runs before the first write, and the
+-- value space (URLs) is public anyway — the owner column never leaves here.
+--
+-- `p_kind` is the claim the caller is ABOUT to make ('screen' | 'handle'):
+-- a value is available when nothing claims it, when the caller's own claim
+-- already IS that kind (republish / unchanged handle), or — nothing else.
+-- Their own OTHER kind blocks them (decision 10: the collision the trigger
+-- refuses), and so does anyone else's claim of any kind. An unknown kind
+-- answers false rather than loosening the check.
+drop function if exists public.route_available(text);
+create or replace function public.route_available(p_value text, p_kind text)
+returns boolean
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select
+    p_kind in ('screen', 'handle')
+    and char_length(btrim(coalesce(p_value, ''))) > 0
+    and not exists (
+      select 1 from public.route_claims c
+      where c.value = lower(btrim(coalesce(p_value, '')))
+        and (c.kind is distinct from p_kind
+             or c.owner_id is distinct from auth.uid())
+    );
+$$;
+
+-- Publishing a screen claims its slug in the shared namespace (F2). Runs as
+-- the definer so the writer needs no grant on route_claims; any failure here
+-- aborts the publish itself, which is the point — a published slug that is
+-- not reserved could be taken by a project handle a moment later.
+create or replace function public.claim_screen_route()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_owner uuid;
+  v_kind  text;
+begin
+  select c.owner_id, c.kind into v_owner, v_kind
+    from public.route_claims c where c.value = new.slug;
+
+  if found then
+    if v_owner <> new.owner_id then
+      raise exception 'route % is already claimed', new.slug
+        using errcode = '23505';
+    end if;
+    -- Decision 10: the value is the owner's LIVE project handle. Publishing
+    -- the screen anyway would give a URL that precedence (handle > screen)
+    -- can never serve, so refuse loudly instead of publishing a dead link.
+    if v_kind = 'handle' then
+      raise exception 'route % is held by a project handle', new.slug
+        using errcode = '23505';
+    end if;
+    if v_kind = 'redirect' then
+      -- Decision 4: the owner reclaims their own redirect — the live screen
+      -- wins, so both the claim kind and the redirect row move.
+      update public.route_claims
+         set kind = 'screen', project_id = null
+       where value = new.slug;
+      delete from public.route_redirects where from_value = new.slug;
+    end if;
+    -- kind = 'screen': the owner re-publishing their own slug — idempotent.
+  else
+    insert into public.route_claims (value, owner_id, kind)
+    values (new.slug, new.owner_id, 'screen');
+  end if;
+
+  return new;
+end;
+$$;
+
+-- A handle change claims the new value and turns the old one into a permanent
+-- redirect (decisions 4/6). It runs AFTER the row write, inside the SAME
+-- statement: a taken handle raises, which rolls the whole statement back — so
+-- the project row and its claim land together or not at all (and the FK on
+-- route_claims.project_id is satisfied, which a BEFORE trigger could not do:
+-- the row does not exist yet).
+create or replace function public.claim_project_handle()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_owner uuid;
+  v_kind  text;
+begin
+  if new.handle is null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and new.handle is not distinct from old.handle then
+    return new;
+  end if;
+
+  select c.owner_id, c.kind into v_owner, v_kind
+    from public.route_claims c where c.value = new.handle;
+
+  if found then
+    -- Reclaiming your own former handle is allowed; anyone else's is not.
+    if v_owner <> new.owner_id then
+      raise exception 'handle % is already claimed', new.handle
+        using errcode = '23505';
+    end if;
+    -- Decision 10: the value is a published screen slug of this same owner.
+    -- Flipping it to a handle would shadow that screen (handle > screen) and
+    -- leave `route_claims` disagreeing with `published_pages` — refuse; the
+    -- owner releases the screen first if they really want the value.
+    if v_kind = 'screen' then
+      raise exception 'handle % is held by a published screen', new.handle
+        using errcode = '23505';
+    end if;
+    -- kind = 'redirect' → decision 4 reclaim; kind = 'handle' → idempotent.
+    update public.route_claims
+       set kind = 'handle', project_id = new.id
+     where value = new.handle;
+    delete from public.route_redirects where from_value = new.handle;
+  else
+    insert into public.route_claims (value, owner_id, kind, project_id)
+    values (new.handle, new.owner_id, 'handle', new.id);
+  end if;
+
+  if tg_op = 'UPDATE' and old.handle is not null
+     and old.handle <> new.handle then
+    insert into public.route_redirects (from_value, owner_id, project_id)
+    values (old.handle, new.owner_id, new.id)
+    on conflict (from_value) do update
+      set owner_id = excluded.owner_id,
+          project_id = excluded.project_id;
+
+    update public.route_claims
+       set kind = 'redirect', project_id = new.id
+     where value = old.handle
+       and owner_id = new.owner_id
+       and kind = 'handle';
+  end if;
+
+  return new;
+end;
+$$;

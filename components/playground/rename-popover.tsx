@@ -9,7 +9,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { isReservedSlug, isValidSlug, slugify } from "@/lib/slug";
+import { isReservedRoute } from "@/lib/routes/registry";
+import { isValidSlug, slugify } from "@/lib/slug";
 
 interface RenamePopoverProps {
   entryId: string;
@@ -53,7 +54,7 @@ export function RenamePopover({
   const slugError =
     trimmedSlug === ""
       ? t("rename.errors.slugRequired")
-      : isReservedSlug(trimmedSlug)
+      : isReservedRoute(trimmedSlug)
         ? t("rename.errors.slugReserved")
         : !isValidSlug(trimmedSlug)
           ? t("rename.errors.slugInvalid")

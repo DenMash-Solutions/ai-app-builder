@@ -25,6 +25,14 @@ interface FakeState {
   deletes: Array<string>;
   /** Message to fail the next upsert with (simulates the slug constraint). */
   upsertError?: string;
+  /** `route_claims` rows the `route_available` arbiter consults. */
+  claims: Array<{ value: string; owner_id: string; kind: string }>;
+  /** The JWT subject the RPC runs as (`null` = anonymous). */
+  callerId: string | null;
+  /** Message to fail the next `route_available` RPC with. */
+  rpcError?: string;
+  /** Every RPC the code under test issued (fn name + params). */
+  rpcCalls: Array<{ fn: string; params: Record<string, unknown> }>;
 }
 
 function makeClient(state: FakeState): PublishClient {
@@ -61,24 +69,17 @@ function makeClient(state: FakeState): PublishClient {
       } as unknown as ReturnType<PublishClient["from"]>;
     }
     if (name === "published_pages") {
-      const findBySlug = (slug: string) =>
-        state.pages.find((row) => row.slug === slug) ?? null;
       return {
         select: (columns: string) => {
-          if (columns.includes("ui_id, slug, version")) {
-            return chain(() => ({
-              data: state.pages.map((row) => ({ ...row })),
-              error: null,
-            }));
+          // The only remaining select shape is getPublishedState's mapping;
+          // the availability probe moved to the `route_available` RPC.
+          if (!columns.includes("ui_id, slug, version")) {
+            throw new Error(`unexpected published_pages select: ${columns}`);
           }
-          // Availability probe: resolve the slug captured by the eq() call.
-          let slug = "";
-          return chain(
-            () => ({ data: findBySlug(slug), error: null }),
-            (value) => {
-              slug = value;
-            },
-          );
+          return chain(() => ({
+            data: state.pages.map((row) => ({ ...row })),
+            error: null,
+          }));
         },
         upsert: (row: Record<string, unknown>) => {
           const upsertError = state.upsertError;
@@ -104,13 +105,49 @@ function makeClient(state: FakeState): PublishClient {
     } as unknown as ReturnType<PublishClient["from"]>;
   }
 
-  return { from: table };
+  /**
+   * Mini-implementation of `route_available(p_value, p_kind)` — the same
+   * contract as the definer function: a claim blocks unless it is the
+   * caller's OWN claim of the SAME kind; an unknown kind or an empty value
+   * answers false rather than loosening the check.
+   */
+  async function rpc(
+    fn: string,
+    params: Record<string, unknown>,
+  ): Promise<{ data: boolean | null; error: { message: string } | null }> {
+    state.rpcCalls.push({ fn, params });
+    if (state.rpcError)
+      return { data: null, error: { message: state.rpcError } };
+    const value = String(params.p_value ?? "")
+      .trim()
+      .toLowerCase();
+    const kind = String(params.p_kind ?? "");
+    if ((kind !== "screen" && kind !== "handle") || value === "") {
+      return { data: false, error: null };
+    }
+    const claim = state.claims.find((row) => row.value === value);
+    if (!claim) return { data: true, error: null };
+    const blocked =
+      claim.kind !== kind || claim.owner_id !== (state.callerId ?? null);
+    return { data: !blocked, error: null };
+  }
+
+  return { from: table, rpc };
 }
 
 let state: FakeState;
 
 beforeEach(() => {
-  state = { versions: [], pages: [], inserts: [], upserts: [], deletes: [] };
+  state = {
+    versions: [],
+    pages: [],
+    inserts: [],
+    upserts: [],
+    deletes: [],
+    claims: [],
+    callerId: null,
+    rpcCalls: [],
+  };
 });
 
 describe("publishEntry", () => {
@@ -166,21 +203,57 @@ describe("publishEntry", () => {
   });
 });
 
-describe("isSlugAvailable", () => {
-  test("free slugs are available", async () => {
+describe("isSlugAvailable (route_available, decision 11)", () => {
+  test("a value nobody claims is available", async () => {
     expect(await isSlugAvailable(makeClient(state), "free")).toBe(true);
   });
 
-  test("another owner's live slug is taken", async () => {
-    state.pages.push({ ui_id: "other-ui", slug: "taken", version: 1 });
+  test("asks the arbiter for the SCREEN kind, never the pages table", async () => {
+    await isSlugAvailable(makeClient(state), "my-slug");
+
+    expect(state.rpcCalls).toEqual([
+      {
+        fn: "route_available",
+        params: { p_value: "my-slug", p_kind: "screen" },
+      },
+    ]);
+    expect(state.pages).toHaveLength(0);
+  });
+
+  test("a foreign claim blocks", async () => {
+    state.callerId = "owner-1";
+    state.claims = [
+      { value: "taken", owner_id: "someone-else", kind: "screen" },
+    ];
+
     expect(await isSlugAvailable(makeClient(state), "taken")).toBe(false);
   });
 
-  test("our own live slug stays available (republish keeps it)", async () => {
-    state.pages.push({ ui_id: "my-ui", slug: "mine", version: 1 });
-    expect(await isSlugAvailable(makeClient(state), "mine", "my-ui")).toBe(
-      true,
-    );
+  test("our own screen claim stays available (republish is not taken)", async () => {
+    state.callerId = "owner-1";
+    state.claims = [{ value: "mine", owner_id: "owner-1", kind: "screen" }];
+
+    expect(await isSlugAvailable(makeClient(state), "mine")).toBe(true);
+  });
+
+  test("our own HANDLE claim blocks the screen slug (decision 10)", async () => {
+    state.callerId = "owner-1";
+    state.claims = [{ value: "blog", owner_id: "owner-1", kind: "handle" }];
+
+    expect(await isSlugAvailable(makeClient(state), "blog")).toBe(false);
+  });
+
+  test("an anonymous caller sees every claim as taken", async () => {
+    state.callerId = null;
+    state.claims = [{ value: "mine", owner_id: "owner-1", kind: "screen" }];
+
+    expect(await isSlugAvailable(makeClient(state), "mine")).toBe(false);
+  });
+
+  test("fails closed when the arbiter errors", async () => {
+    state.rpcError = "function route_available does not exist";
+
+    expect(await isSlugAvailable(makeClient(state), "anything")).toBe(false);
   });
 });
 

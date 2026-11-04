@@ -17,7 +17,14 @@
  */
 
 /** GETs of these tables are share-cached; nothing else ever is. */
-export const PROJECTION_TABLES = ["published_pages", "site_settings"] as const;
+export const PROJECTION_TABLES = [
+  "published_pages",
+  "site_settings",
+  // Plan 069: the multi-route projection of a published project. Every
+  // reader of it is anonymous (decision 5 / F5 — the allowlist must grow in
+  // the same change as the first writer, or its tags are silently dropped).
+  "published_entry_points",
+] as const;
 
 const REST_TABLE_PATTERN = /\/rest\/v1\/([a-z_]+)(?:\?|$)/;
 

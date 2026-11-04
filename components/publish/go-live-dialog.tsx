@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { HistoryEntry } from "@/lib/history";
-import { isReservedSlug, isValidSlug } from "@/lib/slug";
+import { isValidSlug } from "@/lib/slug";
+import { isReservedRoute } from "@/lib/routes/registry";
 import { createClient } from "@/lib/supabase/client";
 import {
   asPublishClient,
@@ -92,7 +93,9 @@ function GoLiveContent({
   const [busy, setBusy] = useState(false);
 
   const valid = isValidSlug(slug);
-  const reserved = isReservedSlug(slug);
+  // The registry owns route meaning (plan 069 task 2) — reserved segments are
+  // checked there, not per surface, so this can never drift from the arbiter.
+  const reserved = isReservedRoute(slug);
 
   // Debounced availability probe. The status shown is *derived* below
   // (check.slug !== slug ⇒ still checking) — no setState in the effect body.
@@ -100,7 +103,7 @@ function GoLiveContent({
     if (!valid || reserved) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      void isSlugAvailable(supabase, slug, entry.id).then((available) => {
+      void isSlugAvailable(supabase, slug).then((available) => {
         if (!cancelled) setCheck({ slug, available });
       });
     }, 400);

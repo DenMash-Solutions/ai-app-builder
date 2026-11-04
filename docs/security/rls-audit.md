@@ -62,6 +62,13 @@ All tables have RLS enabled; no views exist in `public`; no `public.*` table is 
 | `catalog_installs` | `catalog_installs_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` **and** (asset own **or public**) `exists (...)` **and** version-belongs-to-asset `exists (...)` ← single-owner + private-install denial (066) |
 | `catalog_installs` | `catalog_installs_update_owner` | UPDATE | authenticated | `owner_id = auth.uid()` ← F7 shape | same triple `exists (...)` as INSERT |
 | `catalog_installs` | `catalog_installs_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
+| `route_claims` | *(no policies at all — RLS enabled, definer-trigger writes only, read via `route_available()`; 069 namespace arbiter)* | — | — | — | — |
+| `route_redirects` | `route_redirects_select_everyone` | SELECT | **public** | `true` (a renamed project must answer its old URL for anonymous visitors) | — |
+| `route_redirects` | *(no write policies — rows come from the `projects_claim_handle` trigger, removed with the project by cascade)* | — | — | — | — |
+| `published_entry_points` | `published_entry_points_select_when_published` | SELECT | **public** | `project_is_published(project_id)` (definer helper — the projects policy is owner-only, an inline EXISTS would read as empty for every visitor) | — |
+| `published_entry_points` | `published_entry_points_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` |
+| `published_entry_points` | `published_entry_points_update_own` | UPDATE | authenticated | `owner_id = auth.uid()` | `owner_id = auth.uid()` |
+| `published_entry_points` | `published_entry_points_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
 
 `profiles` has no INSERT/UPDATE/DELETE policy at all → **privilege escalation via `UPDATE profiles SET role='admin'` is impossible** (battery: 0 rows). Signups get their row from the `handle_new_user` trigger.
 
@@ -74,10 +81,14 @@ All tables have RLS enabled; no views exist in `public`; no `public.*` table is 
 | `rls_auto_enable()` | event-trigger function (`ensure_rls`: new tables auto-get RLS) | `postgres`, `service_role` |
 | `reject_catalog_version_mutation()` | trigger function on `catalog_asset_versions` (066 immutability) | default `PUBLIC` — trigger functions cannot be invoked directly, not `SECURITY DEFINER` |
 | `fork_catalog_asset(uuid, uuid, uuid)` | SECURITY INVOKER fork RPC (066 decision 4) — plpgsql runs under the caller's RLS across `catalog_assets` / `catalog_asset_versions` / `uis` / `catalog_installs` / `project_screens` | `authenticated`, `service_role` — revoked from `PUBLIC`, `anon` (signed-in call required; anon EXECUTE denied at grant level, verified live) |
+| `claim_screen_route()` | trigger function on `published_pages` (069 — claims a published slug in `route_claims`) | `postgres`, `service_role` — revoked from `PUBLIC`, `anon`, `authenticated` (invoked only by the DB) |
+| `claim_project_handle()` | trigger function on `projects` (069 — claims the handle, turns the old value into a redirect) | `postgres`, `service_role` — revoked from `PUBLIC`, `anon`, `authenticated` |
+| `route_available(text)` | SECURITY DEFINER availability probe (069 — the publish dialog's pre-write check) | `anon`, `authenticated`, `service_role` — reads `route_claims` only, returns a boolean (no owner id leaves the function) |
+| `project_is_published(uuid)` | SECURITY DEFINER helper used by the `published_entry_points` SELECT policy (069) — reads `projects.status` where the projects policy is owner-only | `anon`, `authenticated`, `service_role` (required by policy evaluation, same reasoning as `is_admin()`); revoked from `PUBLIC` |
 
 ### Grants (post-fix)
 
-`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all tables in `public` (RLS filters rows) — the `db/` set is 10 tables (`genui_records` is applied separately and also carries RLS + 4 policies). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
+`anon` / `authenticated` keep `SELECT, INSERT, UPDATE, DELETE` on all tables in `public` (RLS filters rows) — the `db/` set is 13 tables (`genui_records` is applied separately and also carries RLS + 4 policies). `TRUNCATE, TRIGGER, REFERENCES` revoked from both (F1). `auth.users` has no grant to `anon` (battery: `permission denied for table users`).
 
 ## Findings
 
@@ -190,6 +201,16 @@ Test fixtures (2 users, 2 uis, versions, published row) were removed afterwards;
 
 - Advisories after fixes: 2 WARN — F5 accepted (above) and F6 (manual). The three original `*_security_definer_function_executable`/anon findings are cleared except the accepted one.
 - **Addendum 2026-11-02 (plan 066):** security advisors now show 4 WARN classes, no ERRORs and no missing-RLS findings — (1) F5 `is_admin()` accepted above; (2) F6 leaked-password, manual; (3) `function_search_path_mutable` on `genui_records_touch_updated_at` (the separate genui migration, outside the `db/` set); (4) `auth_allow_anonymous_sign_ins` fires on **every** table with a `to authenticated` USING policy (all 11 tables) because anonymous sign-ins are enabled project-wide — anonymous users share the `authenticated` role by design (the app signs in anonymously), so this is a project-wide posture, not a policy regression: the catalog policies are the same shape as the pre-existing ones. Lint reference: [0012](https://supabase.com/docs/guides/database/database-advisors?queryGroups=lint&lint=0012_auth_allow_anonymous_sign_ins).
+- **Addendum 2026-11-04 (plan 069):** three tables added (`route_claims`,
+  `route_redirects`, `published_entry_points`), 5 policies, 4 functions
+  (2 definer triggers, 2 definer helpers). `route_claims` is the deliberately
+  policy-less arbiter (see its inventory row): the only write paths are the
+  two SECURITY DEFINER triggers, so no client role can insert a claim
+  directly — which is what keeps a reserved/foreign value unclaimable.
+  `route_available()` is anon-callable by design (a boolean answer for a
+  public value space; it never returns `owner_id`), and
+  `project_is_published()` is `anon` + `authenticated` for the same
+  policy-evaluation reason as `is_admin()`.
 - 24 h logs: no failed logins, no 4xx/5xx auth responses, audit trail shows only the owner's own `login`/`token_refreshed`/`token_revoked` events from a single IP. `postgres_logs` anomalies are only this audit's own denial probes (`row-level security policy` / `permission denied for table site_settings`) plus checkpoints — nothing else.
 
 ## Residual notes

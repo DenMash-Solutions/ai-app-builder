@@ -1,5 +1,6 @@
 import type { HistoryEntry } from "@/lib/history";
 import { revalidateProjection } from "@/lib/publish/revalidate";
+import { ROUTE_CLAIM_KINDS } from "@/lib/routes/registry";
 
 /**
  * Publish flow (plan Q5): publishing snapshots the currently selected
@@ -51,6 +52,11 @@ export interface PublishClient {
       ): PromiseLike<{ error: QueryError | null }>;
     };
   };
+  /** RPC seam — the namespace arbiter (`route_available`) is a function. */
+  rpc(
+    fn: string,
+    params: Record<string, unknown>,
+  ): PromiseLike<QueryResult<boolean>>;
 }
 
 export interface PublishedPage {
@@ -78,24 +84,39 @@ export interface PublishResult {
 
 function isSlugTakenError(message: string): boolean {
   return (
-    message.includes("duplicate key") && message.includes("published_pages")
+    (message.includes("duplicate key") &&
+      message.includes("published_pages")) ||
+    // The namespace arbiter refuses before the row constraint ever fires
+    // (decision 10): the value is held by someone's claim — a foreign one, or
+    // this owner's project handle / published screen of the other kind.
+    message.includes("is already claimed") ||
+    message.includes("is held by a project handle") ||
+    message.includes("is held by a published screen")
   );
 }
 
-/** Debounced-dialog availability probe: free, or ours (keeping our slug). */
+/**
+ * Debounced-dialog availability probe: asks the namespace ARBITER
+ * (`route_available`, decision 11) rather than reading `published_pages` —
+ * a value held by a project handle is exactly as taken for a screen slug,
+ * and two sources of takenness would disagree. The definer RPC counts the
+ * caller's own claim of the SAME kind as available, so republishing one's
+ * own slug is never a false "taken"; a foreign claim or one's other kind
+ * reads taken, which is what the trigger then enforces.
+ *
+ * Fail-closed on error (same contract as before): an unreachable arbiter
+ * shows "taken" instead of letting a doomed publish through.
+ */
 export async function isSlugAvailable(
   client: PublishClient,
   slug: string,
-  currentUiId?: string,
 ): Promise<boolean> {
-  const { data, error } = await client
-    .from("published_pages")
-    .select("ui_id")
-    .eq("slug", slug)
-    .maybeSingle();
+  const { data, error } = await client.rpc("route_available", {
+    p_value: slug,
+    p_kind: ROUTE_CLAIM_KINDS.screen,
+  });
   if (error) return false;
-  if (!data) return true;
-  return data.ui_id === currentUiId;
+  return data === true;
 }
 
 /** Published state for the drawer rows — one query for all visible entries. */

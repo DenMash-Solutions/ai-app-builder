@@ -116,6 +116,13 @@ create table if not exists public.projects (
   owner_id       uuid not null references auth.users (id) on delete cascade,
   name           text not null,
   slug           text not null,
+  -- Plan 069: the GLOBAL, claimed handle — distinct from the per-owner
+  -- `slug` above. `slug` is name-derived and re-derived on rename (local
+  -- preview namespace); the handle is what a published project is served
+  -- under and never changes on rename (a rename makes the old value a
+  -- redirect row instead). NULL until the project is first published.
+  handle         text,
+  published_at   timestamptz,
   home_screen_id uuid references public.uis (id) on delete set null,
   status         text not null default 'draft',
   state          jsonb not null default '{}'::jsonb,
@@ -152,6 +159,117 @@ create table if not exists public.project_screens (
   constraint project_screens_project_id_screen_id_key unique (project_id, screen_id),
   constraint project_screens_project_id_route_key unique (project_id, route)
 );
+
+-- Handle columns on an existing install (plan 069) + the shape CHECK and the
+-- partial unique index: a NULL handle means "never published", and Postgres
+-- treats each NULL as distinct, so drafts coexist.
+alter table public.projects add column if not exists handle text;
+alter table public.projects add column if not exists published_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'projects_handle_check'
+  ) then
+    alter table public.projects
+      add constraint projects_handle_check check (
+        handle is null
+        or (
+          char_length(handle) between 1 and 48
+          and handle ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+        )
+      );
+  end if;
+end $$;
+
+create unique index if not exists projects_handle_key
+  on public.projects (handle) where handle is not null;
+
+-- ── route_claims (plan 069) ─────────────────────────────────────────────────
+-- The single arbiter of the shared /{locale}/{value} namespace. Screens and
+-- project handles live in different tables, so one cross-table UNIQUE is
+-- impossible (F2); both write a claim row here and the primary key is the
+-- constraint. `kind` records how the value is currently used:
+--   handle   — a project's live handle (`project_id` set)
+--   screen   — a published screen slug (`published_pages.slug`)
+--   redirect — a former handle that still redirects (`route_redirects`)
+-- Rows are written ONLY by the definer triggers in 02 (a screen publish and a
+-- handle change each claim atomically, in the same transaction), so this
+-- table has RLS enabled and no policies at all.
+create table if not exists public.route_claims (
+  value      text primary key,
+  owner_id   uuid not null references auth.users (id) on delete cascade,
+  kind       text not null,
+  project_id uuid references public.projects (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  constraint route_claims_value_check check (
+    char_length(value) between 1 and 48
+    and value ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+  ),
+  constraint route_claims_kind_check check (
+    kind in ('handle', 'screen', 'redirect')
+  ),
+  constraint route_claims_screen_project_check check (
+    kind <> 'screen' or project_id is null
+  )
+);
+
+create index if not exists route_claims_owner_id_idx
+  on public.route_claims (owner_id);
+
+-- Decision 2 (F2): every slug published BEFORE this table existed must already
+-- hold its claim — otherwise the next project handle could take the value and
+-- shadow a live URL (handle wins over screen at every resolution). Idempotent:
+-- `on conflict do nothing` keeps a claim the trigger already created.
+insert into public.route_claims (value, owner_id, kind, project_id)
+select p.slug, p.owner_id, 'screen', null
+  from public.published_pages p
+ where not exists (
+         select 1 from public.route_claims c where c.value = p.slug
+       )
+on conflict (value) do nothing;
+
+-- ── route_redirects (plan 069) ──────────────────────────────────────────────
+-- A handle change keeps the old URL alive: the old value becomes a redirect
+-- to the project (decision 4). Redirects are retained indefinitely and stay
+-- reserved for their owner — the matching `route_claims` row keeps kind
+-- 'redirect', so nobody else can claim the value and the owner can reclaim it.
+-- Public read (the redirect resolves for anonymous visitors); written only by
+-- the handle trigger.
+create table if not exists public.route_redirects (
+  from_value text primary key,
+  owner_id   uuid not null references auth.users (id) on delete cascade,
+  project_id uuid not null references public.projects (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  constraint route_redirects_from_value_check check (
+    char_length(from_value) between 1 and 48
+    and from_value ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+  )
+);
+
+-- ── published_entry_points (plan 069) ───────────────────────────────────────
+-- The multi-route projection of a published project: one row per route, each
+-- a SNAPSHOT of the screen it resolved to at publish time (spec + version,
+-- decision 5), so editing a screen afterwards changes nothing live until the
+-- next publish. `route` '' is the home route (`/{locale}/{handle}`); every
+-- other value is the membership pattern ('' or 'settings' or 'items/{id}').
+-- Served only while the project's `status = 'published'` (policy in 03).
+create table if not exists public.published_entry_points (
+  project_id   uuid not null references public.projects (id) on delete cascade,
+  route        text not null,
+  owner_id     uuid not null references auth.users (id) on delete cascade,
+  screen_id    uuid not null references public.uis (id) on delete cascade,
+  spec         jsonb not null,
+  version      integer not null,
+  artifacts    jsonb,
+  published_at timestamptz not null default now(),
+  primary key (project_id, route),
+  constraint published_entry_points_route_check check (char_length(route) between 0 and 128),
+  constraint published_entry_points_version_check check (version >= 1)
+);
+
+create index if not exists published_entry_points_owner_id_idx
+  on public.published_entry_points (owner_id);
 
 -- ── catalog_assets ───────────────────────────────────────────────────────────
 -- Plan 066: a reusable asset (a published screen or component) with

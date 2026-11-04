@@ -25,3 +25,20 @@ drop trigger if exists catalog_asset_versions_immutable on public.catalog_asset_
 create trigger catalog_asset_versions_immutable
   before update or delete on public.catalog_asset_versions
   for each row execute function public.reject_catalog_version_mutation();
+
+-- Plan 069: the shared route namespace is enforced in the same statement that
+-- publishes, so a claim can never be lost or half-written. The handle trigger
+-- is AFTER, not BEFORE: route_claims.project_id has an FK on projects, and a
+-- BEFORE INSERT trigger would insert a claim pointing at a row that does not
+-- exist yet (23503 — caught by the live decision-10 DO-block). An exception
+-- from an AFTER trigger still rolls the whole statement back, so atomicity is
+-- unchanged.
+drop trigger if exists published_pages_claim_route on public.published_pages;
+create trigger published_pages_claim_route
+  after insert or update of slug on public.published_pages
+  for each row execute function public.claim_screen_route();
+
+drop trigger if exists projects_claim_handle on public.projects;
+create trigger projects_claim_handle
+  after insert or update of handle on public.projects
+  for each row execute function public.claim_project_handle();

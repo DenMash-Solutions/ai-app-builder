@@ -59,3 +59,25 @@ grant  execute on function public.username_available(text)
 revoke execute on function public.public_profile(text) from public;
 grant  execute on function public.public_profile(text)
   to anon, authenticated, service_role;
+
+-- Plan 069: route claims. The trigger functions are invisible to API callers
+-- (only the DB invokes them), and `route_available` is the anonymous probe the
+-- publish dialog uses before the first write.
+revoke execute on function public.claim_screen_route() from public, anon, authenticated;
+grant  execute on function public.claim_screen_route() to postgres, service_role;
+
+revoke execute on function public.claim_project_handle() from public, anon, authenticated;
+grant  execute on function public.claim_project_handle() to postgres, service_role;
+
+-- The one-arg overload was dropped in 02 (decision 11) — no revoke target
+-- remains for it; the two-arg probe below is the only signature. PUBLIC is
+-- revoked first (new functions default to PUBLIC EXECUTE, which the security
+-- advisor flags on a SECURITY DEFINER), then the three API roles get it.
+drop function if exists public.route_available(text);
+revoke execute on function public.route_available(text, text) from public;
+grant  execute on function public.route_available(text, text)
+  to anon, authenticated, service_role;
+
+revoke execute on function public.project_is_published(uuid) from public, anon;
+grant  execute on function public.project_is_published(uuid)
+  to anon, authenticated, service_role;
