@@ -64,7 +64,8 @@ All tables have RLS enabled; no views exist in `public`; no `public.*` table is 
 | `catalog_installs` | `catalog_installs_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
 | `route_claims` | *(no policies at all — RLS enabled, definer-trigger writes only, read via `route_available()`; 069 namespace arbiter)* | — | — | — | — |
 | `route_redirects` | `route_redirects_select_everyone` | SELECT | **public** | `true` (a renamed project must answer its old URL for anonymous visitors) | — |
-| `route_redirects` | *(no write policies — rows come from the `projects_claim_handle` trigger, removed with the project by cascade)* | — | — | — | — |
+| `route_redirects` | `route_redirects_delete_own` | DELETE | authenticated | `owner_id = auth.uid()` (069 task 3: unpublish clears the project's redirects **before** the status flip — with SELECT-only RLS the delete matched 0 rows and redirects kept serving) | — |
+| `route_redirects` | *(no INSERT/UPDATE — rows come from the `projects_claim_handle` trigger, removed with the project by cascade)* | — | — | — | — |
 | `published_entry_points` | `published_entry_points_select_when_published` | SELECT | **public** | `project_is_published(project_id)` (definer helper — the projects policy is owner-only, an inline EXISTS would read as empty for every visitor) | — |
 | `published_entry_points` | `published_entry_points_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` |
 | `published_entry_points` | `published_entry_points_update_own` | UPDATE | authenticated | `owner_id = auth.uid()` | `owner_id = auth.uid()` |
@@ -202,7 +203,8 @@ Test fixtures (2 users, 2 uis, versions, published row) were removed afterwards;
 - Advisories after fixes: 2 WARN — F5 accepted (above) and F6 (manual). The three original `*_security_definer_function_executable`/anon findings are cleared except the accepted one.
 - **Addendum 2026-11-02 (plan 066):** security advisors now show 4 WARN classes, no ERRORs and no missing-RLS findings — (1) F5 `is_admin()` accepted above; (2) F6 leaked-password, manual; (3) `function_search_path_mutable` on `genui_records_touch_updated_at` (the separate genui migration, outside the `db/` set); (4) `auth_allow_anonymous_sign_ins` fires on **every** table with a `to authenticated` USING policy (all 11 tables) because anonymous sign-ins are enabled project-wide — anonymous users share the `authenticated` role by design (the app signs in anonymously), so this is a project-wide posture, not a policy regression: the catalog policies are the same shape as the pre-existing ones. Lint reference: [0012](https://supabase.com/docs/guides/database/database-advisors?queryGroups=lint&lint=0012_auth_allow_anonymous_sign_ins).
 - **Addendum 2026-11-04 (plan 069):** three tables added (`route_claims`,
-  `route_redirects`, `published_entry_points`), 5 policies, 4 functions
+  `route_redirects`, `published_entry_points`), 6 policies (5 at task 1 +
+  `route_redirects_delete_own` at task 3, see its inventory row), 4 functions
   (2 definer triggers, 2 definer helpers). `route_claims` is the deliberately
   policy-less arbiter (see its inventory row): the only write paths are the
   two SECURITY DEFINER triggers, so no client role can insert a claim

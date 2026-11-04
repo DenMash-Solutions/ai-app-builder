@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Copy,
   Folder,
+  Globe,
   Pencil,
   Plus,
   Trash2,
@@ -17,6 +18,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ProjectWorkspacePanel } from "@/components/projects/project-workspace-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -31,11 +33,17 @@ import { JsonImportButton } from "@/components/playground/json-import-button";
 import { JsonUpdateButton } from "@/components/playground/json-update-button";
 import { GoLiveDialog } from "@/components/publish/go-live-dialog";
 import { PublishActions } from "@/components/publish/publish-actions";
+import { PublishSiteDialog } from "@/components/publish/publish-site-dialog";
 import type { HistoryEntry } from "@/lib/history";
 import { formatRelativeTime } from "@/lib/history";
 import { copySpecToClipboard } from "@/lib/playground/json-io";
 import { getPublishedState, asPublishClient } from "@/lib/publish/publish";
 import type { PublishedPage } from "@/lib/publish/publish";
+import {
+  PROJECT_PUBLISH_STATUS,
+  getProjectPublishStates,
+} from "@/lib/publish/project-publish";
+import type { ProjectPublishState } from "@/lib/publish/project-publish";
 import { groupEntriesForDrawer } from "@/lib/projects/drawer-groups";
 import type { ProjectGroup } from "@/lib/projects/drawer-groups";
 import {
@@ -91,6 +99,12 @@ export function HistoryDrawer({
     Record<string, PublishedPage>
   >({});
   const [goLiveEntry, setGoLiveEntry] = useState<HistoryEntry | null>(null);
+  /** The project whose publish dialog is open (069 task 3). */
+  const [publishTarget, setPublishTarget] = useState<Project | null>(null);
+  /** Live state per project, read on demand — never modelled locally (13). */
+  const [publishStates, setPublishStates] = useState<
+    Record<string, ProjectPublishState>
+  >({});
 
   // Project grouping (plan 061 A1, membership-driven since 065 task 4):
   // every project is listed (even a screenless one — a freshly created
@@ -145,6 +159,25 @@ export function HistoryDrawer({
       cancelled = true;
     };
   }, [open, loading, user, entries, supabase]);
+
+  // Project live state for the header badges — one explicit-column query
+  // while the drawer is open (decision 13: status/handle are read here,
+  // never synced). A project the caller cannot see simply has no entry, so
+  // its badge stays hidden.
+  useEffect(() => {
+    if (!open || loading || !user) return;
+    let cancelled = false;
+    void getProjectPublishStates(
+      asPublishClient(supabase),
+      projects.map((project) => project.id),
+    ).then((states) => {
+      if (cancelled) return;
+      setPublishStates(states);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, loading, user, projects, supabase]);
 
   const handleExportEntry = async (entry: HistoryEntry): Promise<void> => {
     try {
@@ -274,6 +307,10 @@ export function HistoryDrawer({
                   // Local const: narrows `project` to Project for the JSX
                   // closures below (a property access wouldn't survive them).
                   const project = group.project;
+                  const publishState =
+                    project === null ? undefined : publishStates[project.id];
+                  const isLive =
+                    publishState?.status === PROJECT_PUBLISH_STATUS.published;
                   return (
                     <section
                       key={project?.id ?? "legacy"}
@@ -329,6 +366,34 @@ export function HistoryDrawer({
                         <span className="text-xs text-muted-foreground tabular-nums">
                           {group.entries.length}
                         </span>
+                        {isLive && (
+                          <Button
+                            asChild
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1"
+                          >
+                            <a
+                              href={`/${locale}/${publishState?.handle ?? project?.slug ?? ""}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={t("publish.openSite", {
+                                name: project?.name ?? "",
+                              })}
+                            >
+                              <Badge
+                                variant="outline"
+                                className="gap-1 border-emerald-500/50 px-1.5 text-emerald-600 dark:text-emerald-400"
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="size-1.5 rounded-full bg-emerald-500"
+                                />
+                                {t("publish.liveBadge")}
+                              </Badge>
+                            </a>
+                          </Button>
+                        )}
                         {project !== null && renamingId !== project.id && (
                           <Button
                             type="button"
@@ -362,6 +427,17 @@ export function HistoryDrawer({
                         )}
                         {project !== null && renamingId !== project.id && (
                           <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t("publish.publishSite")}
+                              title={t("publish.publishSite")}
+                              className="h-6 px-1.5 text-muted-foreground"
+                              onClick={() => setPublishTarget(project)}
+                            >
+                              <Globe aria-hidden="true" className="size-3.5" />
+                            </Button>
                             <Button
                               type="button"
                               variant="ghost"
@@ -504,6 +580,26 @@ export function HistoryDrawer({
               return next;
             });
           }}
+        />
+      )}
+
+      {publishTarget && (
+        <PublishSiteDialog
+          project={publishTarget}
+          entries={entries}
+          memberships={memberships}
+          open
+          onOpenChange={(next) => {
+            if (!next) setPublishTarget(null);
+          }}
+          // The dialog reports what it wrote, so the badge flips without a
+          // second round trip (and without trusting a local model of status).
+          onStateChanged={(state) =>
+            setPublishStates((current) => ({
+              ...current,
+              [publishTarget.id]: state,
+            }))
+          }
         />
       )}
     </>

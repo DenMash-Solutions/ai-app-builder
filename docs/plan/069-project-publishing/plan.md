@@ -149,20 +149,35 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
       (all 8 claimant subsets × live/preview + a tie per app segment;
       mutation-checked: flipping the order or dropping the reserved rung
       each fail the matrix)
-- [ ] Claim paths (screen publish, project publish, rename) consult the
+- [x] Claim paths (screen publish, project publish, rename) consult the
       registry, not each their own query — **screen publish + rename done**
       (`isReservedRoute` + the `route_available` probe, decision 11); the
-      project-publish handle path lands with task 3's flow
+      project-publish handle path landed with task 3's flow
+      (`isReservedRoute` + `route_available(handle, handle)` in
+      `components/publish/publish-site-dialog.tsx`)
 
 ### 3. Claim, change, redirect
 
-- [ ] Project publish: handle claim (atomic, lowercase, reserved-checked),
+- [x] Project publish: handle claim (atomic, lowercase, reserved-checked),
       snapshot of every entry point + home screen, `projects.status =
-      'published'` (decision 6)
-- [ ] Handle change: claim new → rewrite entry points → old value becomes a
-      redirect row; an active redirect blocks a foreign claim (decision 4)
-- [ ] Unpublish: one transaction-ish sequence that clears entry points and
+      'published'` (decision 6) — `publishProject` in
+      `lib/publish/project-publish.ts` (entry points upserted → stale
+      routes deleted → one `UPDATE projects` that claims the handle and
+      flips status, decision 15); snapshot precedence in
+      `buildProjectEntryPoints` (slug rung → configured pattern → `''`
+      home; the `id` rung is preview-only and never published)
+- [x] Handle change: claim new → rewrite entry points → old value becomes a
+      redirect row; an active redirect blocks a foreign claim (decision 4) —
+      claim + redirect ride the same `UPDATE projects` via the
+      `claim_project_handle` trigger (task 1); **no entry-point rewrite is
+      needed**: route values are handle-relative, so the snapshot from the
+      publish that precedes the change already serves under the new handle.
+      Covered by a `handleTaken` mapping in `publishProject` + unit tests
+- [x] Unpublish: one transaction-ish sequence that clears entry points and
       redirects for the project and flips `status`, so no route half-serves
+      — `unpublishProject` deletes entry points → deletes `route_redirects`
+      (owner DELETE policy added at decision 16) → flips `status`, and
+      keeps the handle claim (decision 14)
 
 ### 4. Live project runtime
 
@@ -250,6 +265,44 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
     "available" and the publish dies at the trigger), which is the
     "each their own query" the plan's task 2 rejects. Requires the 069
     migration to be applied to the live project first.
+12. **The publish affordance lives on the project group header in the
+    history drawer** (Q3a, 2026-11-04) — beside the existing rename/delete
+    buttons (`components/history-drawer.tsx`), with a Live badge when
+    published. Rejected: the workspace panel header, because it is only
+    visible when the panel is expanded, and "both surfaces", because it
+    doubles the i18n and e2e surface for no new capability.
+13. **`status` / `handle` are read on demand from the DB, never modelled
+    locally** (Q3b, 2026-11-04). A small explicit-column reader
+    (`getProjectPublishState`) answers when the drawer/dialog needs it.
+    Rejected: adding the fields to `Project` + the sync spec — `status` is
+    deliberately a server-side fact (`lib/history/sync.ts` drops it on push
+    and `projectToRow` refuses to stamp it), and a client-writable status
+    would let a device flip its own project live without the claim path.
+14. **Unpublish keeps the handle claim reserved for its owner** (Q3c,
+    2026-11-04). Entry points and redirect rows are cleared and `status`
+    flips to `draft`, but the `route_claims` row stays: the owner's URL
+    cannot be squatted while they are offline, and republish reuses it.
+    Rejected: releasing the claim, because another account (or a screen
+    slug) could permanently take a URL that used to be this project's.
+15. **No new RPC — the client sequence is ordered fail-closed** (2026-11-04).
+    Because `published_entry_points` SELECT is gated by
+    `project_is_published(project_id)`, publishing writes the entry points
+    *before* the status flip and unpublishing deletes them *before* it —
+    a failure midway leaves the site dark, never half-serving. The claim
+    itself cannot half-land: `claim_project_handle` runs inside the same
+    `UPDATE projects` statement. Rejected: a `publish_project()` RPC, for
+    an atomicity the ordering already provides (KISS), at the cost of a
+    function + grants + audit rows + a live migration.
+16. **`route_redirects` gets an owner DELETE policy**
+    (`route_redirects_delete_own`, 2026-11-04). Task 3's unpublish clears
+    the project's redirect rows, but the table shipped (task 1) with RLS on
+    and SELECT only — the DELETE would have matched 0 rows and unpublish
+    would silently leave redirects serving. Owner-scoped
+    (`owner_id = auth.uid()`), matching the `published_entry_points` write
+    pattern. Rejected: a definer function or doing nothing, because the
+    rows are the owner's claim artefacts and the same owner DELETE shape
+    already exists elsewhere. Counts move: `db/README.md` 38 → 39 policies
+    (live 42 → 43), 069's policy count 5 → 6.
 
 ## Status log
 
@@ -261,3 +314,4 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 | 2026-11-04 | Task 1 implemented (schema, RLS, grants, README/audit inventory, projection allowlist); Task 2 registry + precedence matrix green (10 tests, mutation-checked). Decisions 10–11 added: same-owner different-kind claim collision REFUSED (redirect reclaim only) and `route_available(value, kind)` replaces the `published_pages` takenness probe |
 | 2026-11-04 | Task 2 done: registry wired into every claim path that exists today (go-live dialog, rename popover, `uniqueSlug`/`projectNameError`), `isSlugAvailable` switched to the `route_available` RPC with a `PublishClient.rpc` seam; live DB verified by a 17-assertion DO block (A1–A9 claims/refusals/redirects, B1–B8 probe matrix, fixture cleanup) — also caught and fixed the BEFORE-trigger FK bug (`projects_claim_handle` → AFTER). Gate: lint 0, tsc clean, 998 unit pass / 0 fail. The project-publish handle path stays open until task 3 |
 | 2026-11-04 | Task 2 **verified**: targeted e2e green (`live-pages › reserved slugs`, `authed › publishes an entry and serves its live URL` — the latter proves the live `route_available` RPC because the probe fails closed), then **full e2e 144 passed / 0 failed** on a fresh server. The run surfaced a pre-existing 068 race (`ClaimForm` painted claim-mode before the profile load settled → a returning user's own handle read "taken"); fixed app-side by gating the dialog on `loading` — **outside 069 scope, committed separately as `fix(auth)`**. Also observed one known parallel-load flake in `catalog.spec.ts` (20 s `waitForRemoteProject` gate; green in isolation and in the next full run) — not raised, not a 069 regression |
+| 2026-11-04 | Task 3 implemented: `lib/publish/project-publish.ts` (explicit-column state reader, `buildProjectEntryPoints`, fail-closed `publishProject`/`unpublishProject`), `components/publish/publish-site-dialog.tsx` (load-phase gated, lowercase + `isReservedRoute` + `route_available(handle, handle)`, `handleTaken`), `components/publish/slug-status.ts` shared with the go-live dialog, history-drawer Globe button + Live badge, 10 en/es keys. Decisions 12–15 (affordance, on-demand reads, unpublish keeps the claim, no-RPC ordering) and **decision 16** (`route_redirects_delete_own` — the table was SELECT-only, so unpublish's clear would have hit 0 rows) added; live migration applied (14 tables / **43** policies / 13 functions) and `db/README.md` + `rls-audit.md` counts bumped. **23 new unit tests** (`project-publish.test.ts`: op-order, version bump, stale-route scope, handleTaken, no-`handle` unpublish payload, explicit columns) → gate 1021 pass / 0 fail, **full e2e 144 passed / 0 failed** |

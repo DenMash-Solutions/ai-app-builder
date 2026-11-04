@@ -51,11 +51,11 @@ contents in order.
 ## Verify after running
 
 ```sql
--- db/ files alone: 13 tables, 38 policies; + genui_records (separate
--- migration) → live project totals: 14 tables, 42 policies.
+-- db/ files alone: 13 tables, 39 policies; + genui_records (separate
+-- migration) → live project totals: 14 tables, 43 policies.
 select count(*) from pg_class
  where relnamespace = 'public'::regnamespace and relkind = 'r';        -- 14
-select count(*) from pg_policies where schemaname = 'public';           -- 42
+select count(*) from pg_policies where schemaname = 'public';           -- 43
 select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public';                                            -- 13
 -- (12 from db/02 — including the 066 fork RPC, the 068 username RPCs and

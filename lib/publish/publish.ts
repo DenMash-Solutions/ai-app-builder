@@ -1,6 +1,7 @@
 import type { HistoryEntry } from "@/lib/history";
 import { revalidateProjection } from "@/lib/publish/revalidate";
 import { ROUTE_CLAIM_KINDS } from "@/lib/routes/registry";
+import type { RouteClaimKind } from "@/lib/routes/registry";
 
 /**
  * Publish flow (plan Q5): publishing snapshots the currently selected
@@ -36,21 +37,29 @@ interface SelectBuilder<T = Row> extends PromiseLike<QueryResult<T>> {
   maybeSingle(): PromiseLike<QueryResult<T>>;
 }
 
+/**
+ * A filtered write (`update`/`delete`): PostgREST builders chain further
+ * equality filters before resolving, so both are chainable and thenable.
+ * The project-publish sequences need `.delete().eq(...).in(...)` to remove
+ * exactly the stale routes of one project, never a route another project
+ * happens to share.
+ */
+interface WriteBuilder extends PromiseLike<{ error: QueryError | null }> {
+  eq(column: string, value: string | number | boolean): WriteBuilder;
+  in(column: string, values: string[]): WriteBuilder;
+}
+
 /** The slice of the Supabase client the publish flow uses (mockable in tests). */
 export interface PublishClient {
   from(table: string): {
     select(columns: string): SelectBuilder;
     insert(values: Record<string, unknown>): SelectBuilder;
     upsert(
-      values: Record<string, unknown>,
+      values: Record<string, unknown> | Record<string, unknown>[],
       options?: { onConflict?: string },
     ): SelectBuilder;
-    delete(): {
-      eq(
-        column: string,
-        value: string,
-      ): PromiseLike<{ error: QueryError | null }>;
-    };
+    update(values: Record<string, unknown>): WriteBuilder;
+    delete(): { eq(column: string, value: string): WriteBuilder };
   };
   /** RPC seam — the namespace arbiter (`route_available`) is a function. */
   rpc(
@@ -82,13 +91,19 @@ export interface PublishResult {
   error?: string;
 }
 
-function isSlugTakenError(message: string): boolean {
+/**
+ * Every way the namespace arbiter (or the backstop unique indexes behind it)
+ * refuses a claim: the definer trigger raises before the row constraint ever
+ * fires (decision 10 — the value is held by someone's claim: a foreign one,
+ * or this owner's project handle / published screen of the other kind).
+ * Shared by the screen publish and the project handle publish so both map
+ * the same failure to the same "taken" verdict.
+ */
+export function isClaimConflictError(message: string): boolean {
   return (
     (message.includes("duplicate key") &&
-      message.includes("published_pages")) ||
-    // The namespace arbiter refuses before the row constraint ever fires
-    // (decision 10): the value is held by someone's claim — a foreign one, or
-    // this owner's project handle / published screen of the other kind.
+      (message.includes("published_pages") ||
+        message.includes("projects_handle_key"))) ||
     message.includes("is already claimed") ||
     message.includes("is held by a project handle") ||
     message.includes("is held by a published screen")
@@ -101,8 +116,12 @@ function isSlugTakenError(message: string): boolean {
  * a value held by a project handle is exactly as taken for a screen slug,
  * and two sources of takenness would disagree. The definer RPC counts the
  * caller's own claim of the SAME kind as available, so republishing one's
- * own slug is never a false "taken"; a foreign claim or one's other kind
- * reads taken, which is what the trigger then enforces.
+ * own slug (or handle) is never a false "taken"; a foreign claim or one's
+ * other kind reads taken, which is what the trigger then enforces.
+ *
+ * `kind` is the claim the caller is about to make — screens pass
+ * `ROUTE_CLAIM_KINDS.screen`, the project-publish dialog passes
+ * `ROUTE_CLAIM_KINDS.handle`; one probe, two callers (decision 11).
  *
  * Fail-closed on error (same contract as before): an unreachable arbiter
  * shows "taken" instead of letting a doomed publish through.
@@ -110,10 +129,11 @@ function isSlugTakenError(message: string): boolean {
 export async function isSlugAvailable(
   client: PublishClient,
   slug: string,
+  kind: RouteClaimKind = ROUTE_CLAIM_KINDS.screen,
 ): Promise<boolean> {
   const { data, error } = await client.rpc("route_available", {
     p_value: slug,
-    p_kind: ROUTE_CLAIM_KINDS.screen,
+    p_kind: kind,
   });
   if (error) return false;
   return data === true;
@@ -189,7 +209,7 @@ export async function publishEntry(
     )
     .maybeSingle();
   if (publicError) {
-    if (isSlugTakenError(publicError.message)) {
+    if (isClaimConflictError(publicError.message)) {
       return { ok: false, slugTaken: true, error: publicError.message };
     }
     return { ok: false, error: publicError.message };

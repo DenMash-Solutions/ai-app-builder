@@ -27,6 +27,12 @@ import {
 import { bakeAndPersistArtifacts } from "@/lib/publish/bake-client";
 import type { PublishedPage } from "@/lib/publish/publish";
 import {
+  SLUG_STATUS_CLASS,
+  SLUG_STATUS_TEXT,
+  slugStatus,
+} from "@/components/publish/slug-status";
+import type { SlugStatus } from "@/components/publish/slug-status";
+import {
   describeDataIssues,
   validateDataSources,
 } from "@/lib/data-sources/validate";
@@ -39,24 +45,6 @@ interface GoLiveDialogProps {
   /** Called with the new live state (null = taken offline). */
   onPublished: (published: PublishedPage | null) => void;
 }
-
-type SlugStatus = "invalid" | "reserved" | "checking" | "available" | "taken";
-
-const STATUS_TEXT: Record<SlugStatus, string> = {
-  invalid: "publish.invalid",
-  reserved: "publish.reserved",
-  checking: "publish.checking",
-  available: "publish.available",
-  taken: "publish.taken",
-};
-
-const STATUS_CLASS: Record<SlugStatus, string> = {
-  invalid: "text-destructive",
-  reserved: "text-destructive",
-  checking: "text-muted-foreground",
-  available: "text-emerald-600 dark:text-emerald-400",
-  taken: "text-destructive",
-};
 
 /**
  * Go-live dialog: slug prefilled from the draft, debounced global
@@ -87,7 +75,7 @@ function GoLiveContent({
   const supabase = useMemo(() => asPublishClient(createClient()), []);
   const [slug, setSlug] = useState(published?.slug ?? entry.slug);
   const [check, setCheck] = useState<{
-    slug: string;
+    value: string;
     available: boolean;
   } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,7 +92,7 @@ function GoLiveContent({
     let cancelled = false;
     const timer = setTimeout(() => {
       void isSlugAvailable(supabase, slug).then((available) => {
-        if (!cancelled) setCheck({ slug, available });
+        if (!cancelled) setCheck({ value: slug, available });
       });
     }, 400);
     return () => {
@@ -113,15 +101,12 @@ function GoLiveContent({
     };
   }, [slug, valid, reserved, supabase, entry.id]);
 
-  const status: SlugStatus = !valid
-    ? "invalid"
-    : reserved
-      ? "reserved"
-      : check?.slug !== slug
-        ? "checking"
-        : check.available
-          ? "available"
-          : "taken";
+  const status: SlugStatus = slugStatus({
+    value: slug,
+    valid,
+    reserved,
+    checked: check,
+  });
 
   const canPublish = status === "available" && !busy && user !== null;
 
@@ -147,7 +132,7 @@ function GoLiveContent({
     setBusy(false);
     if (!result.ok) {
       if (result.slugTaken) {
-        setCheck({ slug, available: false });
+        setCheck({ value: slug, available: false });
         toast.error(t("publish.takenToast"));
       } else {
         toast.error(t("publish.error"));
@@ -214,8 +199,11 @@ function GoLiveContent({
             spellCheck={false}
           />
         </div>
-        <p className={`text-xs ${STATUS_CLASS[status]}`} aria-live="polite">
-          {t(STATUS_TEXT[status])}
+        <p
+          className={`text-xs ${SLUG_STATUS_CLASS[status]}`}
+          aria-live="polite"
+        >
+          {t(SLUG_STATUS_TEXT[status])}
         </p>
       </div>
 

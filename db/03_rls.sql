@@ -367,13 +367,22 @@ comment on table public.route_claims is
 
 -- ── route_redirects (plan 069) ──────────────────────────────────────────────
 -- Public read: a renamed project must answer its old URL for anonymous
--- visitors. No write policies — rows are created by the handle trigger and
--- removed with their project (ON DELETE CASCADE).
+-- visitors. INSERT stays trigger-only — rows are minted by
+-- `claim_project_handle` alone, so a crafted REST call can never create a
+-- redirect. DELETE is the owner's (task 3): unpublish clears the project's
+-- redirects BEFORE the status flip, and cascade-on-delete only ever covered
+-- deleting the project itself.
 drop policy if exists route_redirects_select_everyone on public.route_redirects;
 create policy route_redirects_select_everyone
   on public.route_redirects for select
   to public
   using (true);
+
+drop policy if exists route_redirects_delete_own on public.route_redirects;
+create policy route_redirects_delete_own
+  on public.route_redirects for delete
+  to authenticated
+  using (owner_id = auth.uid());
 
 -- ── published_entry_points (plan 069) ───────────────────────────────────────
 -- Public read only while the owning project is published. `project_is_published`
