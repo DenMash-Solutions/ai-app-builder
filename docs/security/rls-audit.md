@@ -86,6 +86,7 @@ All tables have RLS enabled; no views exist in `public`; no `public.*` table is 
 | `claim_project_handle()` | trigger function on `projects` (069 — claims the handle, turns the old value into a redirect) | `postgres`, `service_role` — revoked from `PUBLIC`, `anon`, `authenticated` |
 | `route_available(text)` | SECURITY DEFINER availability probe (069 — the publish dialog's pre-write check) | `anon`, `authenticated`, `service_role` — reads `route_claims` only, returns a boolean (no owner id leaves the function) |
 | `project_is_published(uuid)` | SECURITY DEFINER helper used by the `published_entry_points` SELECT policy (069) — reads `projects.status` where the projects policy is owner-only | `anon`, `authenticated`, `service_role` (required by policy evaluation, same reasoning as `is_admin()`); revoked from `PUBLIC` |
+| `live_project(text)` | SECURITY DEFINER live handle lookup (069 task 4) — a published project's `(project_id, handle)` for the current handle or a `route_redirects` predecessor; drafts answer NULL | `anon`, `authenticated`, `service_role` — revoked from `PUBLIC`; returns only `project_id` + `handle` of a **published** project (no owner, state or name) |
 
 ### Grants (post-fix)
 
@@ -204,8 +205,9 @@ Test fixtures (2 users, 2 uis, versions, published row) were removed afterwards;
 - **Addendum 2026-11-02 (plan 066):** security advisors now show 4 WARN classes, no ERRORs and no missing-RLS findings — (1) F5 `is_admin()` accepted above; (2) F6 leaked-password, manual; (3) `function_search_path_mutable` on `genui_records_touch_updated_at` (the separate genui migration, outside the `db/` set); (4) `auth_allow_anonymous_sign_ins` fires on **every** table with a `to authenticated` USING policy (all 11 tables) because anonymous sign-ins are enabled project-wide — anonymous users share the `authenticated` role by design (the app signs in anonymously), so this is a project-wide posture, not a policy regression: the catalog policies are the same shape as the pre-existing ones. Lint reference: [0012](https://supabase.com/docs/guides/database/database-advisors?queryGroups=lint&lint=0012_auth_allow_anonymous_sign_ins).
 - **Addendum 2026-11-04 (plan 069):** three tables added (`route_claims`,
   `route_redirects`, `published_entry_points`), 6 policies (5 at task 1 +
-  `route_redirects_delete_own` at task 3, see its inventory row), 4 functions
-  (2 definer triggers, 2 definer helpers). `route_claims` is the deliberately
+  `route_redirects_delete_own` at task 3, see its inventory row), 5 functions
+  (2 definer triggers, 3 definer helpers — `route_available`,
+  `project_is_published`, `live_project`). `route_claims` is the deliberately
   policy-less arbiter (see its inventory row): the only write paths are the
   two SECURITY DEFINER triggers, so no client role can insert a claim
   directly — which is what keeps a reserved/foreign value unclaimable.

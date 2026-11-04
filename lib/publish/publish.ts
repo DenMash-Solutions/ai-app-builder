@@ -61,11 +61,14 @@ export interface PublishClient {
     update(values: Record<string, unknown>): WriteBuilder;
     delete(): { eq(column: string, value: string): WriteBuilder };
   };
-  /** RPC seam — the namespace arbiter (`route_available`) is a function. */
-  rpc(
-    fn: string,
-    params: Record<string, unknown>,
-  ): PromiseLike<QueryResult<boolean>>;
+  /**
+   * RPC seam — the namespace arbiter (`route_available`) and the live
+   * handle lookup (`live_project`, 069 task 4) are functions. The result
+   * row shape differs per function, so it resolves to the loose `Row`
+   * default; every call site narrows it at runtime (`=== true`, the
+   * `project_id`/`handle` string check).
+   */
+  rpc(fn: string, params: Record<string, unknown>): PromiseLike<QueryResult>;
 }
 
 export interface PublishedPage {

@@ -6,6 +6,8 @@ import { revalidateProjection } from "@/lib/publish/revalidate";
 import type { ProjectMembership } from "@/lib/projects/memberships";
 import type { Project } from "@/lib/projects/projects";
 import { projectHomeScreenId } from "@/lib/projects/screen-routes";
+import { validateProjectPublish } from "@/lib/publish/validate-project";
+import type { ProjectPublishIssue } from "@/lib/publish/validate-project";
 
 /**
  * Project publish flow (plan 069, task 3): the GLOBAL handle claim, the
@@ -60,6 +62,8 @@ export interface ProjectPublishResult {
   ok: boolean;
   /** True when the handle is held by another claim (23505). */
   handleTaken?: boolean;
+  /** Set when validation refused the publish before any write (decision 20). */
+  issue?: ProjectPublishIssue;
   error?: string;
   /** ISO timestamp stamped by a successful publish. */
   publishedAt?: string;
@@ -211,6 +215,23 @@ export async function publishProject(
   handle: string,
 ): Promise<ProjectPublishResult> {
   const rows = buildProjectEntryPoints(project, entries, memberships);
+
+  // Decision 20: validate FIRST — a refused publish writes nothing at all
+  // (fail-closed, same contract as decision 15's ordering).
+  const validation = validateProjectPublish(
+    project,
+    entries,
+    memberships,
+    rows,
+  );
+  if (!validation.ok) {
+    return {
+      ok: false,
+      issue: validation.issue,
+      error: validation.detail ?? validation.issue,
+    };
+  }
+
   const publishedAt = new Date().toISOString();
 
   const { data: existing, error: readError } = await client
@@ -272,6 +293,38 @@ export async function publishProject(
 
   revalidateProjection(["published_entry_points"]);
   return { ok: true, publishedAt };
+}
+
+/**
+ * The published snapshot of one project, for the LIVE surface (task 4,
+ * decision 18). Explicit columns, never `SELECT *`. Fail-closed: an error
+ * answers `null` (the caller 404s rather than serving half a site), and a
+ * malformed row is dropped rather than rendered. `.order("route")` pins a
+ * deterministic row order for `resolveLiveRoute`'s within-class ties — the
+ * snapshot carries no position column.
+ */
+export async function getPublishedEntryPointsFrom(
+  client: PublishClient,
+  projectId: string,
+): Promise<ProjectEntryPoint[] | null> {
+  const { data, error } = await client
+    .from("published_entry_points")
+    .select("route, screen_id, spec")
+    .eq("project_id", projectId)
+    .order("route", { ascending: true });
+  if (error || !Array.isArray(data)) return null;
+  const rows: ProjectEntryPoint[] = [];
+  for (const row of data) {
+    const route = row.route;
+    const screenId = row.screen_id;
+    const spec = row.spec;
+    if (typeof route !== "string" || typeof screenId !== "string") continue;
+    if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
+      continue;
+    }
+    rows.push({ route, screenId, spec: spec as Spec });
+  }
+  return rows;
 }
 
 /**

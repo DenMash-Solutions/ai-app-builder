@@ -399,6 +399,41 @@ as $$
     );
 $$;
 
+-- Live lookup for the public handle surface (plan 069 task 4). ONE value
+-- answers three questions: a published project currently holding it
+-- (`handle = value` → serve that project), a published project that USED to
+-- hold it (`route_redirects.from_value = value` → the caller redirects,
+-- because `handle <> value`), or nothing at all (unknown value — or the
+-- holder is a draft: the site is dark, so a redirect would only trade one
+-- 404 for another). The two branches can never both fire for one value:
+-- decision 4 keeps a redirected value reserved for its owner, so a live
+-- handle and a redirect row never share a value.
+--
+-- SECURITY DEFINER for the same reason route_available() is: `projects` is
+-- owner-only and `route_claims` has no policies, so an invoker read would
+-- answer NULL for every visitor. Only `project_id` + `handle` of a PUBLISHED
+-- project leave here — no owner, no state, no name.
+create or replace function public.live_project(p_value text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  with v as (select lower(btrim(coalesce(p_value, ''))) as value)
+  select coalesce(
+    (select jsonb_build_object('project_id', p.id, 'handle', p.handle)
+       from public.projects p
+      where p.handle = v.value and p.status = 'published'),
+    (select jsonb_build_object('project_id', p.id, 'handle', p.handle)
+       from public.route_redirects r
+       join public.projects p on p.id = r.project_id
+      where r.from_value = v.value
+        and p.status = 'published'
+        and p.handle <> v.value)
+  ) from v;
+$$;
+
 -- Publishing a screen claims its slug in the shared namespace (F2). Runs as
 -- the definer so the writer needs no grant on route_claims; any failure here
 -- aborts the publish itself, which is the point — a published slug that is

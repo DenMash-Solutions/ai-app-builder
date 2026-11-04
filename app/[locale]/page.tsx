@@ -9,7 +9,10 @@ import {
   getPublishedPageBySlug,
 } from "@/lib/publish/featured";
 import { servingArtifact } from "@/lib/publish/artifacts";
+import { liveProjectExistsFrom } from "@/lib/publish/live-project";
+import { asPublishClient } from "@/lib/publish/publish";
 import { resolveRootServing } from "@/lib/publish/root-serving";
+import { createPublicReadClient } from "@/lib/supabase/server";
 import { availableLanguages } from "@/lib/i18n/spec-languages";
 import { routing } from "@/lib/i18n/routing";
 
@@ -59,10 +62,16 @@ export default async function Home({
 }) {
   const { locale } = await params;
   const featured = await getFeaturedPage();
+  // Defense in depth for the bare-segment decision (069 F6): a bare value
+  // redirects when it is a published slug OR a live project handle — the
+  // same combined check `proxy.ts` runs upstream.
+  const readClient = asPublishClient(createPublicReadClient());
   const serving = await resolveRootServing(
     locale,
     featured ? availableLanguages(featured.spec) : [],
-    (slug) => getPublishedPageBySlug(slug).then(Boolean),
+    async (segment) =>
+      (await getPublishedPageBySlug(segment)) !== null ||
+      (await liveProjectExistsFrom(readClient, segment)),
   );
   if (serving === "redirect") redirect(`/${routing.defaultLocale}/${locale}`);
   if (serving === "not-found") notFound();

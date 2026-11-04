@@ -81,3 +81,12 @@ grant  execute on function public.route_available(text, text)
 revoke execute on function public.project_is_published(uuid) from public, anon;
 grant  execute on function public.project_is_published(uuid)
   to anon, authenticated, service_role;
+
+-- Plan 069 task 4: the live handle lookup the [slug] page, the proxy's
+-- bare-segment decision and the redirect hop all call. PUBLIC is revoked
+-- first (new functions default to PUBLIC EXECUTE, which the security
+-- advisor flags on a SECURITY DEFINER), then the three API roles get it —
+-- the same shape as the availability probe above.
+revoke execute on function public.live_project(text) from public;
+grant  execute on function public.live_project(text)
+  to anon, authenticated, service_role;

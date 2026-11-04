@@ -7,6 +7,8 @@ import {
   getFeaturedLanguagesFrom,
   publishedSlugExistsFrom,
 } from "@/lib/publish/featured";
+import { liveProjectExistsFrom } from "@/lib/publish/live-project";
+import { asPublishClient } from "@/lib/publish/publish";
 import { resolveRootServing } from "@/lib/publish/root-serving";
 import { createProxyReadClient, updateSession } from "@/lib/supabase/proxy";
 
@@ -33,9 +35,17 @@ async function bareSegmentResponse(
   const supabase = createProxyReadClient(request);
   // Both lookups start together (the proxy bypasses the RSC data cache, so
   // roundtrips dominate); the decision ORDER stays resolveRootServing's.
+  // Plan 069 (F6): a bare segment serves when it is a published slug OR a
+  // live project HANDLE — the slug read runs first and short-circuits, so
+  // the `live_project` RPC only fires for values the slug table misses.
   const slugExists = publishedSlugExistsFrom(supabase, first);
+  const liveExists = liveProjectExistsFrom(asPublishClient(supabase), first);
   const carried = await getFeaturedLanguagesFrom(supabase);
-  const serving = await resolveRootServing(first, carried, () => slugExists);
+  const serving = await resolveRootServing(
+    first,
+    carried,
+    async () => (await slugExists) || (await liveExists),
+  );
   if (serving === "redirect") {
     return NextResponse.redirect(
       new URL(`/${routing.defaultLocale}/${first}`, request.url),

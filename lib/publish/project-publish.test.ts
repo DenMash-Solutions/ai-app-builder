@@ -9,10 +9,12 @@ import {
   buildProjectEntryPoints,
   getProjectPublishState,
   getProjectPublishStates,
+  getPublishedEntryPointsFrom,
   PROJECT_PUBLISH_STATUS,
   publishProject,
   unpublishProject,
 } from "./project-publish";
+import { PROJECT_PUBLISH_ISSUES } from "./validate-project";
 
 function makeSpec(heading: string): Spec {
   return {
@@ -677,5 +679,156 @@ describe("unpublishProject (decision 14: the handle claim stays)", () => {
     expect(JSON.parse(fetched[0].body)).toEqual({
       tags: ["published_entry_points"],
     });
+  });
+});
+
+describe("getPublishedEntryPointsFrom (live reader, decision 18)", () => {
+  test("reads explicit columns — never SELECT *", async () => {
+    state.entryRows = [
+      { route: "beta", screen_id: "s-b", spec: makeSpec("beta") },
+      { route: "", screen_id: "s-home", spec: makeSpec("home") },
+    ];
+
+    const rows = await getPublishedEntryPointsFrom(makeClient(state), "proj-1");
+
+    expect(state.ops).toHaveLength(1);
+    expect(state.ops[0].columns).toBe("route, screen_id, spec");
+    expect(opFilters(state.ops[0], "project_id")).toBe("proj-1");
+    expect(rows).toEqual([
+      { route: "beta", screenId: "s-b", spec: makeSpec("beta") },
+      { route: "", screenId: "s-home", spec: makeSpec("home") },
+    ]);
+  });
+
+  test("malformed rows are dropped, never rendered", async () => {
+    state.entryRows = [
+      { route: "ok", screen_id: "s-1", spec: makeSpec("ok") },
+      { route: 42, screen_id: "s-2", spec: makeSpec("x") },
+      { route: "bad", screen_id: "s-3", spec: "not-an-object" },
+      { route: "ghost", screen_id: null, spec: makeSpec("g") },
+    ];
+
+    const rows = await getPublishedEntryPointsFrom(makeClient(state), "proj-1");
+
+    expect(rows?.map((row) => row.route)).toEqual(["ok"]);
+  });
+
+  test("a failed read answers null — the caller 404s (fail-closed)", async () => {
+    state.fail = {
+      table: "published_entry_points",
+      op: "select",
+      message: "permission denied",
+    };
+
+    expect(
+      await getPublishedEntryPointsFrom(makeClient(state), "proj-1"),
+    ).toBeNull();
+  });
+});
+
+describe("publishProject validation (decision 20: no write on an issue)", () => {
+  const entries = [entry("s-home", "home"), entry("s-a", "alpha")];
+  const memberships = [
+    member("m-home", "s-home", null, 0),
+    member("m-a", "s-a", null, 1),
+  ];
+  const project = makeProject({ homeScreenId: "s-home" });
+
+  test("no home screen refuses with noHome and writes nothing", async () => {
+    const result = await publishProject(
+      makeClient(state),
+      "owner-1",
+      makeProject({ homeScreenId: null }),
+      entries,
+      memberships,
+      "dex",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.issue).toBe(PROJECT_PUBLISH_ISSUES.noHome);
+    expect(result.error).toBe(PROJECT_PUBLISH_ISSUES.noHome);
+    expect(state.ops).toHaveLength(0);
+    expect(fetched).toHaveLength(0);
+  });
+
+  test("a dangling membership refuses with missingScreen", async () => {
+    const result = await publishProject(
+      makeClient(state),
+      "owner-1",
+      project,
+      entries,
+      [...memberships, member("m-ghost", "s-deleted", null, 2)],
+      "dex",
+    );
+
+    expect(result.issue).toBe(PROJECT_PUBLISH_ISSUES.missingScreen);
+    expect(result.error).toBe("s-deleted");
+    expect(state.ops).toHaveLength(0);
+  });
+
+  test("a malformed route refuses with invalidRoute", async () => {
+    const result = await publishProject(
+      makeClient(state),
+      "owner-1",
+      project,
+      entries,
+      [...memberships, member("m-bad", "s-a", "items/{id", 2)],
+      "dex",
+    );
+
+    expect(result.issue).toBe(PROJECT_PUBLISH_ISSUES.invalidRoute);
+    expect(result.error).toBe("items/{id");
+    expect(state.ops).toHaveLength(0);
+  });
+
+  test("a keyless api source refuses with dataConfig (067 gate)", async () => {
+    const badSpec = {
+      ...makeSpec("bad"),
+      dataSources: {
+        remote: {
+          provider: "api",
+          config: { baseUrl: "https://api.example.com", itemsPath: "/items" },
+        },
+      },
+      resources: { items: { dataSource: "remote" } },
+    } as unknown as Spec;
+    const badHome: HistoryEntry = {
+      ...entries[0],
+      spec: badSpec,
+      revisions: [{ spec: badSpec, label: "r0", createdAt: 1 }],
+      head: 0,
+    };
+
+    const result = await publishProject(
+      makeClient(state),
+      "owner-1",
+      project,
+      [badHome, entries[1]],
+      memberships,
+      "dex",
+    );
+
+    expect(result.issue).toBe(PROJECT_PUBLISH_ISSUES.dataConfig);
+    expect(result.error).toContain("auth.ref");
+    expect(state.ops).toHaveLength(0);
+    expect(fetched).toHaveLength(0);
+  });
+
+  test("a valid project still publishes (validation passes through)", async () => {
+    const result = await publishProject(
+      makeClient(state),
+      "owner-1",
+      project,
+      entries,
+      memberships,
+      "dex",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(opNames()).toEqual([
+      "published_entry_points:select",
+      "published_entry_points:upsert",
+      "projects:update",
+    ]);
   });
 });

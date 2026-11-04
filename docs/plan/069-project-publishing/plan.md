@@ -181,14 +181,30 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 
 ### 4. Live project runtime
 
-- [ ] Server resolution in `app/[locale]/[slug]/[[...route]]/page.tsx`:
-      handle → entry point → screen spec, reading `projects`/`project_screens`
-      from the DB (F3), reusing `resolveProjectRoute` / `matchRoutePattern`
-- [ ] Dynamic params seed state through `overlayPathState` exactly as preview
-- [ ] Redirect resolution for a changed handle (permanent, one hop)
-- [ ] Bare `/{handle}` rule in `proxy.ts` / `resolveRootServing` (F6)
-- [ ] Publish validation: home set, every membership route resolves, data
-      configs valid via the existing checkers (F9)
+- [x] Server resolution in `app/[locale]/[slug]/[[...route]]/page.tsx`:
+      handle → entry point → screen spec — `live_project` RPC (decision 17,
+      replaces the F3 `projects`/`project_screens` read; amended by
+      decisions 17/18) → `getPublishedEntryPointsFrom` explicit-column
+      snapshot read → `resolveLiveRoute` in `lib/publish/live-routes.ts`
+      (mirrors `resolveProjectRoute` precedence: home rung, exact, dynamic;
+      reuses `matchRoutePattern`)
+- [x] Dynamic params seed state through `overlayPathState` exactly as
+      preview — the server's match params ride the `liveProject` prop and
+      initialise `pathParams` before SSR; local resolution overwrites them
+      with its own captures when the device holds the project
+- [x] Redirect resolution for a changed handle (permanent, one hop) —
+      `permanentRedirect(/{locale}/{handle}{suffix})` when
+      `live.handle !== slug`; `live_project` only answers published
+      projects, so a dark site never receives a redirect hop
+- [x] Bare `/{handle}` rule in `proxy.ts` / `resolveRootServing` (F6) — the
+      injected callback is now "published slug OR live handle exists"
+      (`publishedSlugExistsFrom` short-circuits before the `live_project`
+      RPC), in `proxy.ts` and as defence-in-depth in `app/[locale]/page.tsx`
+- [x] Publish validation: home set, every membership route resolves, data
+      configs valid via the existing checkers (F9) —
+      `lib/publish/validate-project.ts` (`validateProjectPublish`, decision
+      20) runs first inside `publishProject` (zero writes on an issue),
+      dialog toasts the issue code (4 new en/es keys)
 
 ### 5. Bake and cache
 
@@ -303,6 +319,41 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
     rows are the owner's claim artefacts and the same owner DELETE shape
     already exists elsewhere. Counts move: `db/README.md` 38 → 39 policies
     (live 42 → 43), 069's policy count 5 → 6.
+17. **Handle → project is a SECURITY DEFINER RPC `live_project(p_value)`**
+    (Q4a, 2026-11-04). One function answers serve-or-redirect: the published
+    project whose `handle = p_value`, else the published project behind a
+    `route_redirects.from_value = p_value` row; `handle <> p_value` is how
+    the caller detects the redirect. Rejected: a public SELECT policy on
+    `projects` (`status = 'published'`), because it would newly expose every
+    published project's full row — including `state` (the author's shared
+    session, which SSR deliberately never seeds for visitors) and
+    `owner_id` — to anonymous REST; and a `published_projects` projection
+    table, because it duplicates a value the arbiter already owns for a
+    cache we do not need at this traffic shape. `projects` stays owner-only
+    and `route_claims` stays policy-less (reads keep going through a definer
+    function, like `route_available`).
+18. **The live surface serves the `published_entry_points` snapshot**
+    (Q4b, 2026-11-04) — amends decision 7's row source. `project_screens` /
+    `projects` stay the *publish-time* source (`buildProjectEntryPoints`);
+    the live spec comes from the snapshot, so an edit never goes live before
+    the next publish (decision 5) and no new read policy on `project_screens`
+    is needed. Rejected: reading the synced rows live, because it contradicts
+    decision 5 and widens RLS for no capability gain.
+19. **An unmatched path under a published handle is a real 404**
+    (Q4c, 2026-11-04): the server calls `notFound()` when the handle exists
+    but no entry point matches. Rejected: the 200 + client not-found panel
+    the slug path uses, because a live site's unknown URLs should carry a
+    real status for crawlers and for task 6's "404 routes resolve live"
+    check; the slug path keeps its existing behavior (unchanged).
+20. **Publish validation hard-blocks all three checks before any write**
+    (Q4d, 2026-11-04): home set (`projectHomeScreenId`), every membership's
+    screen present + its configured route pattern well-formed, and
+    `validateDataSources(spec, { inProject: true })` per entry point (F9 —
+    the existing checkers, no second validator). Any issue answers
+    `{ ok: false }` with an issue code and the dialog toasts it; zero rows
+    are written (fail-closed, same as decision 15). Rejected: warn-only,
+    because a missing home 404s the bare namespace the moment the site goes
+    live.
 
 ## Status log
 
@@ -315,3 +366,4 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 | 2026-11-04 | Task 2 done: registry wired into every claim path that exists today (go-live dialog, rename popover, `uniqueSlug`/`projectNameError`), `isSlugAvailable` switched to the `route_available` RPC with a `PublishClient.rpc` seam; live DB verified by a 17-assertion DO block (A1–A9 claims/refusals/redirects, B1–B8 probe matrix, fixture cleanup) — also caught and fixed the BEFORE-trigger FK bug (`projects_claim_handle` → AFTER). Gate: lint 0, tsc clean, 998 unit pass / 0 fail. The project-publish handle path stays open until task 3 |
 | 2026-11-04 | Task 2 **verified**: targeted e2e green (`live-pages › reserved slugs`, `authed › publishes an entry and serves its live URL` — the latter proves the live `route_available` RPC because the probe fails closed), then **full e2e 144 passed / 0 failed** on a fresh server. The run surfaced a pre-existing 068 race (`ClaimForm` painted claim-mode before the profile load settled → a returning user's own handle read "taken"); fixed app-side by gating the dialog on `loading` — **outside 069 scope, committed separately as `fix(auth)`**. Also observed one known parallel-load flake in `catalog.spec.ts` (20 s `waitForRemoteProject` gate; green in isolation and in the next full run) — not raised, not a 069 regression |
 | 2026-11-04 | Task 3 implemented: `lib/publish/project-publish.ts` (explicit-column state reader, `buildProjectEntryPoints`, fail-closed `publishProject`/`unpublishProject`), `components/publish/publish-site-dialog.tsx` (load-phase gated, lowercase + `isReservedRoute` + `route_available(handle, handle)`, `handleTaken`), `components/publish/slug-status.ts` shared with the go-live dialog, history-drawer Globe button + Live badge, 10 en/es keys. Decisions 12–15 (affordance, on-demand reads, unpublish keeps the claim, no-RPC ordering) and **decision 16** (`route_redirects_delete_own` — the table was SELECT-only, so unpublish's clear would have hit 0 rows) added; live migration applied (14 tables / **43** policies / 13 functions) and `db/README.md` + `rls-audit.md` counts bumped. **23 new unit tests** (`project-publish.test.ts`: op-order, version bump, stale-route scope, handleTaken, no-`handle` unpublish payload, explicit columns) → gate 1021 pass / 0 fail, **full e2e 144 passed / 0 failed** |
+| 2026-11-04 | Task 4 implemented: `live_project` SECURITY DEFINER RPC (decisions 17, applied to live DB — 14 functions, ACL anon/authenticated/service_role, 5-assertion DO probe green with cleanup), `lib/publish/live-project.ts` + `live-routes.ts` + `validate-project.ts`, slug-first page/metadata read (share-cached slug short-circuits the RPC), `permanentRedirect` hop, `resolveRootServing` "slug OR handle" in proxy + root page, validation-first `publishProject` with 4 dialog issue toasts (en/es), `liveProject` prop through `preview-client.tsx` (live visitors namespace by **project id** — the supabase adapter partitions on `app_id`). Decisions 17–20 added. **34 new unit tests** → gate 1055 pass / 0 fail; full e2e after wiping stale `.next`: **144 passed / 0 failed** (runs 1/5 green; runs 2–4 were known parallel-load/cold-cache flakes, each green in isolation — timeouts NOT raised per mistake #32) |

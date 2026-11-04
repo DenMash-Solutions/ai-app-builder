@@ -33,6 +33,16 @@ import {
   unpublishProject,
 } from "@/lib/publish/project-publish";
 import type { ProjectPublishState } from "@/lib/publish/project-publish";
+import { PROJECT_PUBLISH_ISSUES } from "@/lib/publish/validate-project";
+import type { ProjectPublishIssue } from "@/lib/publish/validate-project";
+
+/** Validation refusal → its copy (decision 20), object-constant keys. */
+const ISSUE_MESSAGE_KEY: Record<ProjectPublishIssue, string> = {
+  [PROJECT_PUBLISH_ISSUES.noHome]: "publish.siteIssueNoHome",
+  [PROJECT_PUBLISH_ISSUES.missingScreen]: "publish.siteIssueMissingScreen",
+  [PROJECT_PUBLISH_ISSUES.invalidRoute]: "publish.siteIssueInvalidRoute",
+  [PROJECT_PUBLISH_ISSUES.dataConfig]: "publish.siteIssueDataConfig",
+};
 
 interface PublishSiteDialogProps {
   project: Project;
@@ -156,6 +166,9 @@ function PublishSiteContent({
       if (result.handleTaken) {
         setCheck({ value: handle, available: false });
         toast.error(t("publish.takenToast"));
+      } else if (result.issue !== undefined) {
+        // Decision 20: the publish was refused BEFORE any write — say why.
+        toast.error(t(ISSUE_MESSAGE_KEY[result.issue]));
       } else {
         toast.error(t("publish.error"));
       }

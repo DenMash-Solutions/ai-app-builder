@@ -42,6 +42,7 @@ import {
   specRoutePattern,
 } from "@/lib/projects/screen-routes";
 import type { LivePageData } from "@/lib/publish/featured";
+import type { LiveProjectPage } from "@/lib/publish/live-project";
 import { localizeSpec } from "@/lib/specs/localize";
 import {
   SWITCH_THEME_ACTION,
@@ -88,6 +89,7 @@ export default function PreviewPage({
   published,
   bakedCss,
   routePath,
+  liveProject,
 }: {
   published: LivePageData | null;
   /** Publish-baked stylesheet for the published spec — kills the FOUC. */
@@ -98,6 +100,13 @@ export default function PreviewPage({
    * device-local, so the server can only hand the segments over (061-3 §A).
    */
   routePath?: string | null;
+  /**
+   * Server-resolved project HANDLE route (plan 069 task 4, decision 17/18):
+   * the server already matched the path against the published snapshot and
+   * 404d the misses, so this prop arrives only when the path serves. Local
+   * resolution still wins below — the author's device holds the project.
+   */
+  liveProject?: LiveProjectPage | null;
 }) {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
@@ -119,17 +128,33 @@ export default function PreviewPage({
   //  2. else the project namespace — bare serves the EXPLICIT home screen
   //     (`project.homeScreenId`, 065 decision 5), a path resolves
   //     in-project (membership routes: exact slug, static, dynamic, pos),
-  //  3. else the published projection, BARE ONLY: projects are device-local
-  //     and publishing a namespace is follow-up F18, so a path under an
-  //     unknown namespace is a 404, not a fallback.
+  //  3. else the server-resolved live HANDLE route (069, decision 17/18):
+  //     the snapshot row the page matched — local wins when the device
+  //     holds the project, looked up by slug OR by id (the handle may
+  //     differ from the slug after a handle change),
+  //  4. else the published projection, BARE ONLY: a path under an unknown
+  //     namespace is a 404, not a fallback.
   // A path nothing claims (or a project with no members) gates as not-found —
   // never a wrong screen, which would seed the wrong state.
   let entry: HistoryEntry | null | undefined = undefined; // undefined = pending
-  let pathParams: Record<string, string> | null = null;
+  // The server already captured the live route's params — the seed applies
+  // during SSR and survives until local resolution (if any) replaces it.
+  let pathParams: Record<string, string> | null = liveProject?.params ?? null;
   let unmatched = false;
   if (history !== undefined) {
     entry = localEntry;
-    const project = localEntry ? null : projectBySlug(slug);
+    // A local project claims the handle namespace by slug — or by id when
+    // the handle no longer equals the slug (handle change, decision 4).
+    const project =
+      localEntry !== null
+        ? null
+        : (projectBySlug(slug) ??
+          (liveProject
+            ? (getProjects().find(
+                (candidate) => candidate.id === liveProject.projectId,
+              ) ?? null)
+            : null));
+    const localClaimant = localEntry !== null || project !== null;
     if (routePath) {
       const pattern = localEntry ? specRoutePattern(localEntry.spec) : null;
       const flat =
@@ -145,6 +170,13 @@ export default function PreviewPage({
       if (match && match.screen) {
         entry = match.screen;
         pathParams = match.params;
+      } else if (localClaimant) {
+        unmatched = true;
+        entry = null;
+      } else if (liveProject) {
+        // Server-resolved and nothing local competes — serve the snapshot.
+        entry = null;
+        pathParams = liveProject.params;
       } else {
         unmatched = true;
         entry = null;
@@ -161,7 +193,7 @@ export default function PreviewPage({
     }
   }
 
-  const spec = entry?.spec ?? published?.spec ?? null;
+  const spec = entry?.spec ?? published?.spec ?? liveProject?.spec ?? null;
 
   // Runtime classes: spec classNames exist only at runtime — compile any not
   // yet covered via /api/tailwind (same no-op-on-failure behavior as the
@@ -213,17 +245,20 @@ export default function PreviewPage({
   const themeRef = useRef<(params: Record<string, unknown>) => void>(() => {});
   useEffect(() => {
     themeRef.current = (params) => {
-      if (entry !== null || !published) return;
+      // A live HANDLE page is public serving too — persist the visitor's
+      // decision site-wide (same rule as the published projection).
+      if (entry !== null || (!published && !liveProject)) return;
       if (!isTheme(params.theme)) return;
       persistThemeDecision(params.theme);
     };
   });
 
-  // Pending gate: the server knows no history. A bare published slug can
-  // render straight away (unchanged); a PATH waits — only the client can
-  // tell whether a local entry or project claims it, and a premature 404
+  // Pending gate: the server knows no history. A bare published slug (or a
+  // server-resolved live handle, which already matched its path) can render
+  // straight away; a PATH under an unknown namespace waits — only the client
+  // can tell whether a local entry or project claims it, and a premature 404
   // here would set a real status the client can't undo.
-  if (entry === undefined && (routePath || !published)) {
+  if (entry === undefined && !liveProject && (routePath || !published)) {
     return (
       <main className="dot-grid flex h-[100dvh] w-full items-center justify-center">
         <p className="text-sm text-muted-foreground">{t("uiRoute.loading")}</p>
@@ -231,7 +266,7 @@ export default function PreviewPage({
     );
   }
 
-  if (unmatched || (entry === null && !published)) {
+  if (unmatched || (entry === null && !published && !liveProject)) {
     return (
       <main className="dot-grid flex h-[100dvh] w-full items-center justify-center px-6">
         <div className="w-full max-w-md space-y-4 text-center">
@@ -347,7 +382,7 @@ export default function PreviewPage({
   // imperative `document.title` + head MutationObserver did (that observer
   // watched <head> subtree and wrote back into it, wedging the main thread
   // in a synchronous loop on some entries).
-  const entryName = entry?.name ?? published?.name;
+  const entryName = entry?.name ?? published?.name ?? liveProject?.handle;
 
   return (
     <JSONUIProvider
@@ -366,8 +401,15 @@ export default function PreviewPage({
                   project id for project screens (061-4 — owner preview then
                   shares the project's records with the editor) and the slug
                   otherwise, which keeps D6's per-design isolation: owner
-                  preview and published visitors share one per-browser store. */}
-      <QueryLoader spec={spec} namespace={dataNamespaceFor(entry, slug)} />
+                  preview and published visitors share one per-browser store.
+                  069: a live HANDLE page is a project screen with no local
+                  entry — `entry ?? liveProject` keeps its namespace the
+                  PROJECT id, which is the `app_id` partition the supabase
+                  adapter filters on (a handle namespace would read empty). */}
+      <QueryLoader
+        spec={spec}
+        namespace={dataNamespaceFor(entry ?? liveProject, slug)}
+      />
       {/* Shared /session write-through (061-4): mirrors state.session into
           the project store, debounced and flushed on unmount. No project →
           no-op, so screen-local state never leaks across screens. */}
@@ -394,7 +436,9 @@ export default function PreviewPage({
                 carries no stored decision (ThemeInit in the layout applies
                 one) — rendered whenever a published page is being served, so
                 it lands in the server HTML. */}
-        {published ? <SpecThemeInit specDefault={specDefault} /> : null}
+        {published || liveProject ? (
+          <SpecThemeInit specDefault={specDefault} />
+        ) : null}
         {entryName ? <title>{entryName}</title> : null}
         {bakedCss ? <style>{bakedCss}</style> : null}
         <Renderer spec={fixupScrollLayout(localized)} registry={registry} />

@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import PreviewPage from "../preview-client";
 import { getPublishedPageBySlug } from "@/lib/publish/featured";
 import { servingArtifact } from "@/lib/publish/artifacts";
 import { canonicalizeTag } from "@/lib/i18n/spec-languages";
+import { getLiveProjectFrom } from "@/lib/publish/live-project";
+import type { LiveProjectPage } from "@/lib/publish/live-project";
+import { resolveLiveRoute } from "@/lib/publish/live-routes";
+import { getPublishedEntryPointsFrom } from "@/lib/publish/project-publish";
+import { asPublishClient } from "@/lib/publish/publish";
+import { createPublicReadClient } from "@/lib/supabase/server";
 
 /**
  * Blocking by decision (plan 056 F2): the baked `content` artifact must
@@ -27,6 +33,15 @@ export const instant = false;
  * slug keeps the playground affordances, so this route always client-renders;
  * the publish-baked CSS is injected server-side to kill the FOUC.
  *
+ * Plan 069 task 4 — the value may also be a project HANDLE (decision 17):
+ * the `live_project` RPC answers when the slug table misses (the arbiter
+ * keeps the two mutually exclusive, decisions 2/10), and a redirect
+ * predecessor hops permanently to the current handle with the sub-path
+ * preserved (one hop — decision 4's row can only point at one successor).
+ * The handle's route resolves against the `published_entry_points`
+ * snapshot (decision 18); a path nothing matches is a real 404
+ * (decision 19).
+ *
  * Content routes serve canonical tags only (decision 11): the layout lets
  * any segment through so the root can resolve bare slugs, and this page
  * re-establishes the guard the layout used to carry. `proxy.ts` already
@@ -41,8 +56,16 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  // The share-cached slug read first: the arbiter makes a published slug
+  // and a project handle mutually exclusive (decisions 2/10), so a hit can
+  // never be a handle — the `live_project` RPC only fires on a slug miss.
   const published = await getPublishedPageBySlug(slug);
-  return published ? { title: published.name } : {};
+  if (published) return { title: published.name };
+  const live = await getLiveProjectFrom(
+    asPublishClient(createPublicReadClient()),
+    slug,
+  );
+  return live ? { title: live.handle } : {};
 }
 
 export default async function SlugPage({
@@ -52,14 +75,59 @@ export default async function SlugPage({
 }) {
   const { locale, slug, route } = await params;
   if (canonicalizeTag(locale) === null) notFound();
-  const published = await getPublishedPageBySlug(slug);
-  const artifact = published ? servingArtifact(published, locale) : null;
   // 061-3 (§A): the catch-all carries the post-slug path — the flat screen
   // route's own `route` pattern (`/en/{slug}/{id}`) or a project namespace
-  // (`/en/{project-slug}/…`). `null` = bare slug (today's shape). Resolution
-  // is client-side: local entries and projects are device-local, so the
-  // server can't decide a path — it only hands the segments over.
+  // (`/en/{project-slug}/…`). `null` = bare slug (today's shape). Local
+  // entries and projects are device-local, so a path the server does NOT
+  // serve stays client-resolved; a handle's path is server-resolved from
+  // the snapshot below.
   const routePath = route && route.length > 0 ? route.join("/") : null;
+
+  const client = asPublishClient(createPublicReadClient());
+  // Share-cached slug read first (a published slug and a handle are
+  // mutually exclusive in the arbiter, decisions 2/10) — the uncached
+  // `live_project` RPC only fires when the slug table misses.
+  const published = await getPublishedPageBySlug(slug);
+  const live =
+    published === null ? await getLiveProjectFrom(client, slug) : null;
+
+  // Redirect hop for a changed handle (one permanent hop, sub-path kept).
+  // `live_project` only ever answers PUBLISHED projects, so this can never
+  // redirect into a dark site — a draft's old value 404s instead.
+  if (live !== null && live.handle !== slug) {
+    const suffix = routePath === null ? "" : `/${routePath}`;
+    permanentRedirect(`/${locale}/${live.handle}${suffix}`);
+  }
+
+  if (live !== null) {
+    const entryPoints = await getPublishedEntryPointsFrom(
+      client,
+      live.projectId,
+    );
+    const match =
+      entryPoints === null
+        ? null
+        : resolveLiveRoute(entryPoints, routePath ?? "");
+    // Decision 19: the handle exists but nothing serves this path — a real
+    // 404, not the slug path's client-side panel.
+    if (match === null) notFound();
+    const liveProject: LiveProjectPage = {
+      projectId: live.projectId,
+      handle: live.handle,
+      spec: match.entry.spec,
+      params: match.params,
+    };
+    return (
+      <PreviewPage
+        published={published}
+        bakedCss={null}
+        routePath={routePath}
+        liveProject={liveProject}
+      />
+    );
+  }
+
+  const artifact = published ? servingArtifact(published, locale) : null;
   return (
     <PreviewPage
       published={published}
