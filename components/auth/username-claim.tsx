@@ -57,8 +57,15 @@ export function UsernameClaimDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  // `ClaimForm` picks claim-vs-change from the LOADED profile. Opening while
+  // that read is still in flight paints the claim form for an identity that
+  // already owns a handle — its own name then answers "taken" (the row
+  // exists) and any watcher latches onto the wrong branch. Hold the dialog
+  // until the mode is known; the shell banner gates on `loading` the same
+  // way (below).
+  const { loading } = useAuth();
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && !loading} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <ClaimForm onDone={() => onOpenChange(false)} />
       </DialogContent>
