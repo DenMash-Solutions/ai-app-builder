@@ -141,8 +141,7 @@ async function remoteSurface(): Promise<{
 }
 
 async function remoteTableName(): Promise<string> {
-  const { GENUI_RECORDS_TABLE } = await import(
-    "@/lib/data-sources/supabase-adapter"
-  );
+  const { GENUI_RECORDS_TABLE } =
+    await import("@/lib/data-sources/supabase-adapter");
   return GENUI_RECORDS_TABLE;
 }

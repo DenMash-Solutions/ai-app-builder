@@ -27,7 +27,9 @@ function makeStorage(initial: Record<string, string> = {}): PurgeStorage & {
 /** Records the delete scope it was asked for. */
 function makePurgeClient(
   error: { message: string } | null = null,
-): ProjectDataPurgeClient & { deleted: { table: string; column: string; value: string }[] } {
+): ProjectDataPurgeClient & {
+  deleted: { table: string; column: string; value: string }[];
+} {
   const deleted: { table: string; column: string; value: string }[] = [];
   return {
     deleted,
@@ -79,7 +81,10 @@ describe("project data purge (067 decisions 2-4)", () => {
 
   test("a refused or throwing remote purge resolves false, never throws", async () => {
     expect(
-      await purgeRemoteProjectData(projectId, makePurgeClient({ message: "rls" })),
+      await purgeRemoteProjectData(
+        projectId,
+        makePurgeClient({ message: "rls" }),
+      ),
     ).toBe(false);
 
     const throwing: ProjectDataPurgeClient = {

@@ -190,7 +190,9 @@ describe("project store", () => {
     // This test needs an ENUMERABLE storage (length + key): other suites may
     // have installed a partial window fake earlier in the same process, and
     // a shared one would make the purge's prefix scan see nothing.
-    const scope = globalThis as unknown as { window?: { localStorage?: Storage } };
+    const scope = globalThis as unknown as {
+      window?: { localStorage?: Storage };
+    };
     const complete = new Map<string, string>();
     const previous = scope.window?.localStorage;
     const storageFake = {

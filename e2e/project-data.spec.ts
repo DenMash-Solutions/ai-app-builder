@@ -195,7 +195,8 @@ const storedDataKeys = (
   projectId: string,
 ): Promise<string[]> =>
   page.evaluate(
-    (prefix) => Object.keys(localStorage).filter((key) => key.startsWith(prefix)),
+    (prefix) =>
+      Object.keys(localStorage).filter((key) => key.startsWith(prefix)),
     dataPrefix(projectId),
   );
 
@@ -328,7 +329,9 @@ test.describe("project data lifecycle (067)", () => {
       .click();
 
     // Local rows: the project's whole namespace is gone, A's survives.
-    await expect.poll(async () => storedDataKeys(page, projectB?.id ?? "")).toEqual([]);
+    await expect
+      .poll(async () => storedDataKeys(page, projectB?.id ?? ""))
+      .toEqual([]);
     expect(await storedDataKeys(page, projectA?.id ?? "")).not.toHaveLength(0);
     // Remote rows: the purge fires scoped to this project's app_id (best
     // effort by design — the local purge above never waits on it).
@@ -342,7 +345,9 @@ test.describe("project data lifecycle (067)", () => {
     // now ungrouped, and A's project keeps working.
     await expect(drawer).toBeVisible();
     await expect(
-      drawer.getByRole(ROLE.button, { name: entryRowName(JSON_IO.importedEntry) }),
+      drawer.getByRole(ROLE.button, {
+        name: entryRowName(JSON_IO.importedEntry),
+      }),
     ).toBeVisible();
     await expect(drawer.getByLabel(PROJECT_B, { exact: true })).toHaveCount(0);
 

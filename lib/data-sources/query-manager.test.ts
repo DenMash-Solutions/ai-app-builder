@@ -662,7 +662,10 @@ describe("branch mirrors across a screen switch (067 Task 4b)", () => {
         initialize: async () => {},
         list: async () => {
           if (context.namespace === "proj-a") {
-            throw new DataError(DATA_ERROR_CODES.unavailable, "screen A offline");
+            throw new DataError(
+              DATA_ERROR_CODES.unavailable,
+              "screen A offline",
+            );
           }
           return [];
         },
@@ -675,7 +678,10 @@ describe("branch mirrors across a screen switch (067 Task 4b)", () => {
     });
     const manager = new QueryManager(registry);
 
-    const detachA = manager.attach({ ...todoConfig(writes), namespace: "proj-a" });
+    const detachA = manager.attach({
+      ...todoConfig(writes),
+      namespace: "proj-a",
+    });
     await tick();
     expect(writes.at(-1)?.value.status).toBe(QUERY_STATUSES.error);
     // A write in flight on screen A marks its queries pending.

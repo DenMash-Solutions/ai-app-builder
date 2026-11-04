@@ -1641,7 +1641,9 @@ describe("push retry policy", () => {
     // the healthy rows instead of stranding them behind the refused one.
     expect(state.upserts.some((rows) => rows.length === 2)).toBe(true);
     expect(
-      state.upserts.some((rows) => rows.length === 1 && rows[0].id === first.id),
+      state.upserts.some(
+        (rows) => rows.length === 1 && rows[0].id === first.id,
+      ),
     ).toBe(true);
     expect(getSyncStatus()).toBe("saved");
     stop();
