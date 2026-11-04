@@ -183,6 +183,7 @@ Before writing ANY code, follow this exact sequence:
 - A URL/image prop renders with a gap (`…/…png`) → JS inside `$template`; only `${/paths}` interpolate → **[template-derived-strings.md](../lessons/template-derived-strings.md)**
 - e2e failures began right after a build/restart → stale `.next` cache replay; verify disk bytes + wipe cache → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)**
 - `42501`/stuck status dot while probes show healthy tokens → sync race; gate on the DB, not UI status text → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)**
+- Row "missing after Ns" only under parallel workers, retries never help → one refused row aborts the whole multi-row upsert; capture the request BODY → **[dev-server-e2e-triage.md](../lessons/dev-server-e2e-triage.md)** section 9
 - FPS/resize degrades only with DevTools open → CSS rule count first (`@layer utilities`), control arm first → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**
 - `evaluate_script` timeout / rule "missing" from stylesheet scan / `setTimeout` ReferenceError in execute → stepwise calls, recurse `@layer`, page-context timers → **[mcp-verification.md](../lessons/mcp-verification.md)**
 - Check reports 0 attempts / 0 elements / "nothing happened" → probe may not have exercised the path; invalid run, not a pass → **[css-safelist-performance.md](../lessons/css-safelist-performance.md)**

@@ -166,6 +166,41 @@ orphans simply don't exist.
 - Triage order: `querySelector` count 0 = orphaned/unrendered (spec/root
   problem) vs count > 0 + 0×0 = visibility/timing problem (sections 6 and 7).
 
+## 9. A multi-row push is ONE statement: one refused row strands the whole batch (plan 066)
+
+Symptom: a data-heavy suite green serially, **3/10 failing in parallel**; the
+expected row never reached the DB, and the sync engine's retries (5 tries,
+~31s backoff) never helped. The row was being pushed, not skipped.
+
+Capture `request().postData()` on every 4xx — that is what identified it:
+
+```
+403 catalog_installs   rows=6  ids=c9e83b95,c6ebec44,41d26db2,...
+403 project_screens    rows=12 ids=c1d3c32d,917e43d7,35314bc7,...
+```
+
+- A multi-row `upsert` is **one SQL statement**. With a shared account, each
+  context's local store accumulates rows written by every concurrent test, so
+  a push carries other sessions' rows too.
+- One row whose parent is not remote yet is refused — `42501` from a
+  `WITH CHECK` that requires the parent to exist (`exists (select 1 from uis
+  ...)`), or `23503` on the FK — and the refusal aborts the **entire**
+  statement. Every healthy row in that batch is stranded, including the row
+  the test is waiting for.
+- Retrying is useless: the retry re-sends the same poisoned batch. Per-test
+  fixes (longer waits, serial workers) only hide it.
+
+Fix shape (`lib/history/sync.ts`): on a refused batch, retry **row by row** so
+a doomed row can only strand itself, keep the "still refused" answer so the
+offline/retry state survives, and never let a rejected task poison the task
+chain (`chain.then(task).catch(...)` — an unhandled rejection silently skips
+every later push while the UI still looks alive). Postgres gives no indication
+*which* row failed, so the row-by-row probe is what localizes it.
+
+Related triggers: rows "missing after Ns" in one suite only under parallel
+workers; a batch payload carrying ids from several tests; `42501`/`23503`
+that survive every retry.
+
 ## Memory triggers
 
 - e2e failures started right after a build/restart → suspect `.next` cache
@@ -188,5 +223,9 @@ orphans simply don't exist.
   `PLAYWRIGHT_TEST` (section 7)
 - Element absent (count 0) while siblings render → root pointer / helper
   side effect (section 8)
+- A row "missing after Ns" in ONE suite, green serially, failing with parallel
+  workers → the push batch is atomic and another row poisons it (section 9)
+- `42501`/`23503` on writes that survive EVERY retry → per-row retry localizes
+  the doomed row; do not just raise timeouts (section 9)
 - Changing `next.config.ts` but behavior unchanged → is the running server
   older than the config? (`reuseExistingServer` reuses stale servers)

@@ -188,6 +188,22 @@
 **Lesson Reference**: `.agents/lessons/dev-server-e2e-triage.md` sections 6-8
 **Prevention**: before writing any new probe → (1) is there an unapplied/unverified fix in the tree? activate it and re-run the REAL failing test first; (2) a fix that needs a config change needs the server restarted before "verifying"; (3) custom instrumentation earns its cost only AFTER the cheap runs (real test, fresh server, settle/wait experiments) are exhausted
 
+### 32. Raising Timeouts for a Batch That Could Never Succeed (NEW)
+
+**Problem**: plan 066's catalog e2e failed 3/10 under parallel workers. I
+raised the remote-install gate 20s → 45s and then added a longer retry budget
+in `lib/history/sync.ts` — both plausible, both wrong as the primary fix. The
+push WAS being attempted; a multi-row `upsert` is one SQL statement, so a
+single row from a concurrent session whose `uis` parent was not remote yet
+(`42501` WITH CHECK / `23503` FK) aborted the whole batch and stranded the
+test's healthy row with it. Capturing `request().postData()` on 4xx showed
+`rows=6` / `rows=12` batches and settled it in one run
+**Lesson Reference**: `.agents/lessons/dev-server-e2e-triage.md` section 9
+**Prevention**: when a write "never lands" and retries don't help → log the
+request BODY, not just the status. A batch that is refused for one row is
+refused forever; fix ordering/isolation (row-by-row fallback), not the clock.
+Longer timeouts only mask it and slow the suite
+
 ## Dashboard Internationalization Implementation (NEW LESSON)
 
 ### Architecture Pattern Used
@@ -336,6 +352,7 @@ When I see these → STOP and check lessons:
 - **NEW**: About to build another custom probe for an e2e failure → is there an unverified fix in the tree / is the running server older than the config? re-run the real failing test first (`dev-server-e2e-triage.md`, mistake #31)
 - **NEW**: Radix dialog/popover `open=true` but never in the DOM (or 0×0 mid-click) → pending Next navigation defers layout effects → `toHaveURL` before touching portals (`dev-server-e2e-triage.md` section 6)
 - **NEW**: Element count 0 while siblings render → root pointer re-pointed by a spread helper — walk from root, don't blame the renderer (`dev-server-e2e-triage.md` section 8)
+- **NEW**: A write never lands and retries don't help → capture the request BODY: a multi-row upsert is atomic, one refused row strands the batch — fix isolation, not the timeout (`dev-server-e2e-triage.md` section 9, mistake #32)
 - **NEW**: `evaluate_script` returned `undefined` from a body that returns a string → `format:'script'` only parses a `() => …` (never calls it, zero side effects) — use `format:'function'` and assert the returned value (mistake #24)
 
 ## ⚡ Quick Recovery Commands
