@@ -44,8 +44,23 @@ Before finishing any change: `bun run lint && bunx tsc --noEmit && bun run test`
 - Commit messages end at their last line: **never add AI attribution** — no `Generated with` line, no `Co-Authored-By`, no co-author trailers
 - Commit bodies are always a bullet list (subject, blank line, `-` bullets)
 
+## Session memory (mandatory)
+
+`.agents/memory/active-work.md` is the cross-session, **gitignored** working
+state (never stage it). Update it **in the same turn**:
+
+- on **every status request** — refresh it first, then answer from it
+- after **every finding** (bug, gotcha, decision, migration applied)
+- after **every completion** (task, gate run, commit, plan status change)
+
+Full protocol: `.agents/rules/session-memory.md` (always-on via `instructions`
+in `opencode.json`). The plan file (`docs/plan/{NNN}-…/plan.md`) stays the
+long-form design source — the memory file points at it, it does not
+duplicate it.
+
 ## Rules and lessons
 
 - Always-on rules load from `.agents/rules/` (wired via `instructions` in `opencode.json`)
 - Lessons in `.agents/lessons/` are lazy — read the relevant one before implementing (start with `lessons/implementation-checklist.md` and `rules/my-mistakes.md`)
+- Session memory updates are enforced — see `rules/session-memory.md` (status / finding / completion → `.agents/memory/active-work.md` same turn)
 - Commands: `/learn`, `/review`, `/gen-commit`, `/devtools-error-scan` (in `.opencode/commands/`)
