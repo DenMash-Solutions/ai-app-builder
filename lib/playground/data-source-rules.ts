@@ -114,6 +114,14 @@ Rules — these are the runtime contract, not style:
   \`{ "type": "header", "header": "X-API-Key", "ref": "<ref>" }\` — SHAPE
   ONLY: the ref names a configured key, never a value; specs never carry
   credentials.
+- STATE SCOPES (plan 067): one project is one app, so place each value by
+  how far it must travel. \`/session\` is shared by EVERY screen of the
+  project and survives a screen change — use it for small ephemeral UI values
+  (selected tab, filter, chosen store, signed-in context). It is not a
+  database. Every other state path belongs to the screen that declares it.
+  Durable records (cart contents, orders, saved lists) belong in a RESOURCE:
+  every screen of the project that declares the same resource name reads the
+  same rows, because a project's screens share one data namespace.
 - PAGE STATE: seed \`"state": { "page": 0, "limit": 20 }\` — the spec's
   \`/page\` is 0-BASED. \`pageLabel\` and the browser URL (\`?page=\`) are
   1-based; \`urlSync\` converts between them (URL \`?page=2\` ↔ state \`1\`),

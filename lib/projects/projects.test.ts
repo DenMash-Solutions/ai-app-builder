@@ -29,6 +29,10 @@ function storage(): Storage {
     const map = new Map<string, string>();
     globalWindow.window = {
       localStorage: {
+        get length() {
+          return map.size;
+        },
+        key: (index: number) => [...map.keys()][index] ?? null,
         getItem: (key: string) => map.get(key) ?? null,
         setItem: (key: string, value: string) => {
           map.set(key, value);
@@ -180,6 +184,50 @@ describe("project store", () => {
     // Unknown id is a no-op.
     store.removeProject("nope");
     expect(store.getProjects()).toHaveLength(0);
+  });
+
+  test("removeProject purges its own resource rows and keeps another project's", () => {
+    // This test needs an ENUMERABLE storage (length + key): other suites may
+    // have installed a partial window fake earlier in the same process, and
+    // a shared one would make the purge's prefix scan see nothing.
+    const scope = globalThis as unknown as { window?: { localStorage?: Storage } };
+    const complete = new Map<string, string>();
+    const previous = scope.window?.localStorage;
+    const storageFake = {
+      get length() {
+        return complete.size;
+      },
+      key: (index: number) => [...complete.keys()][index] ?? null,
+      getItem: (key: string) => complete.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        complete.set(key, value);
+      },
+      removeItem: (key: string) => {
+        complete.delete(key);
+      },
+      clear: () => complete.clear(),
+    } as unknown as Storage;
+    scope.window = { ...(scope.window ?? {}), localStorage: storageFake };
+
+    const doomedProject = store.createProject("Purged");
+    const keptProject = store.createProject("Kept");
+    const doomed = doomedProject as NonNullable<typeof doomedProject>;
+    const kept = keptProject as NonNullable<typeof keptProject>;
+
+    storageFake.setItem(`genui-data:${doomed.id}:cart`, "[1]");
+    storageFake.setItem(`genui-data:${doomed.id}:orders`, "[]");
+    storageFake.setItem(`genui-data:${kept.id}:cart`, "[2]");
+
+    store.removeProject(doomed.id);
+
+    // 067 decision 4: deletion owns the data, scoped by the project namespace.
+    expect(storageFake.getItem(`genui-data:${doomed.id}:cart`)).toBeNull();
+    expect(storageFake.getItem(`genui-data:${doomed.id}:orders`)).toBeNull();
+    expect(storageFake.getItem(`genui-data:${kept.id}:cart`)).toBe("[2]");
+
+    store.removeProject(kept.id);
+    if (previous === undefined) delete scope.window?.localStorage;
+    else scope.window = { ...(scope.window ?? {}), localStorage: previous };
   });
 
   test("setActiveProjectId rejects unknown ids and accepts null", () => {

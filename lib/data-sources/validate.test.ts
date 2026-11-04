@@ -422,3 +422,54 @@ describe("validateDataSources paged queries (plan 052)", () => {
     ).toBe(true);
   });
 });
+
+describe("validateDataSources inProject (067 Task 4a)", () => {
+  const keylessApi: Partial<DataSourcesSpec> = {
+    dataSources: {
+      remote: {
+        provider: "api",
+        config: { baseUrl: "https://api.example.com", itemsPath: "/items" },
+      },
+    },
+    resources: { items: { dataSource: "remote" } },
+  };
+
+  const keyedApi: Partial<DataSourcesSpec> = {
+    dataSources: {
+      remote: {
+        provider: "api",
+        config: {
+          baseUrl: "https://api.example.com",
+          itemsPath: "/items",
+          auth: { type: "bearer", ref: "items_api" },
+        },
+      },
+    },
+    resources: { items: { dataSource: "remote" } },
+  };
+
+  test("a project screen refuses an api source with no server-keyed auth ref", () => {
+    const issues = validateDataSources(withBlocks(keylessApi), {
+      inProject: true,
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("resources.items.dataSource");
+    expect(issues[0].message).toContain("auth.ref");
+  });
+
+  test("the same spec is fine outside a project, and fine keyed inside one", () => {
+    // Authoring a project-less screen keeps the pre-067 behavior exactly.
+    expect(validateDataSources(withBlocks(keylessApi))).toEqual([]);
+    // The server-held key lane (050) makes the resource refreshable for
+    // visitors, so a keyed api source passes in a project.
+    expect(
+      validateDataSources(withBlocks(keyedApi), { inProject: true }),
+    ).toEqual([]);
+  });
+
+  test("providers scoped by the project namespace need no credentials", () => {
+    expect(
+      validateDataSources(withBlocks(goodBlocks), { inProject: true }),
+    ).toEqual([]);
+  });
+});

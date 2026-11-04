@@ -260,6 +260,21 @@
       "tipRepeat": "Repeats for every item of a state list"
     },
     "states": {
+      "scopes": {
+        "title": "Where state lives",
+        "session": {
+          "label": "Project session — shared",
+          "description": "Read and written by every screen in this project: small, ephemeral values such as the selected tab, filter or store. It is not a database — durable records (cart, order) belong in a resource."
+        },
+        "screen": {
+          "label": "This screen — local",
+          "description": "Belongs to this screen alone: navigation and UI flags the other screens of the project must not see."
+        },
+        "resource": {
+          "label": "Resource data — stored rows",
+          "description": "Rows from a data source (list, create, update, delete), shared by every screen of the project that queries the same resource."
+        }
+      },
       "visibility": "Visibility",
       "shownNow": "Shown now",
       "hiddenNow": "Hidden now",

@@ -578,7 +578,12 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     // — a spec with dangling references or credential-shaped config
     // never becomes an entry/revision. The friendly headline is the one
     // i18n pair; the issue list stays developer-facing English.
-    const dataIssues = validateDataSources(boundSpec);
+    // 067 Task 4a: a screen inside a project runs for visitors, so an api
+    // resource without a server-keyed auth ref is rejected here, not at
+    // runtime for them.
+    const dataIssues = validateDataSources(boundSpec, {
+      inProject: activeEntry?.projectId !== undefined,
+    });
     if (dataIssues.length > 0) {
       if (pendingLang) toast.dismiss(langToastId(pendingLang));
       if (op.kind === PENDING_OP_KINDS.generate) clear();

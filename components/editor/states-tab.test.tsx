@@ -220,3 +220,17 @@ describe("StatesTab condition form", () => {
     expect(html).toContain('value="/queries/pokedexList/status"');
   });
 });
+
+describe("state scopes help (067)", () => {
+  test("states the three scopes where an author picks a state path", () => {
+    const html = renderTab(loadingElement);
+    expect(html).toContain("data-state-scopes");
+    for (const id of ["session", "screen", "resource"]) {
+      expect(html).toContain(`data-state-scope="${id}"`);
+    }
+    // Shared session guidance names the boundary that matters: `/session` is
+    // for small ephemeral values, durable records go to a resource.
+    expect(html).toContain("Where state lives");
+    expect(html).toContain("durable records");
+  });
+});

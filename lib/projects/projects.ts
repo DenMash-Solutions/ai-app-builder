@@ -22,6 +22,7 @@ import {
   createEntry,
   type HistoryEntry,
 } from "@/lib/history";
+import { purgeProjectData } from "@/lib/projects/purge-data";
 import { isReservedSlug } from "@/lib/slug";
 import type { Spec } from "@json-render/core";
 
@@ -463,6 +464,9 @@ export function removeProject(id: string): void {
   persist();
   if (loadActive() === id) setActiveProjectId(null);
   clearProjectFromEntries(id);
+  // Plan 067 decision 4: deletion owns the project's data — local rows now,
+  // remote `genui_records` best-effort (never blocks or fails the delete).
+  void purgeProjectData(id);
 }
 
 /** Selects the project new screens are created into. Unknown ids are a no-op. */

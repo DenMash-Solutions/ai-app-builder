@@ -128,7 +128,11 @@ function GoLiveContent({
     // — the head revision's data blocks must resolve before a version
     // ships (same rule as generate/import).
     const headSpec = entry.revisions[entry.head]?.spec ?? entry.spec;
-    const dataIssues = validateDataSources(headSpec);
+    // 067 Task 4a: a project screen publishes for visitors, so the data blocks
+    // are validated against that context too.
+    const dataIssues = validateDataSources(headSpec, {
+      inProject: entry.projectId !== undefined,
+    });
     if (dataIssues.length > 0) {
       toast.error(t("playground.dataSourcesInvalid"), {
         description: describeDataIssues(dataIssues),

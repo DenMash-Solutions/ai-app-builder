@@ -260,6 +260,21 @@
       "tipRepeat": "Se repite por cada elemento de una lista de estado"
     },
     "states": {
+      "scopes": {
+        "title": "Donde vive el estado",
+        "session": {
+          "label": "Sesión del proyecto — compartido",
+          "description": "Lo leen y escriben todas las pantallas del proyecto: valores pequeños y efímeros como la pestaña, el filtro o la tienda seleccionada. No es una base de datos: los registros duraderos (carrito, pedido) van en un recurso."
+        },
+        "screen": {
+          "label": "Esta pantalla — local",
+          "description": "Pertenece solo a esta pantalla: navegación y banderas de interfaz que las dem\\u00e1s pantallas del proyecto no deben ver."
+        },
+        "resource": {
+          "label": "Datos del recurso — filas guardadas",
+          "description": "Filas de una fuente de datos (listar, crear, actualizar, borrar), compartidas por todas las pantallas del proyecto que consultan el mismo recurso."
+        }
+      },
       "visibility": "Visibilidad",
       "shownNow": "Visible ahora",
       "hiddenNow": "Oculto ahora",

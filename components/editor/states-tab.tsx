@@ -6,6 +6,7 @@ import type { UIElement, VisibilityCondition } from "@json-render/core";
 import { ChevronRight, Pencil, RotateCcw } from "lucide-react";
 import { useSyncExternalStore, useRef, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { PROJECT_STATE_SCOPE_LIST } from "@/lib/projects/state-scopes";
 import {
   Collapsible,
   CollapsibleContent,
@@ -435,6 +436,30 @@ export function StatesTab({
             )}
           </>
         )}
+      </section>
+
+      {/* Plan 067 decision 1/2: the States tab is the only place an author
+          picks a state path, so it is where the three scopes are stated. */}
+      <section className="flex flex-col gap-1.5" data-state-scopes>
+        <span className={SECTION_LABEL_CLASS}>
+          {t("editor.states.scopes.title")}
+        </span>
+        <ul className="flex flex-col gap-1.5">
+          {PROJECT_STATE_SCOPE_LIST.map((scope) => (
+            <li
+              key={scope.id}
+              data-state-scope={scope.id}
+              className="rounded border border-zinc-800 bg-zinc-900/60 px-2 py-1.5"
+            >
+              <span className="block text-[11px] font-medium text-zinc-300">
+                {t(scope.labelKey)}
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-zinc-500">
+                {t(scope.descriptionKey)}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );

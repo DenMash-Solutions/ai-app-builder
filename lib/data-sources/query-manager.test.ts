@@ -10,6 +10,7 @@ import {
 import {
   DATA_ERROR_CODES,
   DATA_SOURCE_PROVIDERS,
+  DataError,
   QUERY_STATUSES,
   dataStorageKey,
 } from "./types";
@@ -639,5 +640,63 @@ describe("QueryManager paged reads + data_read (plan 052)", () => {
     expect(isStateParam({ $state: "/p", extra: 1 })).toBe(false);
     expect(isStateParam("x")).toBe(false);
     expect(isStateParam(null)).toBe(false);
+  });
+});
+
+describe("branch mirrors across a screen switch (067 Task 4b)", () => {
+  test("error, empty and pending never leak from the previous screen", async () => {
+    const writes: Write[] = [];
+    const capabilities: AdapterCapabilities = {
+      list: true,
+      get: true,
+      create: true,
+      update: true,
+      delete: true,
+    };
+    // Screen A's reads fail, screen B's come back empty: the two non-success
+    // branches the plan names, on either side of a project-screen switch.
+    const registry = new AdapterRegistry({
+      [DATA_SOURCE_PROVIDERS.localStorage]: (_def, context) => ({
+        provider: DATA_SOURCE_PROVIDERS.localStorage,
+        capabilities,
+        initialize: async () => {},
+        list: async () => {
+          if (context.namespace === "proj-a") {
+            throw new DataError(DATA_ERROR_CODES.unavailable, "screen A offline");
+          }
+          return [];
+        },
+        get: async () => null,
+        create: async (_resource, input) => input,
+        update: async (_resource, _id, patch) => patch,
+        delete: async () => {},
+        dispose: async () => {},
+      }),
+    });
+    const manager = new QueryManager(registry);
+
+    const detachA = manager.attach({ ...todoConfig(writes), namespace: "proj-a" });
+    await tick();
+    expect(writes.at(-1)?.value.status).toBe(QUERY_STATUSES.error);
+    // A write in flight on screen A marks its queries pending.
+    manager.setPending("proj-a", "todos", true);
+    expect(writes.at(-1)?.value.pending).toBe(true);
+
+    detachA();
+    writes.length = 0;
+
+    manager.attach({ ...todoConfig(writes), namespace: "proj-b" });
+    await tick();
+
+    // The next screen starts from its own branch shapes: idle -> loading ->
+    // success(empty). Screen A's error and pending flag never appear.
+    expect(writes.map((w) => w.value.status)).toEqual([
+      QUERY_STATUSES.idle,
+      QUERY_STATUSES.loading,
+      QUERY_STATUSES.success,
+    ]);
+    const last = writes.at(-1) as Write;
+    expect(last.value.data).toEqual([]);
+    expect(last.value.pending).toBe(false);
   });
 });

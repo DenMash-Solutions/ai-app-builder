@@ -27,6 +27,13 @@ describe("DATA_SOURCE_RULES", () => {
     }
   });
 
+  test("teaches the three state scopes (067): shared session, screen-local, resource rows", () => {
+    expect(DATA_SOURCE_RULES).toContain("STATE SCOPES");
+    expect(DATA_SOURCE_RULES).toContain("`/session` is shared by EVERY screen");
+    expect(DATA_SOURCE_RULES).toContain("It is not a\n  database");
+    expect(DATA_SOURCE_RULES).toContain("Durable records");
+  });
+
   test("derives the zod descriptions (prompt and runtime cannot drift)", () => {
     for (const fragment of [
       'type": "bearer"', // provider/config auth teaching

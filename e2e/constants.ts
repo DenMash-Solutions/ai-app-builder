@@ -82,6 +82,7 @@ export const SWITCHER_LABELS = LOCALE_LABELS;
 export const PROJECTS = {
   switcher: en.projects.switch,
   create: en.projects.create,
+  delete: en.projects.delete,
   namePlaceholder: en.projects.createPlaceholder,
   expandWorkspace: en.projects.expandWorkspace,
   addScreen: en.projects.addScreen,

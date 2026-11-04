@@ -28,15 +28,55 @@ export interface DataSourceIssue {
   message: string;
 }
 
+/** Where the spec will run — plan 067 Task 4a. A project screen renders for
+ *  visitors who have none of the author's credentials, which changes what a
+ *  provider can do there. */
+export interface ValidateDataSourcesOptions {
+  inProject?: boolean;
+}
+
+/** `config.auth` — the server-keyed lane's ref (050). */
+const API_AUTH_CONFIG_KEY = "auth";
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Plan 067 Task 4a — the capability that actually differs by context: a
+ * project screen is shared with visitors, so an api-backed resource needs the
+ * server-held key lane (`config.auth.ref`, 050) to refresh there. Without a
+ * ref the resource reads only inside the author's own signed-in session, and
+ * the authoring gate should say so before the screen ships. Supabase and
+ * localStorage need no credentials — they are scoped by the project
+ * namespace instead.
+ */
+function projectProviderIssue(
+  dataSourceName: string,
+  dataSources: Record<string, unknown> | undefined,
+  resourcePath: string,
+): DataSourceIssue | null {
+  const parsed = dataSourceDefSchema.safeParse(dataSources?.[dataSourceName]);
+  // The dataSources pass already reported an unparseable definition.
+  if (!parsed.success) return null;
+  if (parsed.data.provider !== DATA_SOURCE_PROVIDERS.api) return null;
+  const config = parsed.data.config ?? {};
+  if (isPlainObject(config[API_AUTH_CONFIG_KEY])) return null;
+  return {
+    path: `${resourcePath}.dataSource`,
+    message:
+      'This "api" source declares no config.auth ref, so it can only read inside your own session — a project screen loads for visitors who have none of your credentials. Add an auth.ref backed by server-side keys (DATA_PROXY_<REF>_ORIGIN / DATA_PROXY_<REF>_KEY), or use the "supabase" provider for project data.',
+  };
+}
 
 /**
  * Validates the three top-level blocks of `spec`. Returns an empty array
  * when the spec declares no data blocks at all (the common case) or when
  * every block parses and all references resolve.
  */
-export function validateDataSources(spec: Spec): DataSourceIssue[] {
+export function validateDataSources(
+  spec: Spec,
+  options: ValidateDataSourcesOptions = {},
+): DataSourceIssue[] {
   const { dataSources, resources, queries } = withDataBlocks(spec);
   const issues: DataSourceIssue[] = [];
 
@@ -181,6 +221,14 @@ export function validateDataSources(spec: Spec): DataSourceIssue[] {
           continue;
         }
         resourceNames.add(name);
+        if (options.inProject === true) {
+          const providerIssue = projectProviderIssue(
+            parsed.data.dataSource,
+            dataSources,
+            path,
+          );
+          if (providerIssue !== null) issues.push(providerIssue);
+        }
         if (!dataSourceNames.has(parsed.data.dataSource)) {
           issues.push({
             path: `${path}.dataSource`,
