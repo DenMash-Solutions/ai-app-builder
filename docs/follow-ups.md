@@ -4,8 +4,10 @@
 > by a new plan. When a follow-up gets a plan, move it to the plan's `NNN` link below and
 > mark it ✅ claimed. Source plans are always `docs/plan/{NNN}-*/plan.md`.
 >
-> Last reviewed: 2026-11-04 (plan 069 approved for Slice A/B — F20 registered
-> from its Q2 answer; F17/F18 claimed, F15 closed / F19 registered 2026-10-30)
+> Last reviewed: 2026-11-05 (plan 069 implemented — F18 closed, F21
+> registered from task 6's full-suite finding); 2026-11-04: plan 069
+> approved for Slice A/B — F20 registered from its Q2 answer; F17/F18
+> claimed, F15 closed / F19 registered 2026-10-30)
 
 ## 🔴 Open — needs a plan
 
@@ -19,14 +21,14 @@
 | F4 | **Partial Prefetching adoption** (`partialPrefetching: true`) | 056, "its own follow-up after adoption completes" | Prerequisite (056) met; skill installed: `.agents/skills/next-partial-prefetching-adoption/` |
 | F5 | **Static-shell optimizer pass** (`next-cache-components-optimizer`) | 056, "pure optimization after adoption" | Prerequisite met; skill `next-cache-components-optimizer` available |
 | F6 | **`instant()` e2e regression tests** | 056, "decide at the check-in if wanted" | Open decision for the user |
-| F20 | **Feature a project at the root** — `site_settings.featured_ui_id` is screen-only, so a published project can serve only at `/{locale}/{handle}`. Needs a project slot on `site_settings`, a root-serving rule and the proxy bare-segment path | 069 Q2 answer 2026-11-04 (descoped to keep root semantics unchanged) | Deps: 069 Slice A live project routes |
+| F20 | **Feature a project at the root** — `site_settings.featured_ui_id` is screen-only, so a published project can serve only at `/{locale}/{handle}`. Needs a project slot on `site_settings`, a root-serving rule and the proxy bare-segment path | 069 Q2 answer 2026-11-04 (descoped to keep root semantics unchanged) | Deps: 069 Slice A live project routes (now implemented) |
+| F21 | **Username claim dialog paints claim-mode before the profile settles** — `username_available` does not exclude the caller, so an account that already has its handle reads "That username is taken" the instant the dialog opens ahead of the profile read (`claimIfNeeded` branches on the claim/change title, then fills its own handle into the blocked verdict). Load-sensitive e2e flake: `usernames.spec.ts › claims its own handle` | 069 task 6 full-suite finding 2026-11-05 | Pre-existing 068 race, green in isolation; fix = hold the dialog until the profile settles (mirrors `d59d511`) and/or exclude self in the probe |
 
 ## 🟡 Claimed — has a plan, not implemented
 
 | # | Follow-up | Claimed by |
 |---|-----------|------------|
 | F17 | **Cross-device project sync** — supabase `projects` table + RLS + a second LWW sync loop so project grouping follows the account (061 kept projects local-only per F14 precedent) | plan 064 (draft 2026-10-31) |
-| F18 | **Multi-screen publishing** — one project publishes as a site with per-screen routes, cross-page `navigate` links, `APP_SEGMENTS`/proxy work and a featured pointer story (061 leaves publish per-screen) | plan 069 (approved 2026-11-04; featuring a project moved to F20) |
 
 ## 🟡 Lower priority / conditional
 
@@ -61,3 +63,4 @@
 | 057 scope D — delete `app/probe/*` control pages | done in 057 |
 | 057 scope E — reopen 016's declined slimming with stall evidence | 016 reopened → superseded/implemented by 057 |
 | Safelist size / resize-FPS stall (016 descopes, reopened 2026-10-25) | plan 057 (3,053 KB → 197 KB) |
+| Multi-screen publishing (F18) | plan 069 (implemented 2026-11-05 — featuring a project remains F20) |

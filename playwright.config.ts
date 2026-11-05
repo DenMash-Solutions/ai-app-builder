@@ -24,6 +24,7 @@ export default defineConfig({
       testIgnore: [
         "**/authed.spec.ts",
         "**/catalog.spec.ts",
+        "**/project-publish.spec.ts",
         "**/signout.spec.ts",
         "**/usernames.spec.ts",
       ],
@@ -40,6 +41,7 @@ export default defineConfig({
         "**/authed.spec.ts",
         "**/catalog.spec.ts",
         "**/usernames.spec.ts",
+        "**/project-publish.spec.ts",
       ],
       dependencies: ["chromium"],
     },

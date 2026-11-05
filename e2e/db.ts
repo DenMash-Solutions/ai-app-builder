@@ -511,6 +511,38 @@ export async function waitForRemoteMembership(
   }
 }
 
+/**
+ * Polls until the SCREEN's `uis` row exists in the account, by id (imports
+ * share one default prompt, so `waitForRemoteRow` can't disambiguate).
+ * The publish-time write path FKs `published_entry_points.screen_id` to this
+ * row — same reasoning as `waitForRemoteRow`/`waitForRemoteProject`: the UI
+ * dot can't gate this reliably. Best-effort silent without the service-role
+ * key, like the other helpers.
+ */
+export async function waitForRemoteScreen(
+  screenId: string | undefined,
+  timeoutMs = 30_000,
+): Promise<void> {
+  if (!screenId || !canSeed) return;
+  const svc = serviceClient();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data, error } = await svc
+      .from("uis")
+      .select("id")
+      .eq("id", screenId)
+      .limit(1);
+    if (!error && data && data.length > 0) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `[e2e] uis row for screen ${screenId} missing after ${timeoutMs}ms` +
+          (error ? ` (${error.message})` : ""),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 /** Ids of a catalog asset seeded by `seedCatalogAsset` (asset + pinned v1). */
 export interface SeededCatalogAsset {
   assetId: string;

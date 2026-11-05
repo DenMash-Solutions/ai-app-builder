@@ -1,6 +1,6 @@
 # Project Publishing and Route Claims (closes F18)
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-10-31
 
 ## Goal
@@ -215,20 +215,41 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 
 ### 6. Tests
 
-- [ ] Unit: registry precedence matrix, atomic claim, redirect exclusivity,
-      server route resolution incl. dynamic segments and 404 cases
-- [ ] e2e: project publishes → home, static, dynamic and 404 routes resolve
+- [x] Unit: registry precedence matrix, atomic claim, redirect exclusivity,
+      server route resolution incl. dynamic segments and 404 cases —
+      tasks 2/4 (10-test precedence matrix, claim/redirect/resolution
+      suites); gate re-verified 2026-11-05: 1062 pass / 0 fail (87 files)
+- [x] e2e: project publishes → home, static, dynamic and 404 routes resolve
       live; a second project is unaffected; a handle change redirects the old
-      URL; a pre-existing published slug still serves
-- [ ] Cache revalidation observable; full gate
+      URL; a pre-existing published slug still serves —
+      `e2e/project-publish.spec.ts` (authed, serial, 2 tests) covers the
+      first three; the pre-069 slug is `live-pages › product smoke — DenMash`
+      plus the canary below
+- [x] Cache revalidation observable; full gate — `publishSite` asserts the
+      POST `/api/revalidate` body carries `published_entry_points`; full
+      gate green (see Verification)
 
 ## Verification
 
-- [ ] `bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] `bun run test:e2e` full suite green
-- [ ] Canary: an anonymous visitor resolves every published route of the
-      project and cannot read another project's drafts or entry points
-- [ ] A pre-069 published screen slug still serves byte-identically
+- [x] `bun run lint && bunx tsc --noEmit && bun run test` —
+      2026-11-05: lint 0, tsc clean, **1062 pass / 0 fail** (87 files)
+- [x] `bun run test:e2e` full suite green — 2026-11-05:
+      **146 passed / 0 failed** (attempt 3; attempts 1–2 were load flakes
+      unrelated to 069 — the known parallel-load `waitForRemoteProject`
+      20 s gate and a pre-existing 068 username-claim race, both green on
+      the next run; no timeouts raised per mistake #32)
+- [x] Canary: an anonymous visitor resolves every published route of the
+      project and cannot read another project's drafts or entry points —
+      the e2e anonymous context resolves home/static/dynamic + real 404 +
+      second project + redirect hop; anon-key REST probes return `[]` for
+      `projects`, `published_entry_points`, `route_claims`, `uis`,
+      `profiles`, and anon executes `route_available` (true/false) and
+      `live_project` (null)
+- [x] A pre-069 published screen slug still serves byte-identically —
+      `/denmash` fetched 3x: identical md5 after normalizing Next's
+      per-request `__next_r` nonce (the only varying bytes), stored baked
+      CSS present verbatim in the served HTML; `/e2e-landing` and
+      `/e2e-theme` (non-baked) both 200
 
 ## Decisions taken (approved 2026-11-04)
 
@@ -386,6 +407,24 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
     routes in this plan — a zero-JS handle route needs its own page-level
     decisions (status code, caching, metadata) that Slice B's preview did
     not cover; it would be a new surface, not the reuse decision 3 asks for.
+25. **The entry-point owner can always SELECT their own snapshot rows**
+    (task 6, 2026-11-05). The first UI-driven publish surfaced a REAL
+    schema bug: `publishProject` writes the entry points BEFORE the status
+    flip (decision 15), and every Postgres conflict-target form —
+    `on conflict … do update` AND `do nothing`, even with `return=minimal`
+    — consults the target table's SELECT policy; with the draft project
+    unreadable by design, the owner's own upsert died 42501 while a plain
+    INSERT succeeded (isolated via REST probe + SQL DO-vs-plain matrix,
+    then proven fixed by an owner-bypass in a rolled-back transaction).
+    Fix: `published_entry_points_select_when_published` becomes
+    `using (project_is_published(project_id) or owner_id = auth.uid())`
+    (migration `plan_069_entry_points_select_owner`, `db/03` updated). The
+    public surface is untouched — anonymous reads still gate ONLY on
+    `project_is_published`; an owner now additionally sees their own
+    draft-project rows, which also fixes the pre-flip version READ the
+    republish relies on. Rejected: flipping status first (breaks the dark
+    while writing ordering of decision 15) and an upsert-through-RPC
+    (decision 15 explicitly rejected new RPCs).
 
 ## Status log
 
@@ -401,3 +440,5 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 | 2026-11-04 | Task 4 implemented: `live_project` SECURITY DEFINER RPC (decisions 17, applied to live DB — 14 functions, ACL anon/authenticated/service_role, 5-assertion DO probe green with cleanup), `lib/publish/live-project.ts` + `live-routes.ts` + `validate-project.ts`, slug-first page/metadata read (share-cached slug short-circuits the RPC), `permanentRedirect` hop, `resolveRootServing` "slug OR handle" in proxy + root page, validation-first `publishProject` with 4 dialog issue toasts (en/es), `liveProject` prop through `preview-client.tsx` (live visitors namespace by **project id** — the supabase adapter partitions on `app_id`). Decisions 17–20 added. **34 new unit tests** → gate 1055 pass / 0 fail; full e2e after wiping stale `.next`: **144 passed / 0 failed** (runs 1/5 green; runs 2–4 were known parallel-load/cold-cache flakes, each green in isolation — timeouts NOT raised per mistake #32) |
 | 2026-11-05 | Task 5 **approved** — preview drafted from the session-previous task-5 research; Q5a client-side dialog bake, Q5b one `/api/tailwind` per static route, Q5c live `precovered` identity (decisions 21–23); decision 24 pins the serving scope (CSS + `precovered`, no static-HTML branch). Session memory slimmed to ~160 lines with an enforced trim rule |
 | 2026-11-05 | Task 5 **implemented**: `bakeProjectEntryPoints` + `isStaticRoute` in `bake-client.ts` (shared `bakeSpecArtifacts` core with the screen bake), `/api/publish-artifacts` project branch (version-guarded `published_entry_points` UPDATE + `revalidateTag("published_entry_points", { expire: 0 })` beside the write), `publishProject` threads `baked` rows, reader gains `artifacts, version`, live page serves the version-guarded artifact's CSS, `precovered` live identity. Unit gate green, e2e deferred to task 6 |
+| 2026-11-05 | Task 6 in progress: first project-publish e2e (`e2e/project-publish.spec.ts`, authed serial). Debug ladder: (1) parent-row sync race → `waitForRemoteProject`/`waitForRemoteScreen` gates (imports share one prompt so a by-screen gate was needed); (2) the publish itself 42501'd — decoded request JWT + REST probes split plain-INSERT 201 vs every `on_conflict` form 403, SQL replica confirmed, and a rolled-back transaction proved the fix → **decision 25**: the SELECT policy gains the owner bypass (live migration `plan_069_entry_points_select_owner`, `db/03` + rls-audit updated; public surface unchanged) |
+| 2026-11-05 | Task 6 **implemented** → plan `implemented`: spec GREEN in isolation (both tests) and in the full suite; **full e2e 146 passed / 0 failed** (attempts 1–2 red only on load flakes unrelated to 069 — the known parallel-load 20 s sync gate hit by catalog x2 + this spec, and the pre-existing 068 username-claim race now registered as follow-up **F21**; attempt 3 all green, no timeouts raised). Unit gate re-verified: lint 0 / tsc clean / 1062 pass / 0 fail. Canary green: anon REST surface reads `[]` everywhere, anon probes execute, `/denmash` byte-identical across 3 fetches (modulo Next's per-request `__next_r` nonce) with its stored baked CSS verbatim, `/e2e-landing` + `/e2e-theme` 200. INDEX row updated |

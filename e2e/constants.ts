@@ -176,6 +176,15 @@ export const PUBLISH = {
   unpublish: en.publish.unpublish,
   unpublishDone: en.publish.unpublishDone,
   liveBadge: en.publish.liveBadge,
+  /** Project-group header + publish-site dialog (plan 069 task 3/5). */
+  publishSite: en.publish.publishSite,
+  siteTitle: (name: string): string =>
+    en.publish.siteTitle.replace("{name}", name),
+  siteLabel: en.publish.siteHandleLabel,
+  sitePublished: (url: string): string =>
+    en.publish.sitePublished.replace("{url}", url),
+  openSite: (name: string): string =>
+    en.publish.openSite.replace("{name}", name),
   /** Row affordances + toasts — name/URL interpolated for locators. */
   goLive: (name: string): string => en.publish.goLive.replace("{name}", name),
   manageLive: en.publish.manageLive,

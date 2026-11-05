@@ -76,7 +76,7 @@ row in the same turn as any status change** (rule:
 | 066 | [ui-catalog](066-ui-catalog/plan.md) | implemented | 2026-10-31 |
 | 067 | [project-data-state](067-project-data-state/plan.md) | implemented | 2026-10-31 |
 | 068 | [usernames-public-profiles](068-usernames-public-profiles/plan.md) | implemented | 2026-10-31 |
-| 069 | [project-publishing](069-project-publishing/plan.md) | approved | 2026-10-31 |
+| 069 | [project-publishing](069-project-publishing/plan.md) | implemented | 2026-10-31 |
 | 070 | [ecommerce-reference-demo](070-ecommerce-reference-demo/plan.md) | draft | 2026-10-31 |
 
-_70 plans: 64 implemented · 2 approved (`033`, `069`) · 3 draft (`015`, `035`, `070`) · 1 rejected (`026`)._
+_70 plans: 65 implemented · 1 approved (`033`) · 3 draft (`015`, `035`, `070`) · 1 rejected (`026`)._
