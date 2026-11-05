@@ -26,10 +26,10 @@
  * keyless 401 contrast from a browser tab stays readable. The API stays
  * protected either way: no header → 401, regardless of origin.
  *
- * Run:      bun run demo/keyed-pokedex-server.ts            (port 4100)
+ * Run:      bun run demo/pokedex/keyed-pokedex-server.ts            (port 4100)
  * Pair it:  DATA_PROXY_POKEDEX_ORIGIN=http://localhost:4100
  *           DATA_PROXY_POKEDEX_KEY=pkdex-demo-key-2026      (dev server env)
- * Design:   demo/pokedex-keyed-spec.json — import it via the playground's
+ * Design:   demo/pokedex/pokedex-keyed-spec.json — import it via the playground's
  *           History drawer → "Import JSON" (config.auth.ref = "pokedex";
  *           config.itemDetail fans each list row out to /pokemon/{id}).
  *

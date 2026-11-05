@@ -214,7 +214,7 @@ A list query may declare that each row wants its own detail document — "list f
 - **`{id}` resolution** per row: the row's own `id` (string or number), else the last path segment of a string `row.url` (`.../pokemon/25/` → `25`). The placeholder is mandatory (`{id}` anywhere in the path); a path without it would fetch the same detail N times, so validation rejects it.
 - **Degradation**: a missing id, a non-object detail body, or a failed detail read keeps the base row and `console.warn`s — one flaky detail never blanks a gallery that already loaded. Because rows are schema-validated after the merge, a resource schema must be satisfiable by the base row alone (declare identity fields, not detail-only ones).
 - Works on both lanes (keyless direct and keyed proxy); shape-only like `auth` — details can never carry credentials either.
-- Live proof: the keyed Pokédex demo (`demo/pokedex-keyed-spec.json` + `demo/keyed-pokedex-server.ts`) — 1 list + 12 detail reads through the proxy, cards rendering detail-only fields (type colors, chips, label, artwork).
+- Live proof: the keyed Pokédex demo (`demo/pokedex/pokedex-keyed-spec.json` + `demo/pokedex/keyed-pokedex-server.ts`) — 1 list + 12 detail reads through the proxy, cards rendering detail-only fields (type colors, chips, label, artwork).
 
 ### Adapter notes
 
@@ -312,4 +312,4 @@ Client-side paging (`sliceItems`/`stepPage` over a fully-fetched list, plan 041)
 - **Validation** — `pagination` is list-only, `totalPath` must be a `"/"`-prefixed pointer, and a paged query must bind both `page` and `limit` params.
 - **Limits** — offset/1-based-page shapes only (no cursors); transport is the same keyed/keyless adapter seam, and a keyed paged read forwards `pathname + search` through the proxy body.
 
-Demo: `demo/pokedex-keyed-spec.json` — paged PokéAPI list through the keyed wrapper, Next/Prev + label, and a shareable `?page=…&limit=…` URL.
+Demo: `demo/pokedex/pokedex-keyed-spec.json` — paged PokéAPI list through the keyed wrapper, Next/Prev + label, and a shareable `?page=…&limit=…` URL.
