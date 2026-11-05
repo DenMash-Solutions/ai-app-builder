@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Spec } from "@json-render/core";
+import type { BakedArtifact } from "@/lib/publish/artifacts";
 import { createEntry } from "@/lib/history";
 import type { HistoryEntry } from "@/lib/history";
 import type { ProjectMembership } from "@/lib/projects/memberships";
@@ -448,7 +449,7 @@ describe("publishProject (decision 15: entry points before the status flip)", ()
       { route: "alpha", version: 7 },
     ];
 
-    await publishProject(
+    const result = await publishProject(
       makeClient(state),
       "owner-1",
       project,
@@ -466,6 +467,36 @@ describe("publishProject (decision 15: entry points before the status flip)", ()
       ["alpha", 8],
       ["", 1],
     ]);
+    // Task 5: the baked rows ride the same versions so the dialog can bake
+    // without a second read (decision 21).
+    expect(result.ok).toBe(true);
+    expect(result.baked?.map((row) => [row.route, row.version])).toEqual([
+      ["home", 4],
+      ["alpha", 8],
+      ["", 1],
+    ]);
+  });
+
+  test("a refused publish (taken handle) returns no baked rows", async () => {
+    state.entryRows = [];
+    state.fail = {
+      table: "projects",
+      op: "update",
+      message:
+        'duplicate key value violates unique constraint "projects_handle_key"',
+    };
+
+    const result = await publishProject(
+      makeClient(state),
+      "owner-1",
+      project,
+      entries,
+      memberships,
+      "dex",
+    );
+
+    expect(result.handleTaken).toBe(true);
+    expect(result.baked).toBeUndefined();
   });
 
   test("deletes routes the snapshot dropped, scoped to the project", async () => {
@@ -692,12 +723,65 @@ describe("getPublishedEntryPointsFrom (live reader, decision 18)", () => {
     const rows = await getPublishedEntryPointsFrom(makeClient(state), "proj-1");
 
     expect(state.ops).toHaveLength(1);
-    expect(state.ops[0].columns).toBe("route, screen_id, spec");
+    expect(state.ops[0].columns).toBe(
+      "route, screen_id, spec, artifacts, version",
+    );
     expect(opFilters(state.ops[0], "project_id")).toBe("proj-1");
     expect(rows).toEqual([
-      { route: "beta", screenId: "s-b", spec: makeSpec("beta") },
-      { route: "", screenId: "s-home", spec: makeSpec("home") },
+      {
+        route: "beta",
+        screenId: "s-b",
+        spec: makeSpec("beta"),
+        artifacts: null,
+        version: 0,
+      },
+      {
+        route: "",
+        screenId: "s-home",
+        spec: makeSpec("home"),
+        artifacts: null,
+        version: 0,
+      },
     ]);
+  });
+
+  test("a well-formed bake parses; malformed artifact jsonb degrades to null", async () => {
+    const baked: Record<string, BakedArtifact> = {
+      en: { html: "<p>hi</p>", css: ".x{}", kind: "content", version: 2 },
+    };
+    state.entryRows = [
+      {
+        route: "baked",
+        screen_id: "s-1",
+        spec: makeSpec("b1"),
+        artifacts: baked,
+        version: 2,
+      },
+      {
+        route: "bad",
+        screen_id: "s-2",
+        spec: makeSpec("b2"),
+        artifacts: "not-json",
+        version: 3,
+      },
+      {
+        route: "noversion",
+        screen_id: "s-3",
+        spec: makeSpec("b3"),
+        artifacts: baked,
+      },
+    ];
+
+    const rows = await getPublishedEntryPointsFrom(makeClient(state), "proj-1");
+
+    expect(rows?.map((row) => [row.route, row.version, row.artifacts])).toEqual(
+      [
+        ["baked", 2, baked],
+        ["bad", 3, null],
+        // Fail-closed: no version → the bake can never match (task 5).
+        ["noversion", 0, baked],
+      ],
+    );
   });
 
   test("malformed rows are dropped, never rendered", async () => {

@@ -111,6 +111,10 @@ export default async function SlugPage({
     // Decision 19: the handle exists but nothing serves this path — a real
     // 404, not the slug path's client-side panel.
     if (match === null) notFound();
+    // Task 5 (decision 24): the live surface serves the matched snapshot
+    // row's version-guarded bake as CSS (+ the precovered seeding below);
+    // the static-HTML `content` branch stays a published-PAGES surface.
+    const artifact = servingArtifact(match.entry, locale);
     const liveProject: LiveProjectPage = {
       projectId: live.projectId,
       handle: live.handle,
@@ -120,7 +124,7 @@ export default async function SlugPage({
     return (
       <PreviewPage
         published={published}
-        bakedCss={null}
+        bakedCss={artifact?.css ?? null}
         routePath={routePath}
         liveProject={liveProject}
       />

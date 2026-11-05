@@ -208,9 +208,9 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 
 ### 5. Bake and cache
 
-- [ ] Per-route artifacts keyed (project, route, language); static routes
+- [x] Per-route artifacts keyed (project, route, language); static routes
       bake at publish, dynamic-param routes client-render (F8, Q3)
-- [ ] Every new writer invalidates through `revalidateProjection` and the
+- [x] Every new writer invalidates through `revalidateProjection` and the
       `PROJECTION_TABLES` allowlist (F5, decision 5)
 
 ### 6. Tests
@@ -354,6 +354,38 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
     are written (fail-closed, same as decision 15). Rejected: warn-only,
     because a missing home 404s the bare namespace the moment the site goes
     live.
+21. **The bake runs client-side, in the dialog, right after the publish
+    succeeds** (Q5a, 2026-11-05). `publishProject` threads the baked-source
+    rows (`route, spec, version`) onto its success result and the publish
+    dialog fires the project bake `void …` — best-effort, mirroring
+    `go-live-dialog.tsx` and `bakeAndPersistArtifacts`. Rejected: a
+    server-side bake, because the HTML render half (`lib/publish/bake.tsx`)
+    is client-side React and restructuring it contradicts decision 3's
+    "reuse the existing path"; the bake is best-effort either way, so the
+    cheaper placement wins.
+22. **One `/api/tailwind` call per static route, sequential** (Q5b,
+    2026-11-05). Each route's artifact carries only the CSS its own spec
+    needs, and the screen bake pipeline is reused verbatim per entry point.
+    Rejected: one combined call for the whole project, because every
+    artifact would carry the union CSS and diverge from the per-screen
+    shape `lookupArtifact`/`servingArtifact` serve.
+23. **The live case gets the `precovered` identity check too** (Q5c,
+    2026-11-05): `spec === liveProject?.spec` joins `spec ===
+    published?.spec` in `preview-client.tsx`, and the page passes the SAME
+    spec object reference (from the matched `published_entry_points` row)
+    into the client props, so the check is a reference identity that actually
+    matches. An owner's local entry keeps `spec` pointing elsewhere, so the
+    runtime compile never skips for a spec the bake does not cover.
+    Tested, because a reference mismatch would silently disable the
+    optimization instead of erroring.
+24. **The live handle page serves the artifact's CSS + `precovered` seeding,
+    nothing more** (task 5, 2026-11-05): `bakedCss` flows into the existing
+    `<style>` injection. The `kind === "content"` static-HTML branch stays
+    on the root page only — it is a published-PAGES surface (plan 056 F2's
+    per-screen contract). Rejected: extending the static branch to handle
+    routes in this plan — a zero-JS handle route needs its own page-level
+    decisions (status code, caching, metadata) that Slice B's preview did
+    not cover; it would be a new surface, not the reuse decision 3 asks for.
 
 ## Status log
 
@@ -367,3 +399,5 @@ Moved out of scope (recorded as a follow-up, decision 8): featuring a
 | 2026-11-04 | Task 2 **verified**: targeted e2e green (`live-pages › reserved slugs`, `authed › publishes an entry and serves its live URL` — the latter proves the live `route_available` RPC because the probe fails closed), then **full e2e 144 passed / 0 failed** on a fresh server. The run surfaced a pre-existing 068 race (`ClaimForm` painted claim-mode before the profile load settled → a returning user's own handle read "taken"); fixed app-side by gating the dialog on `loading` — **outside 069 scope, committed separately as `fix(auth)`**. Also observed one known parallel-load flake in `catalog.spec.ts` (20 s `waitForRemoteProject` gate; green in isolation and in the next full run) — not raised, not a 069 regression |
 | 2026-11-04 | Task 3 implemented: `lib/publish/project-publish.ts` (explicit-column state reader, `buildProjectEntryPoints`, fail-closed `publishProject`/`unpublishProject`), `components/publish/publish-site-dialog.tsx` (load-phase gated, lowercase + `isReservedRoute` + `route_available(handle, handle)`, `handleTaken`), `components/publish/slug-status.ts` shared with the go-live dialog, history-drawer Globe button + Live badge, 10 en/es keys. Decisions 12–15 (affordance, on-demand reads, unpublish keeps the claim, no-RPC ordering) and **decision 16** (`route_redirects_delete_own` — the table was SELECT-only, so unpublish's clear would have hit 0 rows) added; live migration applied (14 tables / **43** policies / 13 functions) and `db/README.md` + `rls-audit.md` counts bumped. **23 new unit tests** (`project-publish.test.ts`: op-order, version bump, stale-route scope, handleTaken, no-`handle` unpublish payload, explicit columns) → gate 1021 pass / 0 fail, **full e2e 144 passed / 0 failed** |
 | 2026-11-04 | Task 4 implemented: `live_project` SECURITY DEFINER RPC (decisions 17, applied to live DB — 14 functions, ACL anon/authenticated/service_role, 5-assertion DO probe green with cleanup), `lib/publish/live-project.ts` + `live-routes.ts` + `validate-project.ts`, slug-first page/metadata read (share-cached slug short-circuits the RPC), `permanentRedirect` hop, `resolveRootServing` "slug OR handle" in proxy + root page, validation-first `publishProject` with 4 dialog issue toasts (en/es), `liveProject` prop through `preview-client.tsx` (live visitors namespace by **project id** — the supabase adapter partitions on `app_id`). Decisions 17–20 added. **34 new unit tests** → gate 1055 pass / 0 fail; full e2e after wiping stale `.next`: **144 passed / 0 failed** (runs 1/5 green; runs 2–4 were known parallel-load/cold-cache flakes, each green in isolation — timeouts NOT raised per mistake #32) |
+| 2026-11-05 | Task 5 **approved** — preview drafted from the session-previous task-5 research; Q5a client-side dialog bake, Q5b one `/api/tailwind` per static route, Q5c live `precovered` identity (decisions 21–23); decision 24 pins the serving scope (CSS + `precovered`, no static-HTML branch). Session memory slimmed to ~160 lines with an enforced trim rule |
+| 2026-11-05 | Task 5 **implemented**: `bakeProjectEntryPoints` + `isStaticRoute` in `bake-client.ts` (shared `bakeSpecArtifacts` core with the screen bake), `/api/publish-artifacts` project branch (version-guarded `published_entry_points` UPDATE + `revalidateTag("published_entry_points", { expire: 0 })` beside the write), `publishProject` threads `baked` rows, reader gains `artifacts, version`, live page serves the version-guarded artifact's CSS, `precovered` live identity. Unit gate green, e2e deferred to task 6 |

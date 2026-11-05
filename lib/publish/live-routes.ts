@@ -5,8 +5,10 @@ import {
 } from "@/lib/projects/screen-routes";
 
 /** What serves a live path — the snapshot row + the pattern's captures. */
-export interface LiveRouteMatch {
-  entry: ProjectEntryPoint;
+export interface LiveRouteMatch<
+  T extends ProjectEntryPoint = ProjectEntryPoint,
+> {
+  entry: T;
   /** `{id}` captures (`items/4` → `{ id: "4" }`); exact runs carry `{}`. */
   params: Record<string, string>;
 }
@@ -30,10 +32,10 @@ export interface LiveRouteMatch {
  * No match → null; the caller 404s (decision 19) rather than serving a
  * wrong screen into the wrong state. Pure: rows and path are injected.
  */
-export function resolveLiveRoute(
-  entryPoints: readonly ProjectEntryPoint[],
+export function resolveLiveRoute<T extends ProjectEntryPoint>(
+  entryPoints: readonly T[],
   path: string,
-): LiveRouteMatch | null {
+): LiveRouteMatch<T> | null {
   const clean = path.replace(/^\/+|\/+$/g, "");
   if (clean === "") {
     const home = entryPoints.find((row) => row.route === "");

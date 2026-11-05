@@ -24,6 +24,7 @@ import type { ProjectMembership } from "@/lib/projects/memberships";
 import type { Project } from "@/lib/projects/projects";
 import { isValidSlug } from "@/lib/slug";
 import { ROUTE_CLAIM_KINDS, isReservedRoute } from "@/lib/routes/registry";
+import { bakeProjectEntryPoints } from "@/lib/publish/bake-client";
 import { createClient } from "@/lib/supabase/client";
 import { asPublishClient, isSlugAvailable } from "@/lib/publish/publish";
 import {
@@ -184,6 +185,13 @@ function PublishSiteContent({
       handle,
       publishedAt: result.publishedAt ?? new Date().toISOString(),
     });
+    // Task 5 (decision 21): the publish succeeded — fire the per-route bake
+    // as fire-and-forget, mirroring the go-live dialog. Best-effort: it
+    // filters to the static subset and serving degrades to client render
+    // until a bake lands.
+    if (result.baked !== undefined) {
+      void bakeProjectEntryPoints(project.id, result.baked);
+    }
     onOpenChange(false);
   };
 

@@ -1,5 +1,8 @@
 import type { Spec } from "@json-render/core";
 import type { HistoryEntry } from "@/lib/history";
+import type { BakeEntryPoint } from "@/lib/publish/bake-client";
+import { parseArtifacts } from "@/lib/publish/artifacts";
+import type { BakedArtifact } from "@/lib/publish/artifacts";
 import type { PublishClient } from "@/lib/publish/publish";
 import { isClaimConflictError } from "@/lib/publish/publish";
 import { revalidateProjection } from "@/lib/publish/revalidate";
@@ -67,6 +70,12 @@ export interface ProjectPublishResult {
   error?: string;
   /** ISO timestamp stamped by a successful publish. */
   publishedAt?: string;
+  /**
+   * The baked-source rows of the just-written snapshot (task 5, decision
+   * 21): the dialog hands them straight to `bakeProjectEntryPoints`, which
+   * filters to the static subset — no reload, no second read.
+   */
+  baked?: readonly BakeEntryPoint[];
 }
 
 /** Unreadable/unknown status answers `draft` — the badge never guesses live. */
@@ -246,6 +255,11 @@ export async function publishProject(
     }
   }
 
+  // The rows the dialog's bake keys on (decision 21) — empty when the
+  // snapshot has no entry points, e.g. a project with a handle and nothing
+  // attached (its update statement below is the entire publish).
+  let baked: BakeEntryPoint[] = [];
+
   if (rows.length > 0) {
     const payload = rows.map((row) => ({
       project_id: project.id,
@@ -256,6 +270,11 @@ export async function publishProject(
       version: (versions.get(row.route) ?? 0) + 1,
       artifacts: null,
       published_at: publishedAt,
+    }));
+    baked = payload.map((row) => ({
+      route: row.route,
+      spec: row.spec,
+      version: row.version,
     }));
     const { error } = await client
       .from("published_entry_points")
@@ -292,7 +311,7 @@ export async function publishProject(
   }
 
   revalidateProjection(["published_entry_points"]);
-  return { ok: true, publishedAt };
+  return { ok: true, publishedAt, baked };
 }
 
 /**
@@ -302,18 +321,29 @@ export async function publishProject(
  * malformed row is dropped rather than rendered. `.order("route")` pins a
  * deterministic row order for `resolveLiveRoute`'s within-class ties — the
  * snapshot carries no position column.
+ *
+ * Task 5: the snapshot now also carries `artifacts` + `version` (the bake
+ * keys): `artifacts` is parsed by `parseArtifacts`, so a malformed bake jsonb
+ * reads `null` (the surface client-renders), and a row whose version is not
+ * a usable number keeps its bake unredeemable (version 0 can never match a
+ * baked artifact — fail-closed, never stale).
  */
+export interface PublishedEntryPoint extends ProjectEntryPoint {
+  artifacts: Record<string, BakedArtifact> | null;
+  version: number;
+}
+
 export async function getPublishedEntryPointsFrom(
   client: PublishClient,
   projectId: string,
-): Promise<ProjectEntryPoint[] | null> {
+): Promise<PublishedEntryPoint[] | null> {
   const { data, error } = await client
     .from("published_entry_points")
-    .select("route, screen_id, spec")
+    .select("route, screen_id, spec, artifacts, version")
     .eq("project_id", projectId)
     .order("route", { ascending: true });
   if (error || !Array.isArray(data)) return null;
-  const rows: ProjectEntryPoint[] = [];
+  const rows: PublishedEntryPoint[] = [];
   for (const row of data) {
     const route = row.route;
     const screenId = row.screen_id;
@@ -322,7 +352,13 @@ export async function getPublishedEntryPointsFrom(
     if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
       continue;
     }
-    rows.push({ route, screenId, spec: spec as Spec });
+    rows.push({
+      route,
+      screenId,
+      spec: spec as Spec,
+      artifacts: parseArtifacts(row.artifacts),
+      version: typeof row.version === "number" ? row.version : 0,
+    });
   }
   return rows;
 }
