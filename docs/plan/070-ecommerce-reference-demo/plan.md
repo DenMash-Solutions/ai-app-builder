@@ -43,6 +43,11 @@ first-class acceptance, not a side effect.
   already has a navbar) — product prompt gap, separate plan (descoped
   2026-11-05 → follow-up **F22**); 070 proves the manual catalog-install
   consistency flow instead
+- **Order dates** — spec expressions have **no clock** (no directive or
+  action produces "now"; `$format` only formats a value it is given), so
+  an `orders` record cannot carry a created-at timestamp. Order rows show
+  id, status, total/itemCount instead (descoped 2026-11-05, task-1
+  research)
 
 ## The 15 scenarios (acceptance script)
 
@@ -77,7 +82,7 @@ existing single-UI flow still works.
 | 3 | Product details | `/products/{id}` | Detail view, **Price display**, qty + **Add to cart** | `products` get-by-id + `cartItems` **create** | Products, Cart |
 | 4 | Cart | `/cart` | **Cart item** rows: qty stepper (update), remove (delete), line totals, go-to-checkout | `cartItems` list + update/delete | Checkout |
 | 5 | Checkout | `/checkout` | Shipping form (validateForm-gated), customer prefill, **Checkout summary**, Place order | `customers` read; `cartItems` read; `orders` **create** | Orders (after placing) |
-| 6 | Orders | `/orders` | Placed orders list (id, date, total, status) | `orders` list | Order details |
+| 6 | Orders | `/orders` | Placed orders list (id, status, total — no date: no clock in spec expressions, see Out of scope) | `orders` list | Order details |
 | 7 | Order details | `/orders/{id}` | One order: line items, **Price display**, totals | `orders` get-by-id | Orders |
 
 All 7 carry the **Navigation bar**; every screen that shows cart chrome
@@ -226,6 +231,67 @@ support cross-project reuse; MCP spot-check precedent = plans 032/056
     navigation), which the navigation-based assertion alone cannot cover.
     Rejected: Radix Dialog/drawer (F16); rejected: sidebar-less design
     (misses the same-surface freshness proof).
+13. **Fixture api sources ride the KEYED lane** (auth.ref) — discovered in
+    task-1 research 2026-11-05: the 067 in-project gate
+    (`projectProviderIssue`, run by `validate-project.ts` + the go-live
+    dialog with `inProject: true`) **refuses to publish any project screen
+    whose api resource declares no `config.auth.ref`** — a plain browser-
+    direct fixture source would block scenarios 10–11. Fixtures therefore
+    declare `config: { baseUrl: "http://localhost:3000/api-public", auth:
+    { type: "bearer", ref: "ecommerce" } }`: every request goes
+    `POST /api/data-proxy` with `{ref, path}` (path = `/api-public/…`), the
+    server injects the key from env and fetches `origin + path`. Required
+    env (documented in README + `.env.example`, appended to the local
+    `.env.local`): `DATA_PROXY_ECOMMERCE_ORIGIN=http://localhost:3000`
+    (bare origin — `checkRefOrigin` rejects paths; precedent
+    `DATA_PROXY_POKEDEX_ORIGIN`) + any non-empty `…_KEY` (the route
+    ignores headers). **e2e needs no env**: the MSW `*/api/data-proxy`
+    handler gains an `ecommerce` branch that fetches `path` through to the
+    real `app/api-public` route (unhandled by MSW → passthrough), which
+    also exercises the committed fixture route. **MCP spot-check and the
+    README replay hit the real proxy route, so they run only after the
+    acceptance-time dev restart** picks up the env (Q2 sequence extended:
+    stop dev → gate chain → restart dev → MCP spot-check).
+    Rejected: no-auth fixture source (blocks publish); rejected: MSW-only
+    fixtures (MCP/README surfaces can't see them — Q1); rejected: supabase
+    for products/customers (drags auth into a keyless demo).
+14. **Product grid repeats raw state `/filtered-items`, not the mirror** —
+    STYLING_RULES' repeat rule ("state is raw data — repeat reads raw
+    state") forbids expressions in `repeat.statePath`, and live search
+    needs `filterItems` output as state. The **grid component's root
+    carries the mirror watch**: `watch: {"/queries/productsList/data":
+    [setState /filtered-items = filterItems(source: mirror, query:
+    /query)]}` — mirrors are store writes (`queryManager.attach` →
+    `write: set`), so the watch fires on data arrival in any host; the
+    Products screen's search Input rewrites the same path on change
+    (STYLING_RULES rule 15). Hosts seed `filteredItems: []`; Home needs no
+    `/query` (`filterItems` treats a missing query as ""). Rejected:
+    repeating the mirror directly (kills search — no filtered list to
+    read); rejected: per-card `visible` gating (conditions have no
+    "contains" operator).
+15. **Navbar cart control = two visibility-gated buttons** so decision 12's
+    badge opener exists WITHOUT dead clicks: `nav-cart-open` (label +
+    count badge, `on.press → setState /cartOpen true`,
+    `visible: {$state: "/hasSidebar"}`) and `nav-cart-page` (identical
+    label, `on.press → navigate Cart`, `visible: {$state: "/hasSidebar",
+    not: true}`). Hosts of the sidebar declare `/hasSidebar: true` in
+    state, the other four declare `false` — one navbar component, visually
+    identical chrome everywhere, correct behavior on every screen.
+    Rejected: single toggle button (dead click on Cart/Checkout/Orders);
+    rejected: sidebar installed on all 7 screens (a cart drawer over the
+    cart page itself; scope is decision 12's three content screens).
+16. **Money flows through stored numbers, not per-render sums**: every
+    `cartItems` row carries `lineTotal` (written at create, kept in sync
+    by each qty update — `input: {qty: …, lineTotal: {$math multiply …}}`),
+    so Checkout summary/sidebar subtotal = `{$agg: "sum", items:
+    {$state: "/queries/cartList/data"}, field: "lineTotal"}` and Order
+    details renders `{$state: "/queries/orderDetail/data/0/items"}` —
+    the Checkout `orders create` snapshots the cart array (`input.items`)
+    plus `total`/`itemCount` into the record, making each order
+    self-contained after the cart empties. Price display binds HOST state
+    `/price` (+ `/compareAt` on Product details), each host mirroring its
+    own query via a root watch. Rejected: re-deriving totals from the live
+    cart (an emptied cart would zero out placed orders).
 
 ## Files
 
@@ -238,10 +304,14 @@ support cross-project reuse; MCP spot-check precedent = plans 032/056
   decision 10)
 - `demo/pokedex/` — pre-existing provenance, moved here 2026-11-05
   (decision 9)
-- `app/api-public/[resource]/route.ts` + route unit test (decision 5)
+- `app/api-public/[resource]/[[...path]]/route.ts` + route unit test
+  (decision 5; catch-all serves list `/products` and get `/products/3`)
 - `e2e/ecommerce.spec.ts` (serial, `afterAll` cleanup, authed project)
 - `e2e/helpers.ts` (`specToLines`), `e2e/constants.ts` (demo keys),
-  `e2e/msw/*` reuse; `e2e/db.ts` helpers reused as-is
+  `e2e/msw/init.ts` (`ecommerce` ref branch of the data-proxy handler,
+  decision 13); `e2e/db.ts` helpers reused as-is
+- env docs: README replay section + `.env.example` gain the
+  `DATA_PROXY_ECOMMERCE_*` pair (decision 13)
 - README replay section; en/es copy only if new UI copy turns out needed
   (expected: none — spec copy lives in the specs)
 
@@ -329,3 +399,6 @@ Serial file, split into ~4 tests so a failure localises (069's pattern),
 | 2026-11-05 | spec inventory fixed + fixture reconciliation: fixtures reduced to `products.json` + `customers.json` (cart + orders are writable `localStorage` resources per decision 10 — Checkout creates orders); scenario-5 update assertion names Navigation bar (all 7 installs) + Cart item explicitly |
 | 2026-11-05 | **Cart sidebar** added as component #7 — **decision 12**: cart visible without navigation; fixed-position `Stack` (never portal Dialog — F16), installed on Home/Products/Product details, opened by navbar badge; new same-surface e2e assertion (post-mutation refresh with zero navigation); **spec inventory tables** (7 screens / 7 components / 4 resources) embedded in this plan |
 | 2026-11-05 | **approved** by user ("ok") — full preview accepted: decisions 1-12, Q1/Q2 resolved, inventory tables, F22/F23 parked |
+| 2026-11-05 | task-1 research complete → **decisions 13-16** (implementation-level, scope unchanged): 13 = fixture api sources ride the keyed lane (`config.auth.ref: ecommerce` + `DATA_PROXY_ECOMMERCE_*` env, MSW forwards the ref to the real fixture route, MCP spot-check sequenced after the acceptance-time dev restart) because the 067 in-project gate blocks publishing api resources without a ref; 14 = grid repeats `/filtered-items` with the mirror watch inside the component; 15 = navbar dual cart control gated by `/hasSidebar` (decision-12 opener preserved, no dead clicks); 16 = money via stored `lineTotal` + order snapshot of the cart array. Files section: route path corrected to the `[[...path]]` catch-all, MSW/env additions listed |
+| 2026-11-05 | task-1 verification: element events AND watchers resolve action params through `resolveActionParam` → `resolvePropValue` (directives, `$computed`, nested `$item` = VALUE; top-level `$item` = PATH) — decisions 14/16 mechanically sound. **Descope:** order dates (Out of scope) — spec expressions have no clock |
+| 2026-11-05 | **task 1 authored, gate green** (lint 0 / tsc / 1136 unit pass): fixtures + `app/api-public/[resource]/[[...path]]` route (6 route tests) + 7 screen specs + 7 components ×v1/v2 (all pass `validateSpec` + `validateDataSources({inProject:true})` in `demo/ecommerce/specs.test.ts`, 49 tests incl. route/slot/sidebar/mirror-seed contracts) + README replay section + `DATA_PROXY_ECOMMERCE_*` env pair. **Gate widened**: `bun run test` → `bun test lib components app demo` (route/seed tests were outside the chain; bare `bun test` also picks up Playwright files — pre-existing). Authoring gotchas recorded in session memory (Heading level string enum, Text/Badge ignore className, mirror-repeat screens seed `state.queries.<q>.data` for validateSpec) |

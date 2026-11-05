@@ -1,0 +1,81 @@
+{
+  "root": "cart-root",
+  "route": "cart",
+  "state": {
+    "hasSidebar": false,
+    "cartOpen": false,
+    "queries": { "cartList": { "data": [] } }
+  },
+  "dataSources": {
+    "browserStore": { "provider": "localStorage", "config": {} }
+  },
+  "resources": {
+    "cartItems": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "qty": "number",
+        "lineTotal": "number"
+      }
+    }
+  },
+  "queries": {
+    "cartList": { "resource": "cartItems", "operation": "list" }
+  },
+  "elements": {
+    "cart-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": [
+        "slot-navbar",
+        "cart-heading",
+        "cart-empty",
+        "cart-list",
+        "cart-actions"
+      ]
+    },
+    "slot-navbar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "cart-heading": {
+      "type": "Heading",
+      "props": { "text": "Your cart", "level": "h1" }
+    },
+    "cart-empty": {
+      "type": "Text",
+      "props": { "text": "Your cart is empty.", "variant": "muted" },
+      "visible": [
+        { "$state": "/queries/cartList/count", "eq": 0 },
+        { "$state": "/queries/cartList/status", "eq": "success" }
+      ]
+    },
+    "cart-list": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "repeat": { "statePath": "/queries/cartList/data", "key": "id" },
+      "children": ["slot-cart-item"]
+    },
+    "slot-cart-item": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": []
+    },
+    "cart-actions": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm" },
+      "visible": { "$state": "/queries/cartList/count", "gt": 0 },
+      "children": ["cart-checkout"]
+    },
+    "cart-checkout": {
+      "type": "Button",
+      "props": { "label": "Go to checkout" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Checkout" } }]
+      }
+    }
+  }
+}

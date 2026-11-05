@@ -1,0 +1,147 @@
+{
+  "root": "od-root",
+  "route": "orders/{id}",
+  "state": {
+    "hasSidebar": false,
+    "cartOpen": false,
+    "price": 0,
+    "queries": { "orderDetail": { "data": [{ "items": [] }] } }
+  },
+  "dataSources": {
+    "browserStore": { "provider": "localStorage", "config": {} }
+  },
+  "resources": {
+    "cartItems": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "qty": "number",
+        "lineTotal": "number"
+      }
+    },
+    "orders": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "status": "string",
+        "total": "number",
+        "itemCount": "number"
+      }
+    }
+  },
+  "queries": {
+    "cartList": { "resource": "cartItems", "operation": "list" },
+    "orderDetail": {
+      "resource": "orders",
+      "operation": "get",
+      "params": { "id": { "$state": "/id" } }
+    }
+  },
+  "elements": {
+    "od-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "watch": {
+        "/queries/orderDetail/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/price",
+              "value": { "$state": "/queries/orderDetail/data/0/total" }
+            }
+          }
+        ]
+      },
+      "children": ["slot-navbar", "od-heading", "od-loading", "od-block"]
+    },
+    "slot-navbar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "od-heading": {
+      "type": "Heading",
+      "props": { "text": "Order details", "level": "h1" }
+    },
+    "od-loading": {
+      "type": "Text",
+      "props": { "text": "Loading order…", "variant": "muted" },
+      "visible": { "$state": "/queries/orderDetail/status", "eq": "loading" }
+    },
+    "od-block": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "visible": { "$state": "/queries/orderDetail/status", "eq": "success" },
+      "children": [
+        "od-id",
+        "od-status",
+        "od-items-heading",
+        "od-items",
+        "slot-price"
+      ]
+    },
+    "od-id": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": ["Order ", { "$state": "/queries/orderDetail/data/0/id" }]
+        }
+      }
+    },
+    "od-status": {
+      "type": "Badge",
+      "props": {
+        "text": { "$state": "/queries/orderDetail/data/0/status" },
+        "variant": "secondary"
+      }
+    },
+    "od-items-heading": {
+      "type": "Heading",
+      "props": { "text": "Items", "level": "h2" }
+    },
+    "od-items": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "repeat": {
+        "statePath": "/queries/orderDetail/data/0/items",
+        "key": "id"
+      },
+      "children": ["od-item"]
+    },
+    "od-item": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full rounded border p-2"
+      },
+      "children": ["od-item-name", "od-item-qty", "od-item-line"]
+    },
+    "od-item-name": {
+      "type": "Text",
+      "props": { "text": { "$item": "name" } }
+    },
+    "od-item-qty": {
+      "type": "Text",
+      "props": {
+        "text": { "$concat": ["× ", { "$item": "qty" }] },
+        "variant": "muted"
+      }
+    },
+    "od-item-line": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$item": "lineTotal" } }
+      }
+    },
+    "slot-price": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "children": []
+    }
+  }
+}

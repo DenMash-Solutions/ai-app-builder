@@ -1,0 +1,92 @@
+{
+  "root": "sum-root",
+  "elements": {
+    "sum-root": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm",
+        "className": "w-full rounded-lg border p-4"
+      },
+      "children": ["sum-title", "sum-subtotal", "sum-shipping", "sum-total"]
+    },
+    "sum-title": {
+      "type": "Heading",
+      "props": { "text": "Order summary", "level": "h3" }
+    },
+    "sum-subtotal": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "justify": "between"
+      },
+      "children": ["sum-subtotal-label", "sum-subtotal-value"]
+    },
+    "sum-subtotal-label": {
+      "type": "Text",
+      "props": { "text": "Subtotal", "variant": "muted" }
+    },
+    "sum-subtotal-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$format": "currency",
+          "value": {
+            "$agg": "sum",
+            "items": { "$state": "/queries/cartList/data" },
+            "field": "lineTotal"
+          }
+        }
+      }
+    },
+    "sum-shipping": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "justify": "between"
+      },
+      "children": ["sum-shipping-label", "sum-shipping-value"]
+    },
+    "sum-shipping-label": {
+      "type": "Text",
+      "props": { "text": "Shipping", "variant": "muted" }
+    },
+    "sum-shipping-value": {
+      "type": "Text",
+      "props": { "text": { "$format": "currency", "value": 5 } }
+    },
+    "sum-total": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "justify": "between",
+        "className": "border-t pt-2"
+      },
+      "children": ["sum-total-label", "sum-total-value"]
+    },
+    "sum-total-label": {
+      "type": "Text",
+      "props": { "text": "Total" }
+    },
+    "sum-total-value": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$format": "currency",
+          "value": {
+            "$math": "add",
+            "a": {
+              "$agg": "sum",
+              "items": { "$state": "/queries/cartList/data" },
+              "field": "lineTotal"
+            },
+            "b": 5
+          }
+        }
+      }
+    }
+  }
+}

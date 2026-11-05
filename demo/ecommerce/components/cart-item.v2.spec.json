@@ -1,0 +1,144 @@
+{
+  "root": "ci-root",
+  "elements": {
+    "ci-root": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "className": "w-full rounded-lg border p-3"
+      },
+      "children": ["ci-thumb", "ci-info", "ci-qty", "ci-line", "ci-remove"]
+    },
+    "ci-thumb": {
+      "type": "Image",
+      "props": {
+        "src": { "$item": "image" },
+        "alt": { "$item": "name" },
+        "width": 64,
+        "height": 48
+      }
+    },
+    "ci-info": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["ci-name", "ci-price"]
+    },
+    "ci-name": {
+      "type": "Text",
+      "props": { "text": { "$item": "name" } }
+    },
+    "ci-price": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$item": "price" } },
+        "variant": "muted"
+      }
+    },
+    "ci-qty": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "children": ["ci-minus", "ci-qty-value", "ci-plus"]
+    },
+    "ci-minus": {
+      "type": "Button",
+      "props": { "label": "−", "variant": "secondary" },
+      "on": {
+        "press": [
+          {
+            "action": "data_mutate",
+            "params": {
+              "op": "update",
+              "resource": "cartItems",
+              "id": { "$item": "id" },
+              "input": {
+                "qty": {
+                  "$math": "max",
+                  "a": {
+                    "$math": "subtract",
+                    "a": { "$item": "qty" },
+                    "b": 1
+                  },
+                  "b": 1
+                },
+                "lineTotal": {
+                  "$math": "multiply",
+                  "a": { "$item": "price" },
+                  "b": {
+                    "$math": "max",
+                    "a": {
+                      "$math": "subtract",
+                      "a": { "$item": "qty" },
+                      "b": 1
+                    },
+                    "b": 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ci-qty-value": {
+      "type": "Text",
+      "props": { "text": { "$item": "qty" } }
+    },
+    "ci-plus": {
+      "type": "Button",
+      "props": { "label": "+" },
+      "on": {
+        "press": [
+          {
+            "action": "data_mutate",
+            "params": {
+              "op": "update",
+              "resource": "cartItems",
+              "id": { "$item": "id" },
+              "input": {
+                "qty": {
+                  "$math": "add",
+                  "a": { "$item": "qty" },
+                  "b": 1
+                },
+                "lineTotal": {
+                  "$math": "multiply",
+                  "a": { "$item": "price" },
+                  "b": {
+                    "$math": "add",
+                    "a": { "$item": "qty" },
+                    "b": 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ci-line": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$item": "lineTotal" } },
+        "variant": "lead"
+      }
+    },
+    "ci-remove": {
+      "type": "Button",
+      "props": { "label": "Remove", "variant": "danger" },
+      "on": {
+        "press": [
+          {
+            "action": "data_mutate",
+            "params": {
+              "op": "delete",
+              "resource": "cartItems",
+              "id": { "$item": "id" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

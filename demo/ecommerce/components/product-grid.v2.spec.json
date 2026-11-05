@@ -1,0 +1,34 @@
+{
+  "root": "grid-root",
+  "elements": {
+    "grid-root": {
+      "type": "Grid",
+      "props": { "columns": 4, "gap": "sm" },
+      "repeat": { "statePath": "/filtered-items", "key": "id" },
+      "watch": {
+        "/queries/productsList/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/filtered-items",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/queries/productsList/data" },
+                  "query": { "$state": "/query" },
+                  "fields": ["name", "category"]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "children": ["slot-card"]
+    },
+    "slot-card": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": []
+    }
+  }
+}

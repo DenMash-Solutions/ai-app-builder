@@ -1,0 +1,72 @@
+{
+  "root": "nav-root",
+  "elements": {
+    "nav-root": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full border-b bg-background px-4 py-3"
+      },
+      "children": ["nav-brand", "nav-links", "nav-cart"]
+    },
+    "nav-brand": {
+      "type": "Heading",
+      "props": { "text": "Everyday Goods", "level": "h3" }
+    },
+    "nav-links": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm" },
+      "children": ["nav-home", "nav-products"]
+    },
+    "nav-home": {
+      "type": "Button",
+      "props": { "label": "Home", "variant": "secondary" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Home" } }]
+      }
+    },
+    "nav-products": {
+      "type": "Button",
+      "props": { "label": "Products", "variant": "secondary" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Products" } }]
+      }
+    },
+    "nav-cart": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "children": ["nav-cart-open", "nav-cart-page", "nav-badge"]
+    },
+    "nav-cart-open": {
+      "type": "Button",
+      "props": { "label": "Cart", "variant": "secondary" },
+      "visible": { "$state": "/hasSidebar" },
+      "on": {
+        "press": [
+          {
+            "action": "setState",
+            "params": { "statePath": "/cartOpen", "value": true }
+          }
+        ]
+      }
+    },
+    "nav-cart-page": {
+      "type": "Button",
+      "props": { "label": "Cart", "variant": "secondary" },
+      "visible": { "$state": "/hasSidebar", "not": true },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Cart" } }]
+      }
+    },
+    "nav-badge": {
+      "type": "Badge",
+      "props": {
+        "text": { "$state": "/queries/cartList/count" },
+        "variant": "secondary"
+      }
+    }
+  }
+}

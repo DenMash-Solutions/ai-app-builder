@@ -1,0 +1,80 @@
+{
+  "root": "card-root",
+  "elements": {
+    "card-root": {
+      "type": "Card",
+      "props": { "className": "overflow-hidden" },
+      "children": ["card-image", "card-body"]
+    },
+    "card-image": {
+      "type": "Image",
+      "props": {
+        "src": { "$item": "image" },
+        "alt": { "$item": "name" },
+        "width": 400,
+        "height": 300
+      }
+    },
+    "card-body": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["card-name", "card-price", "card-sale", "card-actions"]
+    },
+    "card-name": {
+      "type": "Heading",
+      "props": { "text": { "$item": "name" }, "level": "h4" }
+    },
+    "card-price": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$item": "price" } }
+      }
+    },
+    "card-sale": {
+      "type": "Badge",
+      "props": { "text": "Sale", "variant": "destructive" },
+      "visible": { "$item": "onSale" }
+    },
+    "card-actions": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm" },
+      "children": ["card-view", "card-add"]
+    },
+    "card-view": {
+      "type": "Button",
+      "props": { "label": "View details", "variant": "secondary" },
+      "on": {
+        "press": [
+          {
+            "action": "navigate",
+            "params": {
+              "screen": "Product details",
+              "id": { "$item": "id" }
+            }
+          }
+        ]
+      }
+    },
+    "card-add": {
+      "type": "Button",
+      "props": { "label": "Add to cart" },
+      "on": {
+        "press": [
+          {
+            "action": "data_mutate",
+            "params": {
+              "op": "create",
+              "resource": "cartItems",
+              "input": {
+                "name": { "$item": "name" },
+                "price": { "$item": "price" },
+                "qty": 1,
+                "lineTotal": { "$item": "price" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

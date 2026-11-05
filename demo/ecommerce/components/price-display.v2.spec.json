@@ -1,0 +1,66 @@
+{
+  "root": "price-root",
+  "elements": {
+    "price-root": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "children": ["price-current", "price-compare-row", "price-discount"]
+    },
+    "price-current": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$state": "/price" } },
+        "variant": "lead"
+      }
+    },
+    "price-compare-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "line-through text-muted-foreground"
+      },
+      "visible": { "$state": "/compareAt" },
+      "children": ["price-compare"]
+    },
+    "price-compare": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$format": "currency",
+          "value": { "$state": "/compareAt" }
+        },
+        "variant": "caption"
+      }
+    },
+    "price-discount": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            "Save ",
+            {
+              "$math": "round",
+              "a": {
+                "$math": "multiply",
+                "a": {
+                  "$math": "divide",
+                  "a": {
+                    "$math": "subtract",
+                    "a": { "$state": "/compareAt" },
+                    "b": { "$state": "/price" }
+                  },
+                  "b": { "$state": "/compareAt" }
+                },
+                "b": 100
+              }
+            },
+            "%"
+          ]
+        },
+        "variant": "caption"
+      },
+      "visible": { "$state": "/compareAt" }
+    }
+  }
+}

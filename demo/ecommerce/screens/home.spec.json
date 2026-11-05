@@ -1,0 +1,120 @@
+{
+  "root": "home-root",
+  "state": {
+    "hasSidebar": true,
+    "cartOpen": false,
+    "filteredItems": []
+  },
+  "dataSources": {
+    "browserStore": { "provider": "localStorage", "config": {} },
+    "storefront": {
+      "provider": "api",
+      "config": {
+        "baseUrl": "http://localhost:3000/api-public",
+        "auth": { "type": "bearer", "ref": "ecommerce" }
+      }
+    }
+  },
+  "resources": {
+    "cartItems": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "qty": "number",
+        "lineTotal": "number"
+      }
+    },
+    "products": {
+      "dataSource": "storefront",
+      "collection": "products",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "onSale": "boolean",
+        "category": "string"
+      }
+    }
+  },
+  "queries": {
+    "cartList": { "resource": "cartItems", "operation": "list" },
+    "productsList": { "resource": "products", "operation": "list" }
+  },
+  "elements": {
+    "home-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": [
+        "slot-navbar",
+        "home-hero",
+        "home-links",
+        "home-featured-heading",
+        "slot-grid",
+        "slot-sidebar"
+      ]
+    },
+    "slot-navbar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "home-hero": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["home-title", "home-subtitle"]
+    },
+    "home-title": {
+      "type": "Heading",
+      "props": { "text": "Everyday Goods", "level": "h1" }
+    },
+    "home-subtitle": {
+      "type": "Text",
+      "props": {
+        "text": "Small-batch homeware for kitchen and home.",
+        "variant": "muted"
+      }
+    },
+    "home-links": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm" },
+      "children": ["home-browse", "home-checkout", "home-orders"]
+    },
+    "home-browse": {
+      "type": "Button",
+      "props": { "label": "Browse products", "variant": "secondary" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Products" } }]
+      }
+    },
+    "home-checkout": {
+      "type": "Button",
+      "props": { "label": "Checkout", "variant": "secondary" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Checkout" } }]
+      }
+    },
+    "home-orders": {
+      "type": "Button",
+      "props": { "label": "Orders", "variant": "secondary" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Orders" } }]
+      }
+    },
+    "home-featured-heading": {
+      "type": "Heading",
+      "props": { "text": "Featured products", "level": "h2" }
+    },
+    "slot-grid": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "slot-sidebar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    }
+  }
+}

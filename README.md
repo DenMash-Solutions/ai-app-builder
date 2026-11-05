@@ -26,6 +26,30 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - [Implementation plans](docs/plan/) — per-feature plans with decisions and task logs
 - [Security](docs/security/) — RLS audit notes
 
+## Demo: ecommerce reference app
+
+`demo/ecommerce/` holds the committed seed specs of a 7-screen storefront
+(Home, Products, Product details, Cart, Checkout, Orders, Order details)
+plus 7 catalog components in two versions each. The plan that defines the
+whole system is [`docs/plan/070-ecommerce-reference-demo/plan.md`](docs/plan/070-ecommerce-reference-demo/plan.md).
+
+Replay:
+
+1. **Fixtures** — `GET /api-public/products` and `/api-public/customers`
+   serve `demo/ecommerce/fixtures/*.json` (read-only; the route allowlists
+   resources and 404s anything else).
+2. **Env (keyed lane)** — the products/customers data sources declare
+   `config.auth.ref: ecommerce` (the 067 publish gate refuses an api
+   source without one on a project screen). The server proxy pairs
+   `DATA_PROXY_ECOMMERCE_ORIGIN` + `DATA_PROXY_ECOMMERCE_KEY` (append both
+   to `.env.local`, see `.env.example`; **restart `next dev`** to pick
+   them up). The e2e suite needs no env — MSW forwards the ref to the
+   fixture route in the browser.
+3. **Specs** — screens live in `demo/ecommerce/screens/*.spec.json`,
+   components in `demo/ecommerce/components/*.{v1,v2}.spec.json`; all are
+   validated by `bun test demo/ecommerce/specs.test.ts`
+   (`validateSpec` + the in-project data-source gate).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

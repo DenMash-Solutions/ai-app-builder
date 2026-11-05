@@ -1,0 +1,17 @@
+{
+  "root": "price-root",
+  "elements": {
+    "price-root": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "children": ["price-current"]
+    },
+    "price-current": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$state": "/price" } },
+        "variant": "lead"
+      }
+    }
+  }
+}

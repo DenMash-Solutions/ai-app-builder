@@ -1,0 +1,119 @@
+{
+  "root": "orders-root",
+  "route": "orders",
+  "state": {
+    "hasSidebar": false,
+    "cartOpen": false,
+    "queries": { "ordersList": { "data": [] } }
+  },
+  "dataSources": {
+    "browserStore": { "provider": "localStorage", "config": {} }
+  },
+  "resources": {
+    "cartItems": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "qty": "number",
+        "lineTotal": "number"
+      }
+    },
+    "orders": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "status": "string",
+        "total": "number",
+        "itemCount": "number"
+      }
+    }
+  },
+  "queries": {
+    "cartList": { "resource": "cartItems", "operation": "list" },
+    "ordersList": { "resource": "orders", "operation": "list" }
+  },
+  "elements": {
+    "orders-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": [
+        "slot-navbar",
+        "orders-heading",
+        "orders-empty",
+        "orders-list"
+      ]
+    },
+    "slot-navbar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "orders-heading": {
+      "type": "Heading",
+      "props": { "text": "Orders", "level": "h1" }
+    },
+    "orders-empty": {
+      "type": "Text",
+      "props": { "text": "No orders yet.", "variant": "muted" },
+      "visible": [
+        { "$state": "/queries/ordersList/count", "eq": 0 },
+        { "$state": "/queries/ordersList/status", "eq": "success" }
+      ]
+    },
+    "orders-list": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "repeat": { "statePath": "/queries/ordersList/data", "key": "id" },
+      "children": ["order-row"]
+    },
+    "order-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between",
+        "className": "w-full rounded-lg border p-3"
+      },
+      "children": ["order-id", "order-status", "order-total", "order-view"]
+    },
+    "order-id": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": ["Order ", { "$item": "id" }]
+        }
+      }
+    },
+    "order-status": {
+      "type": "Badge",
+      "props": { "text": { "$item": "status" }, "variant": "secondary" }
+    },
+    "order-total": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$format": "currency",
+          "value": { "$item": "total" }
+        }
+      }
+    },
+    "order-view": {
+      "type": "Button",
+      "props": { "label": "View order", "variant": "secondary" },
+      "on": {
+        "press": [
+          {
+            "action": "navigate",
+            "params": {
+              "screen": "Order details",
+              "id": { "$item": "id" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

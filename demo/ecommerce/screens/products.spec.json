@@ -1,0 +1,108 @@
+{
+  "root": "products-root",
+  "route": "products",
+  "state": {
+    "hasSidebar": true,
+    "cartOpen": false,
+    "query": "",
+    "filteredItems": []
+  },
+  "dataSources": {
+    "browserStore": { "provider": "localStorage", "config": {} },
+    "storefront": {
+      "provider": "api",
+      "config": {
+        "baseUrl": "http://localhost:3000/api-public",
+        "auth": { "type": "bearer", "ref": "ecommerce" }
+      }
+    }
+  },
+  "resources": {
+    "cartItems": {
+      "dataSource": "browserStore",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "qty": "number",
+        "lineTotal": "number"
+      }
+    },
+    "products": {
+      "dataSource": "storefront",
+      "collection": "products",
+      "schema": {
+        "id": "string",
+        "name": "string",
+        "price": "number",
+        "onSale": "boolean",
+        "category": "string"
+      }
+    }
+  },
+  "queries": {
+    "cartList": { "resource": "cartItems", "operation": "list" },
+    "productsList": { "resource": "products", "operation": "list" }
+  },
+  "elements": {
+    "products-root": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": [
+        "slot-navbar",
+        "products-heading",
+        "products-search",
+        "slot-grid",
+        "slot-sidebar"
+      ]
+    },
+    "slot-navbar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "products-heading": {
+      "type": "Heading",
+      "props": { "text": "All products", "level": "h1" }
+    },
+    "products-search": {
+      "type": "Input",
+      "props": {
+        "label": "Search products",
+        "name": "product-search",
+        "placeholder": "Search by name or category",
+        "value": { "$bindState": "/query" },
+        "checks": [],
+        "validateOn": "change"
+      },
+      "on": {
+        "change": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/filtered-items",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/queries/productsList/data" },
+                  "query": { "$state": "/query" },
+                  "fields": ["name", "category"]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "slot-grid": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    },
+    "slot-sidebar": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "md" },
+      "children": []
+    }
+  }
+}

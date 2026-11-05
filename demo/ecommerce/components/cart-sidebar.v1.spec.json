@@ -1,0 +1,101 @@
+{
+  "root": "sb-root",
+  "elements": {
+    "sb-root": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "className": "fixed right-0 top-0 z-50 h-full w-80 overflow-y-auto border-l bg-background p-4 shadow-xl"
+      },
+      "visible": { "$state": "/cartOpen" },
+      "children": ["sb-head", "sb-count", "sb-empty", "sb-list", "sb-view"]
+    },
+    "sb-head": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "align": "center",
+        "justify": "between"
+      },
+      "children": ["sb-title", "sb-close"]
+    },
+    "sb-title": {
+      "type": "Heading",
+      "props": { "text": "Cart", "level": "h3" }
+    },
+    "sb-close": {
+      "type": "Button",
+      "props": { "label": "Close", "variant": "secondary" },
+      "on": {
+        "press": [
+          {
+            "action": "setState",
+            "params": { "statePath": "/cartOpen", "value": false }
+          }
+        ]
+      }
+    },
+    "sb-count": {
+      "type": "Text",
+      "props": {
+        "text": {
+          "$concat": [
+            { "$count": { "$state": "/queries/cartList/data" } },
+            " items"
+          ]
+        },
+        "variant": "caption"
+      }
+    },
+    "sb-empty": {
+      "type": "Text",
+      "props": { "text": "Your cart is empty.", "variant": "muted" },
+      "visible": [
+        { "$state": "/queries/cartList/count", "eq": 0 },
+        { "$state": "/queries/cartList/status", "eq": "success" }
+      ]
+    },
+    "sb-list": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "repeat": { "statePath": "/queries/cartList/data", "key": "id" },
+      "children": ["sb-row"]
+    },
+    "sb-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "md",
+        "align": "center",
+        "justify": "between"
+      },
+      "children": ["sb-name", "sb-qty", "sb-line"]
+    },
+    "sb-name": {
+      "type": "Text",
+      "props": { "text": { "$item": "name" } }
+    },
+    "sb-qty": {
+      "type": "Text",
+      "props": {
+        "text": { "$concat": ["× ", { "$item": "qty" }] },
+        "variant": "muted"
+      }
+    },
+    "sb-line": {
+      "type": "Text",
+      "props": {
+        "text": { "$format": "currency", "value": { "$item": "lineTotal" } }
+      }
+    },
+    "sb-view": {
+      "type": "Button",
+      "props": { "label": "View cart", "variant": "secondary" },
+      "on": {
+        "press": [{ "action": "navigate", "params": { "screen": "Cart" } }]
+      }
+    }
+  }
+}
