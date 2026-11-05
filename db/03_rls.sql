@@ -385,16 +385,24 @@ create policy route_redirects_delete_own
   using (owner_id = auth.uid());
 
 -- ── published_entry_points (plan 069) ───────────────────────────────────────
--- Public read only while the owning project is published. `project_is_published`
--- is a definer helper for the same reason `is_admin()` is: the projects policy
--- is owner-only, so an inline EXISTS would be filtered by RLS for every
--- visitor and the live routes would read as empty (silent 404s).
+-- Public read only while the owning project is published — plus the OWNER
+-- always (decision 25): the publish writes the snapshot BEFORE the status
+-- flip (decision 15), so the owner's upsert forms (`on_conflict … do
+-- update/nothing`) need row SELECT visibility mid-publish, and Postgres
+-- consults the SELECT policy on every conflict-target form even when the
+-- resolution would have taken a plain-insert path (`return=minimal`
+-- included). Without the owner rung a draft project can never be
+-- (re)published — the first UI-driven publish surfaced this as a 42501.
+-- `project_is_published` stays a definer helper for the same reason
+-- `is_admin()` is: the projects policy is owner-only, so an inline EXISTS
+-- would be filtered by RLS for every visitor and the live routes would read
+-- as empty (silent 404s).
 drop policy if exists published_entry_points_select_when_published
   on public.published_entry_points;
 create policy published_entry_points_select_when_published
   on public.published_entry_points for select
   to public
-  using (project_is_published(project_id));
+  using (project_is_published(project_id) or owner_id = auth.uid());
 
 -- Owner writes, mirroring the projects F7 shape: the WITH CHECK forbids
 -- re-stamping owner_id and refuses a membership in someone else's project.

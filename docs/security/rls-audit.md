@@ -66,7 +66,7 @@ All tables have RLS enabled; no views exist in `public`; no `public.*` table is 
 | `route_redirects` | `route_redirects_select_everyone` | SELECT | **public** | `true` (a renamed project must answer its old URL for anonymous visitors) | — |
 | `route_redirects` | `route_redirects_delete_own` | DELETE | authenticated | `owner_id = auth.uid()` (069 task 3: unpublish clears the project's redirects **before** the status flip — with SELECT-only RLS the delete matched 0 rows and redirects kept serving) | — |
 | `route_redirects` | *(no INSERT/UPDATE — rows come from the `projects_claim_handle` trigger, removed with the project by cascade)* | — | — | — | — |
-| `published_entry_points` | `published_entry_points_select_when_published` | SELECT | **public** | `project_is_published(project_id)` (definer helper — the projects policy is owner-only, an inline EXISTS would read as empty for every visitor) | — |
+| `published_entry_points` | `published_entry_points_select_when_published` | SELECT | **public** | `project_is_published(project_id) or owner_id = auth.uid()` (definer helper only — the projects policy is owner-only, an inline EXISTS would read as empty for every visitor; the owner rung is decision 25: the upsert forms need SELECT visibility while the project is still draft, because the publish writes the snapshot before the status flip) | — |
 | `published_entry_points` | `published_entry_points_insert_own` | INSERT | authenticated | — | `owner_id = auth.uid()` **and** project-ownership `exists (...)` |
 | `published_entry_points` | `published_entry_points_update_own` | UPDATE | authenticated | `owner_id = auth.uid()` | `owner_id = auth.uid()` |
 | `published_entry_points` | `published_entry_points_delete_owner` | DELETE | authenticated | `owner_id = auth.uid()` | — |
@@ -215,6 +215,18 @@ Test fixtures (2 users, 2 uis, versions, published row) were removed afterwards;
   public value space; it never returns `owner_id`), and
   `project_is_published()` is `anon` + `authenticated` for the same
   policy-evaluation reason as `is_admin()`.
+- **Addendum 2026-11-05 (plan 069 task 6, decision 25):**
+  `published_entry_points_select_when_published` gains the owner rung —
+  `using (project_is_published(project_id) or owner_id = auth.uid())`
+  (migration `plan_069_entry_points_select_owner` applied live, plus
+  `db/03`). Reason: the publish upserts the snapshot BEFORE the status
+  flip (decision 15), and every Postgres conflict-target form —
+  `on conflict … do update` and even `do nothing` with `return=minimal` —
+  consults the target table's SELECT policy regardless; a draft project's
+  SELECT policy denied that and the owner's first (re)publish died 42501
+  (caught by the first UI-driven publish e2e). The public surface is
+  unchanged: anonymous reads stay gated purely on
+  `project_is_published`, and owners now see ONLY their own rows.
 - 24 h logs: no failed logins, no 4xx/5xx auth responses, audit trail shows only the owner's own `login`/`token_refreshed`/`token_revoked` events from a single IP. `postgres_logs` anomalies are only this audit's own denial probes (`row-level security policy` / `permission denied for table site_settings`) plus checkpoints — nothing else.
 
 ## Residual notes
