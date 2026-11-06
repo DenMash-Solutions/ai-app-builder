@@ -1,6 +1,6 @@
 # 072 — Component-Aware Generation (F22) — Implementation Plan
 
-**Status:** approved
+**Status:** implemented
 **Date:** 2026-11-06
 **Owner:** follow-up F22 (generation ignores installed components), registered from plan 070. F23 (project orchestration) was split out of this plan 2026-11-06 — see Out of scope and decisions 4/5/6/8, which are preserved verbatim for F23's own plan.
 
@@ -142,11 +142,26 @@ one.
       `e2e/msw/init.ts`), standalone green (`test:e2e:component-refs`
       script added). Existing generate e2e stay green (no components in
       those contexts ⇒ the block never ships).
-- [ ] Full chain: `bun run lint && bunx tsc --noEmit && bun run test` +
-      `bun run test:e2e` (or the per-spec scripts).
-- [ ] Optional MCP: on the real account, install a navbar in a project,
+- [x] Full chain: `bun run lint && bunx tsc --noEmit && bun run test` +
+      `bun run test:e2e` (or the per-spec scripts). — gate green (1161
+      unit); full e2e 149 passed / 2 failed, both green in isolation
+      (`project-publish` 2 passed, `ecommerce` 7 passed) = known
+      publish-under-load flakes, no code change per flake policy.
+- [x] Optional MCP: on the real account, install a navbar in a project,
       generate a new screen, confirm the navbar expanded and the picker
-      shows the new install.
+      shows the new install. — run 2026-11-06 on admin@e2e.com (user
+      chose the current account; it owns no component assets, so a
+      `Header` component was service-role seeded first — the first-party
+      seed 073 formalizes). Real LLM (`gemini-3.1-flash-lite`):
+      `context.components` shipped in the request, the model emitted the
+      `data-component-ref` marker on the first try, screen #2 rendered
+      the expanded "Acme Header" with 0 markers left, the committed spec
+      had no marker + `data-template-id` provenance, and installs read
+      2 rows locally **and** remotely (picker + REST), the second pushed
+      phase-B against the generated host. Picker proof: with a v2
+      seeded, the update dialog read **"Update 2 copies to v2"**
+      (project-scoped count = seeded install + expansion install).
+      Evidence: `mcp-check-update-dialog.png` beside this file.
 
 *F23's verification items (`orchestrate.test.ts`, `/api/plan` parsing
 tests, the 3-screen build e2e + MSW `*/api/plan` handler) moved out with
@@ -160,3 +175,6 @@ the split (2026-11-06) and belong to F23's own plan.*
 | 2026-11-06 | Clarifying questions answered by the user: component source = installs + templates (decision 7), trigger = explicit action + plan preview (decision 8). |
 | 2026-11-06 | **Scope change (user sequencing decision): F23 split out** — order is F22 → project templates (073) → F23; F23 items moved to Out of scope, decisions 4/5/6/8 preserved for F23's plan, F23 verification items moved out. 072 = F22 only. |
 | 2026-11-06 | **Approved** by user (alongside 073 and 074). |
+| 2026-11-06 | Code shipped (`1e8d7c6`) + e2e (`4a8f739`); gate green (1161 unit); full e2e 149 passed with 2 publish-under-load flakes, both green in isolation. |
+| 2026-11-06 | **Optional MCP check run and passed** on admin@e2e.com with the real LLM: pairing shipped, marker emitted first-try, expansion rendered, 2 install rows local + remote (phase-B), picker update dialog counted 2 copies. Evidence: `mcp-check-update-dialog.png`. |
+| 2026-11-06 | **Implemented** — all verification boxes ticked. |
