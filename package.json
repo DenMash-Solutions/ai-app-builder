@@ -14,6 +14,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:authed": "playwright test e2e/authed.spec.ts --no-deps",
     "test:e2e:catalog": "playwright test e2e/catalog.spec.ts --no-deps",
+    "test:e2e:component-refs": "playwright test e2e/component-refs.spec.ts --no-deps",
     "test:e2e:project-publish": "playwright test e2e/project-publish.spec.ts --no-deps",
     "test:e2e:signout": "playwright test e2e/signout.spec.ts --no-deps",
     "test:e2e:usernames": "playwright test e2e/usernames.spec.ts --no-deps",

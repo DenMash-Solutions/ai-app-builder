@@ -11,6 +11,9 @@ interface MockWindow {
   __GENERATE_CALLS__?: number;
   /** Prompt of the most recent intercepted /api/generate request. */
   __LAST_GENERATE_PROMPT__?: string;
+  /** `context.components` of the most recent /api/generate request —
+   *  the F22 (072) pairing proof: [] when the list never shipped. */
+  __LAST_GENERATE_COMPONENTS__?: { id: string; name: string }[];
   /** The most recent intercepted /api/data-proxy call (keyed lane, 050). */
   __LAST_PROXY__?: {
     ref: string;
@@ -49,9 +52,14 @@ const worker = setupWorker(
     const body = (await request.json().catch(() => ({}))) as {
       currentSpec?: { root?: string } | null;
       prompt?: string;
+      context?: { components?: unknown } | null;
     };
     mockWindow.__LAST_GENERATE_PROMPT__ =
       typeof body.prompt === "string" ? body.prompt : "";
+    const components = body.context?.components;
+    mockWindow.__LAST_GENERATE_COMPONENTS__ = Array.isArray(components)
+      ? (components as { id: string; name: string }[])
+      : [];
 
     if (config.delayMs && config.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, config.delayMs));

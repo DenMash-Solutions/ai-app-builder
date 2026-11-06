@@ -128,16 +128,20 @@ one.
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Unit — `lib/playground/catalog-rules.test.ts`: rules pair behavior
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+- [x] Unit — `lib/playground/catalog-rules.test.ts`: rules pair behavior
       (empty list ⇒ no rules/block), `parseComponents` drops malformed
       entries and caps at 12, block lists ids/names only.
-- [ ] Unit — expansion: marker → catalog install recorded + subtree in
+- [x] Unit — expansion: marker → catalog install recorded + subtree in
       place (fresh keys, `data-template-id`), template path stamps only,
       unknown id dropped without failing, marker inside an edit spec.
-- [ ] e2e — one new test asserts a component reference expands (install
-      row + rendered subtree). Existing generate e2e stay green (no
-      components in those contexts ⇒ the block never ships).
+- [x] e2e — one new test asserts a component reference expands (install
+      row + rendered subtree): `e2e/component-refs.spec.ts` (local-only
+      seed via `addInitScript` — project + active + catalog asset with
+      one existing install; MSW `context.components` capture added to
+      `e2e/msw/init.ts`), standalone green (`test:e2e:component-refs`
+      script added). Existing generate e2e stay green (no components in
+      those contexts ⇒ the block never ships).
 - [ ] Full chain: `bun run lint && bunx tsc --noEmit && bun run test` +
       `bun run test:e2e` (or the per-spec scripts).
 - [ ] Optional MCP: on the real account, install a navbar in a project,

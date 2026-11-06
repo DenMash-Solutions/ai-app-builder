@@ -57,6 +57,21 @@ export function lastGeneratePrompt(page: Page): Promise<string> {
   );
 }
 
+/** `context.components` of the most recent `/api/generate` request (072
+ *  F22) — `[]` when the component list never shipped with the request. */
+export function lastGenerateComponents(
+  page: Page,
+): Promise<{ id: string; name: string }[]> {
+  return page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __LAST_GENERATE_COMPONENTS__?: { id: string; name: string }[];
+        }
+      ).__LAST_GENERATE_COMPONENTS__ ?? [],
+  );
+}
+
 /** Top-level spec blocks besides `root`/`elements` — each rides its own
  *  `add` patch, the shape the model's JSONL stream uses (plan 070 task 2). */
 const SPEC_TOP_LEVEL_BLOCKS = {
