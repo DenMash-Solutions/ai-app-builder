@@ -10,12 +10,18 @@
     "compareAt": null
   },
   "dataSources": {
-    "browserStore": { "provider": "localStorage", "config": {} },
+    "browserStore": {
+      "provider": "localStorage",
+      "config": {}
+    },
     "storefront": {
       "provider": "api",
       "config": {
         "baseUrl": "http://localhost:3000/api-public",
-        "auth": { "type": "bearer", "ref": "ecommerce" }
+        "auth": {
+          "type": "bearer",
+          "ref": "ecommerce"
+        }
       }
     }
   },
@@ -43,19 +49,30 @@
     }
   },
   "queries": {
-    "cartList": { "resource": "cartItems", "operation": "list" },
+    "cartList": {
+      "resource": "cartItems",
+      "operation": "list"
+    },
     "productsDetail": {
       "resource": "products",
       "operation": "get",
-      "params": { "id": { "$state": "/id" } }
+      "params": {
+        "id": {
+          "$state": "/id"
+        }
+      }
     }
   },
   "elements": {
     "pd-root": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "md" },
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
+      "children": ["slot-navbar", "pd-meta", "slot-sidebar"],
       "watch": {
-        "/queries/productsDetail/data": [
+        "/queries/productsDetail/data/0/price": [
           {
             "action": "setState",
             "params": {
@@ -64,14 +81,35 @@
                 "$state": "/queries/productsDetail/data/0/price"
               }
             }
-          },
+          }
+        ]
+      }
+    },
+    "slot-navbar": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
+      "children": []
+    },
+    "pd-meta": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
+      "watch": {
+        "/queries/productsDetail/data/0/compareAt": [
           {
             "action": "setState",
             "params": {
               "statePath": "/compareAt",
               "value": {
                 "$coalesce": [
-                  { "$state": "/queries/productsDetail/data/0/compareAt" },
+                  {
+                    "$state": "/queries/productsDetail/data/0/compareAt"
+                  },
                   null
                 ]
               }
@@ -79,21 +117,25 @@
           }
         ]
       },
-      "children": ["slot-navbar", "pd-loading", "pd-block", "slot-sidebar"]
-    },
-    "slot-navbar": {
-      "type": "Stack",
-      "props": { "direction": "vertical", "gap": "md" },
-      "children": []
+      "children": ["pd-loading", "pd-block"]
     },
     "pd-loading": {
       "type": "Text",
-      "props": { "text": "Loading product…", "variant": "muted" },
-      "visible": { "$state": "/queries/productsDetail/status", "eq": "loading" }
+      "props": {
+        "text": "Loading product…",
+        "variant": "muted"
+      },
+      "visible": {
+        "$state": "/queries/productsDetail/status",
+        "eq": "loading"
+      }
     },
     "pd-block": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "md" },
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
       "visible": {
         "$state": "/queries/productsDetail/status",
         "eq": "success"
@@ -111,8 +153,12 @@
     "pd-image": {
       "type": "Image",
       "props": {
-        "src": { "$state": "/queries/productsDetail/data/0/image" },
-        "alt": { "$state": "/queries/productsDetail/data/0/name" },
+        "src": {
+          "$state": "/queries/productsDetail/data/0/image"
+        },
+        "alt": {
+          "$state": "/queries/productsDetail/data/0/name"
+        },
         "width": 400,
         "height": 300
       }
@@ -120,34 +166,51 @@
     "pd-name": {
       "type": "Heading",
       "props": {
-        "text": { "$state": "/queries/productsDetail/data/0/name" },
+        "text": {
+          "$state": "/queries/productsDetail/data/0/name"
+        },
         "level": "h1"
       }
     },
     "slot-price": {
       "type": "Stack",
-      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "align": "center"
+      },
       "children": []
     },
     "pd-desc": {
       "type": "Text",
       "props": {
-        "text": { "$state": "/queries/productsDetail/data/0/description" },
+        "text": {
+          "$state": "/queries/productsDetail/data/0/description"
+        },
         "variant": "muted"
       }
     },
     "pd-qty": {
       "type": "Stack",
-      "props": { "direction": "horizontal", "gap": "sm", "align": "center" },
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "align": "center"
+      },
       "children": ["pd-qty-label", "pd-minus", "pd-qty-value", "pd-plus"]
     },
     "pd-qty-label": {
       "type": "Text",
-      "props": { "text": "Quantity" }
+      "props": {
+        "text": "Quantity"
+      }
     },
     "pd-minus": {
       "type": "Button",
-      "props": { "label": "−", "variant": "secondary" },
+      "props": {
+        "label": "−",
+        "variant": "secondary"
+      },
       "on": {
         "press": [
           {
@@ -156,7 +219,13 @@
               "statePath": "/qty",
               "value": {
                 "$math": "max",
-                "a": { "$math": "subtract", "a": { "$state": "/qty" }, "b": 1 },
+                "a": {
+                  "$math": "subtract",
+                  "a": {
+                    "$state": "/qty"
+                  },
+                  "b": 1
+                },
                 "b": 1
               }
             }
@@ -166,11 +235,17 @@
     },
     "pd-qty-value": {
       "type": "Text",
-      "props": { "text": { "$state": "/qty" } }
+      "props": {
+        "text": {
+          "$state": "/qty"
+        }
+      }
     },
     "pd-plus": {
       "type": "Button",
-      "props": { "label": "+" },
+      "props": {
+        "label": "+"
+      },
       "on": {
         "press": [
           {
@@ -179,7 +254,9 @@
               "statePath": "/qty",
               "value": {
                 "$math": "add",
-                "a": { "$state": "/qty" },
+                "a": {
+                  "$state": "/qty"
+                },
                 "b": 1
               }
             }
@@ -189,7 +266,9 @@
     },
     "pd-add": {
       "type": "Button",
-      "props": { "label": "Add to cart" },
+      "props": {
+        "label": "Add to cart"
+      },
       "on": {
         "press": [
           {
@@ -198,36 +277,59 @@
               "op": "create",
               "resource": "cartItems",
               "input": {
-                "name": { "$state": "/queries/productsDetail/data/0/name" },
-                "price": { "$state": "/queries/productsDetail/data/0/price" },
-                "qty": { "$state": "/qty" },
+                "name": {
+                  "$state": "/queries/productsDetail/data/0/name"
+                },
+                "price": {
+                  "$state": "/queries/productsDetail/data/0/price"
+                },
+                "qty": {
+                  "$state": "/qty"
+                },
                 "lineTotal": {
                   "$math": "multiply",
-                  "a": { "$state": "/queries/productsDetail/data/0/price" },
-                  "b": { "$state": "/qty" }
+                  "a": {
+                    "$state": "/queries/productsDetail/data/0/price"
+                  },
+                  "b": {
+                    "$state": "/qty"
+                  }
                 }
               }
             }
           },
           {
             "action": "setState",
-            "params": { "statePath": "/added", "value": true }
+            "params": {
+              "statePath": "/added",
+              "value": true
+            }
           },
           {
             "action": "setState",
-            "params": { "statePath": "/qty", "value": 1 }
+            "params": {
+              "statePath": "/qty",
+              "value": 1
+            }
           }
         ]
       }
     },
     "pd-added": {
       "type": "Badge",
-      "props": { "text": "Added to cart" },
-      "visible": { "$state": "/added" }
+      "props": {
+        "text": "Added to cart"
+      },
+      "visible": {
+        "$state": "/added"
+      }
     },
     "slot-sidebar": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "md" },
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
       "children": []
     }
   }

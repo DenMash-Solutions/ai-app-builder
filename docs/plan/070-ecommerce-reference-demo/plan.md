@@ -48,6 +48,13 @@ first-class acceptance, not a side effect.
   an `orders` record cannot carry a created-at timestamp. Order rows show
   id, status, total/itemCount instead (descoped 2026-11-05, task-1
   research)
+- **Fixing the multi-action element `watch` limitation in the runtime**
+  — MCP-verified 2026-11-05 (see decision 16a): after the first
+  `await execute()` in a watch effect's loop, later iterations resolve
+  `$state` derefs EMPTY (the actions still run — literal params apply
+  fine). 070 works around it structurally (one action per element
+  watch); the root cause in `@json-render/react`'s watch effect needs an
+  upstream investigation → follow-up **F24**
 
 ## The 15 scenarios (acceptance script)
 
@@ -292,6 +299,29 @@ support cross-project reuse; MCP spot-check precedent = plans 032/056
     `/price` (+ `/compareAt` on Product details), each host mirroring its
     own query via a root watch. Rejected: re-deriving totals from the live
     cart (an emptied cart would zero out placed orders).
+16a. **One `setState` action per element `watch` — MCP-verified runtime
+    constraint (2026-11-05)**: importing the seeds into the playground
+    showed the multi-action watches only applying their first action's
+    `$state` deref. Deterministic across 4 experiments: (1) 1 path × N
+    actions → 2nd+ actions run but their `$state` resolves empty
+    (literal params DO apply); (2) 1 element × 2 paths × 1 action each →
+    2nd path resolves empty; (3) literal discriminator → proves the
+    action executes (not cancelled); (4) **2 elements × 1 action each →
+    both apply**, even firing simultaneously. Applied: Checkout prefill
+    moved from a root 5-action watch to **per-Input single-action
+    watches** (each Input's watch = its own data-path action + its
+    `validateForm` path — the two paths change on different events, so
+    each fire has one changed path); Product details split `/price`
+    (pd-root) and `/compareAt` onto a new **always-mounted `pd-meta`**
+    body container (two paths on one element would hit constraint 2;
+    success-gated `pd-block` can't carry it — a newly mounted element's
+    watch never fires for the mount transition). Rejected: keeping the
+    compact root watches (4/5 fields silently empty in the real UI —
+    caught only because the commit was browser-verified). Upstream fix →
+    **F24**. Verified live: all 5 checkout fields prefill + submit
+    enables; both product-details host prices fill (probes `32`/`45`);
+    `on.press` multi-action lists unaffected (cart row + badge both
+    observed).
 
 ## Files
 
@@ -402,3 +432,4 @@ Serial file, split into ~4 tests so a failure localises (069's pattern),
 | 2026-11-05 | task-1 research complete → **decisions 13-16** (implementation-level, scope unchanged): 13 = fixture api sources ride the keyed lane (`config.auth.ref: ecommerce` + `DATA_PROXY_ECOMMERCE_*` env, MSW forwards the ref to the real fixture route, MCP spot-check sequenced after the acceptance-time dev restart) because the 067 in-project gate blocks publishing api resources without a ref; 14 = grid repeats `/filtered-items` with the mirror watch inside the component; 15 = navbar dual cart control gated by `/hasSidebar` (decision-12 opener preserved, no dead clicks); 16 = money via stored `lineTotal` + order snapshot of the cart array. Files section: route path corrected to the `[[...path]]` catch-all, MSW/env additions listed |
 | 2026-11-05 | task-1 verification: element events AND watchers resolve action params through `resolveActionParam` → `resolvePropValue` (directives, `$computed`, nested `$item` = VALUE; top-level `$item` = PATH) — decisions 14/16 mechanically sound. **Descope:** order dates (Out of scope) — spec expressions have no clock |
 | 2026-11-05 | **task 1 authored, gate green** (lint 0 / tsc / 1136 unit pass): fixtures + `app/api-public/[resource]/[[...path]]` route (6 route tests) + 7 screen specs + 7 components ×v1/v2 (all pass `validateSpec` + `validateDataSources({inProject:true})` in `demo/ecommerce/specs.test.ts`, 49 tests incl. route/slot/sidebar/mirror-seed contracts) + README replay section + `DATA_PROXY_ECOMMERCE_*` env pair. **Gate widened**: `bun run test` → `bun test lib components app demo` (route/seed tests were outside the chain; bare `bun test` also picks up Playwright files — pre-existing). Authoring gotchas recorded in session memory (Heading level string enum, Text/Badge ignore className, mirror-repeat screens seed `state.queries.<q>.data` for validateSpec) |
+| 2026-11-05 | **task-1 MCP/browser verification (user challenge: "committed without MCP test")** — all green: fixture route live (list/get 200, allowlist 404s, Chromium JSON `rows:6`); keyed lane live **without a dev restart** (Next dev hot-reloaded `.env.local` — proxy 200, so acceptance sequencing no longer depends on the restart); checkout seed imported into `/en/ui` prefills via the keyed lane after the 16a fix (5/5 fields, submit enabled, no errors); product-details seed renders by route param with both host watches (probes 32/45) and `Add to cart` creates the localStorage row + badge. **Finding → decision 16a + F24**: multi-action/multi-path element watches resolve `$state` empty after the first iteration — checkout + product-details specs rewritten (per-element single-action), gate re-run green (1136 pass) |

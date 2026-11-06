@@ -11,12 +11,18 @@
     "shipCountry": ""
   },
   "dataSources": {
-    "browserStore": { "provider": "localStorage", "config": {} },
+    "browserStore": {
+      "provider": "localStorage",
+      "config": {}
+    },
     "storefront": {
       "provider": "api",
       "config": {
         "baseUrl": "http://localhost:3000/api-public",
-        "auth": { "type": "bearer", "ref": "ecommerce" }
+        "auth": {
+          "type": "bearer",
+          "ref": "ecommerce"
+        }
       }
     }
   },
@@ -55,51 +61,21 @@
     }
   },
   "queries": {
-    "cartList": { "resource": "cartItems", "operation": "list" },
-    "customersList": { "resource": "customers", "operation": "list" }
+    "cartList": {
+      "resource": "cartItems",
+      "operation": "list"
+    },
+    "customersList": {
+      "resource": "customers",
+      "operation": "list"
+    }
   },
   "elements": {
     "checkout-root": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "md" },
-      "watch": {
-        "/queries/customersList/data": [
-          {
-            "action": "setState",
-            "params": {
-              "statePath": "/shipName",
-              "value": { "$state": "/queries/customersList/data/0/name" }
-            }
-          },
-          {
-            "action": "setState",
-            "params": {
-              "statePath": "/shipStreet",
-              "value": { "$state": "/queries/customersList/data/0/street" }
-            }
-          },
-          {
-            "action": "setState",
-            "params": {
-              "statePath": "/shipCity",
-              "value": { "$state": "/queries/customersList/data/0/city" }
-            }
-          },
-          {
-            "action": "setState",
-            "params": {
-              "statePath": "/shipPostal",
-              "value": { "$state": "/queries/customersList/data/0/postal" }
-            }
-          },
-          {
-            "action": "setState",
-            "params": {
-              "statePath": "/shipCountry",
-              "value": { "$state": "/queries/customersList/data/0/country" }
-            }
-          }
-        ]
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
       },
       "children": [
         "slot-navbar",
@@ -112,16 +88,25 @@
     },
     "slot-navbar": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "md" },
+      "props": {
+        "direction": "vertical",
+        "gap": "md"
+      },
       "children": []
     },
     "checkout-heading": {
       "type": "Heading",
-      "props": { "text": "Checkout", "level": "h1" }
+      "props": {
+        "text": "Checkout",
+        "level": "h1"
+      }
     },
     "checkout-form": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "sm" },
+      "props": {
+        "direction": "vertical",
+        "gap": "sm"
+      },
       "children": ["ci-name", "ci-street", "ci-city", "ci-postal", "ci-country"]
     },
     "ci-name": {
@@ -129,15 +114,37 @@
       "props": {
         "label": "Full name",
         "name": "ship-name",
-        "value": { "$bindState": "/shipName" },
-        "checks": [{ "type": "required", "message": "Name is required" }],
+        "value": {
+          "$bindState": "/shipName"
+        },
+        "checks": [
+          {
+            "type": "required",
+            "message": "Name is required"
+          }
+        ],
         "validateOn": "change"
       },
       "watch": {
-        "/shipName": {
-          "action": "validateForm",
-          "params": { "statePath": "/formValidation" }
-        }
+        "/queries/customersList/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/shipName",
+              "value": {
+                "$state": "/queries/customersList/data/0/name"
+              }
+            }
+          }
+        ],
+        "/shipName": [
+          {
+            "action": "validateForm",
+            "params": {
+              "statePath": "/formValidation"
+            }
+          }
+        ]
       }
     },
     "ci-street": {
@@ -145,15 +152,37 @@
       "props": {
         "label": "Street address",
         "name": "ship-street",
-        "value": { "$bindState": "/shipStreet" },
-        "checks": [{ "type": "required", "message": "Street is required" }],
+        "value": {
+          "$bindState": "/shipStreet"
+        },
+        "checks": [
+          {
+            "type": "required",
+            "message": "Street is required"
+          }
+        ],
         "validateOn": "change"
       },
       "watch": {
-        "/shipStreet": {
-          "action": "validateForm",
-          "params": { "statePath": "/formValidation" }
-        }
+        "/queries/customersList/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/shipStreet",
+              "value": {
+                "$state": "/queries/customersList/data/0/street"
+              }
+            }
+          }
+        ],
+        "/shipStreet": [
+          {
+            "action": "validateForm",
+            "params": {
+              "statePath": "/formValidation"
+            }
+          }
+        ]
       }
     },
     "ci-city": {
@@ -161,15 +190,37 @@
       "props": {
         "label": "City",
         "name": "ship-city",
-        "value": { "$bindState": "/shipCity" },
-        "checks": [{ "type": "required", "message": "City is required" }],
+        "value": {
+          "$bindState": "/shipCity"
+        },
+        "checks": [
+          {
+            "type": "required",
+            "message": "City is required"
+          }
+        ],
         "validateOn": "change"
       },
       "watch": {
-        "/shipCity": {
-          "action": "validateForm",
-          "params": { "statePath": "/formValidation" }
-        }
+        "/queries/customersList/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/shipCity",
+              "value": {
+                "$state": "/queries/customersList/data/0/city"
+              }
+            }
+          }
+        ],
+        "/shipCity": [
+          {
+            "action": "validateForm",
+            "params": {
+              "statePath": "/formValidation"
+            }
+          }
+        ]
       }
     },
     "ci-postal": {
@@ -177,17 +228,37 @@
       "props": {
         "label": "Postal code",
         "name": "ship-postal",
-        "value": { "$bindState": "/shipPostal" },
+        "value": {
+          "$bindState": "/shipPostal"
+        },
         "checks": [
-          { "type": "required", "message": "Postal code is required" }
+          {
+            "type": "required",
+            "message": "Postal code is required"
+          }
         ],
         "validateOn": "change"
       },
       "watch": {
-        "/shipPostal": {
-          "action": "validateForm",
-          "params": { "statePath": "/formValidation" }
-        }
+        "/queries/customersList/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/shipPostal",
+              "value": {
+                "$state": "/queries/customersList/data/0/postal"
+              }
+            }
+          }
+        ],
+        "/shipPostal": [
+          {
+            "action": "validateForm",
+            "params": {
+              "statePath": "/formValidation"
+            }
+          }
+        ]
       }
     },
     "ci-country": {
@@ -195,27 +266,56 @@
       "props": {
         "label": "Country",
         "name": "ship-country",
-        "value": { "$bindState": "/shipCountry" },
-        "checks": [{ "type": "required", "message": "Country is required" }],
+        "value": {
+          "$bindState": "/shipCountry"
+        },
+        "checks": [
+          {
+            "type": "required",
+            "message": "Country is required"
+          }
+        ],
         "validateOn": "change"
       },
       "watch": {
-        "/shipCountry": {
-          "action": "validateForm",
-          "params": { "statePath": "/formValidation" }
-        }
+        "/queries/customersList/data": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/shipCountry",
+              "value": {
+                "$state": "/queries/customersList/data/0/country"
+              }
+            }
+          }
+        ],
+        "/shipCountry": [
+          {
+            "action": "validateForm",
+            "params": {
+              "statePath": "/formValidation"
+            }
+          }
+        ]
       }
     },
     "slot-summary": {
       "type": "Stack",
-      "props": { "direction": "vertical", "gap": "sm" },
+      "props": {
+        "direction": "vertical",
+        "gap": "sm"
+      },
       "children": []
     },
     "checkout-place": {
       "type": "Button",
-      "props": { "label": "Place order" },
+      "props": {
+        "label": "Place order"
+      },
       "disabled": {
-        "$cond": { "$state": "/formValidation/valid" },
+        "$cond": {
+          "$state": "/formValidation/valid"
+        },
         "$then": false,
         "$else": true
       },
@@ -232,19 +332,30 @@
                   "$math": "add",
                   "a": {
                     "$agg": "sum",
-                    "items": { "$state": "/queries/cartList/data" },
+                    "items": {
+                      "$state": "/queries/cartList/data"
+                    },
                     "field": "lineTotal"
                   },
                   "b": 5
                 },
                 "itemCount": {
-                  "$count": { "$state": "/queries/cartList/data" }
+                  "$count": {
+                    "$state": "/queries/cartList/data"
+                  }
                 },
-                "items": { "$state": "/queries/cartList/data" }
+                "items": {
+                  "$state": "/queries/cartList/data"
+                }
               }
             }
           },
-          { "action": "navigate", "params": { "screen": "Orders" } }
+          {
+            "action": "navigate",
+            "params": {
+              "screen": "Orders"
+            }
+          }
         ]
       }
     },
