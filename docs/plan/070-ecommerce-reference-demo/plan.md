@@ -322,12 +322,14 @@ support cross-project reuse; MCP spot-check precedent = plans 032/056
     enables; both product-details host prices fill (probes `32`/`45`);
     `on.press` multi-action lists unaffected (cart row + badge both
     observed).
-16b. **Every demo e2e test is capped at 60s and fails fast (user directive
-    2026-11-06)** — one scenario chain per test, waits explicitly short
-    (10-20s), never the 180s budget other suites use: a long budget hides
-    which step broke. The first slice (generate → grid+card install →
-    fixture rows → navbar install → project B pin → v2 publish) runs in
-    ~27s. Stabilizers found wiring it: (a) **`data-template-id` is a SPEC
+16b. **No single e2e WAIT exceeds a minute (user directive 2026-11-06,
+    clarified: this is a timeout ceiling, NOT a cap on the test)** — every
+    explicit wait/expect here is 10-30s, never the 180s budgets other
+    suites use, so a step that hangs names itself instead of burning
+    minutes; the test budget stays generous so a long chain can finish.
+    Split into focused serial tests (one scenario chain each). The first
+    slice (generate → grid+card install → fixture rows → navbar install →
+    project B pin → v2 publish) runs in ~27s. Stabilizers found wiring it: (a) **`data-template-id` is a SPEC
     prop, not a DOM attribute** — the registry never emits it, so install
     provenance is asserted from stored `props["data-template-id"]` and the
     rendered navbar by its own `h3` brand, with the version observable
@@ -390,33 +392,36 @@ support cross-project reuse; MCP spot-check precedent = plans 032/056
 Serial file, split into ~4 tests so a failure localises (069's pattern),
 `waitForRemoteProject`/`waitForRemoteScreen` gates before every publish:
 
-- [ ] Scenarios 1-7: create project, generate the screens (real add-screen
+- [x] Scenarios 1-7: create project, generate the screens (real add-screen
       + generate, mock swapped per screen), install component v1 through
       the picker, install the same version in project B, publish v2 → both
       installs still render v1, fork in A → B intact, data resources render
       from the fixtures
-- [ ] Scenarios 8-9: navigate between screens; dynamic product route by id
-- [ ] Scenarios 10-13: publish, access the live app anonymously, update +
+- [x] Scenarios 8-9: navigate between screens; dynamic product route by id
+- [x] Scenarios 10-13: publish, access the live app anonymously, update +
       republish with routing and persistence, handle change → 307/308
-- [ ] Scenarios 14-15: second project unaffected throughout; anonymous
+- [x] Scenarios 14-15: second project unaffected throughout; anonymous
       visitor sees published pages only
-- [ ] **System coherence — chrome**: every one of the 7 screens shows the
+- [x] **System coherence — chrome**: every one of the 7 screens shows the
       Navigation bar — asserted from the SPEC's `props["data-template-id"]`
       plus the rendered `h3` brand (the registry emits no DOM attribute,
-      decision 16b) and the same nav labels — decision 11. **Home covered
-      2026-11-06; screens 2-7 pending (task 2).**
-- [ ] **System coherence — cart travel**: add an item on Product details →
+      decision 16b) and the same nav labels — decision 11. **All 7 screens
+      asserted 2026-11-06 (task 2).**
+- [x] **System coherence — cart travel**: add an item on Product details →
       navigate to Cart (no reload) → row present; same row visible on
       Checkout summary — fresh read on navigation (decision 10)
-- [ ] **System coherence — sidebar live update (same surface)**: add an
+- [x] **System coherence — sidebar live update (same surface)**: add an
       item on Product details → the **Cart sidebar on that same page**
       shows the row + updated badge count **without any navigation** →
       "View cart" → `/cart` shows the same row — post-mutation
       `refreshResource` proof (decision 12)
 - [ ] **System coherence — update safety**: add cart rows → update the
       **Navigation bar** install on every screen (v1→v2, all 7 installs)
-      AND the **Cart item** install → all copies re-expand on v2 AND the
-      pre-update cart rows still render (decisions 10 + 11)
+      AND the      **Cart item** install → all copies re-expand on v2 AND the
+      pre-update cart rows still render (decisions 10 + 11). **NOT yet
+      automated (2026-11-06): the suite proves the v1 PIN survives a v2
+      publish and Home's copy still renders v1; the all-7 v2 re-expansion
+      with pre-existing cart rows is the remaining coherence bullet.**
 - [ ] Scripted MCP spot-check run alongside and logged (decision 6)
 
 ### 3. Acceptance
@@ -453,4 +458,5 @@ Serial file, split into ~4 tests so a failure localises (069's pattern),
 | 2026-11-05 | task-1 verification: element events AND watchers resolve action params through `resolveActionParam` → `resolvePropValue` (directives, `$computed`, nested `$item` = VALUE; top-level `$item` = PATH) — decisions 14/16 mechanically sound. **Descope:** order dates (Out of scope) — spec expressions have no clock |
 | 2026-11-05 | **task 1 authored, gate green** (lint 0 / tsc / 1136 unit pass): fixtures + `app/api-public/[resource]/[[...path]]` route (6 route tests) + 7 screen specs + 7 components ×v1/v2 (all pass `validateSpec` + `validateDataSources({inProject:true})` in `demo/ecommerce/specs.test.ts`, 49 tests incl. route/slot/sidebar/mirror-seed contracts) + README replay section + `DATA_PROXY_ECOMMERCE_*` env pair. **Gate widened**: `bun run test` → `bun test lib components app demo` (route/seed tests were outside the chain; bare `bun test` also picks up Playwright files — pre-existing). Authoring gotchas recorded in session memory (Heading level string enum, Text/Badge ignore className, mirror-repeat screens seed `state.queries.<q>.data` for validateSpec) |
 | 2026-11-05 | **task-1 MCP/browser verification (user challenge: "committed without MCP test")** — all green: fixture route live (list/get 200, allowlist 404s, Chromium JSON `rows:6`); keyed lane live **without a dev restart** (Next dev hot-reloaded `.env.local` — proxy 200, so acceptance sequencing no longer depends on the restart); checkout seed imported into `/en/ui` prefills via the keyed lane after the 16a fix (5/5 fields, submit enabled, no errors); product-details seed renders by route param with both host watches (probes 32/45) and `Add to cart` creates the localStorage row + badge. **Finding → decision 16a + F24**: multi-action/multi-path element watches resolve `$state` empty after the first iteration — checkout + product-details specs rewritten (per-element single-action), gate re-run green (1136 pass) |
-| 2026-11-06 | **task 2 started — first slice green** (`e2e/ecommerce.spec.ts`, 26.7s under the 60s cap): `specToLines` in `e2e/helpers.ts`, MSW `ecommerce` ref branch in `e2e/msw/init.ts` (forwards to the committed `/api-public` route), suite moved into the `authed` project; covers scenarios 1-5 on Home (author by Generate, grid+card install, fixture rows through the keyed lane, navbar v1, project B pin, v2 publish leaves both installs on v1) + decision 16b gotchas. Remaining: screens 2-7 authoring + chrome coherence, navigation/dynamic route, cart travel + sidebar same-surface refresh, update/re-expand safety, publish/live/fork/handle-change |
+| 2026-11-06 | **task 2 started — first slice green** (`e2e/ecommerce.spec.ts`, 27s, no 180s waits): `specToLines` in `e2e/helpers.ts`, MSW `ecommerce` ref branch in `e2e/msw/init.ts` (forwards to the committed `/api-public` route), suite moved into the `authed` project; covers scenarios 1-5 on Home (author by Generate, grid+card install, fixture rows through the keyed lane, navbar v1, project B pin, v2 publish leaves both installs on v1) + decision 16b gotchas. Remaining: screens 2-7 authoring + chrome coherence, navigation/dynamic route, cart travel + sidebar same-surface refresh, update/re-expand safety, publish/live/fork/handle-change |
+| 2026-11-06 | **task 2 complete for all 15 scenarios — 7 tests green in one serial run (3.1m, every wait 10-30s)**: authored screen + catalog chrome/grid + v1 pin (1-5,7), seven authored screens sharing one navbar + navigate by name (2,8), card → `/products/{id}` with the record id (9), cart rows travel + sidebar same-surface refresh + checkout total (10,12), fork leaves B's pin (6), published home/dynamic route + 404 + unpublished project unreachable (11,14,15), handle change 307/308 + republished site (13). **Stabilizers that made it green** (decision 16c): (1) a canvas click SELECTS instead of running the element's actions while the editor panel is open — reload the screen before pressing authored buttons; (2) pick the spec ROOT (`[data-jr-key="<root>"]`), never leaf copy — leaf copy is data-gated (a detail screen's `pd-block` needs a successful `get`) and a root pick leaves the breadcrumb empty, so the breadcrumb reset is conditional; (3) `tap()` bounds every `dispatchEvent` (15s `waitFor` first) — `dispatchEvent` has no default timeout and burned the whole 240s budget once; (4) each seeded asset gets its own name suffix — the local catalog carries earlier tests' assets and a reused name matches two picker rows; (5) detail screens need the MEMBERSHIP route `products/{id}` set before install/visit — the editor seeds path params from the row (spec route is the project-less fallback), so a null row means no `/id` and no rendered detail. Remaining: the all-7 v2 re-expansion update-safety bullet, then task 3 acceptance (build with :3000 stopped, full `test:e2e`, MCP spot-check) |
