@@ -15,6 +15,11 @@ import {
 } from "@/lib/playground/repair-patch-line";
 import { DATA_SOURCE_RULES } from "@/lib/playground/data-source-rules";
 import {
+  CATALOG_RULES,
+  componentBlock,
+  parseComponents,
+} from "@/lib/playground/catalog-rules";
+import {
   NAVIGATE_RULES,
   parseScreens,
   siblingScreensBlock,
@@ -38,7 +43,14 @@ interface GenerateBody {
   currentSpec?: unknown;
   // screens: client-computed sibling list ({ref, name} pairs, 061) — the
   // only side that can see this device's history. Validated by parseScreens.
-  context?: { model?: unknown; locale?: unknown; screens?: unknown } | null;
+  // components: client-computed component list ({id, name} pairs, 072 F22) —
+  // project catalog installs + saved templates. Validated by parseComponents.
+  context?: {
+    model?: unknown;
+    locale?: unknown;
+    screens?: unknown;
+    components?: unknown;
+  } | null;
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -132,6 +144,11 @@ export async function POST(req: Request) {
   // carries real targets, so a fresh project never sees the action offered.
   const screens = parseScreens(context?.screens);
   const hasSiblings = screens.length > 0;
+  // Component references (072 F22, decision 2): CATALOG_RULES and the
+  // component list ship as the same kind of pair — the marker vocabulary
+  // is offered only when real components exist to reference.
+  const components = parseComponents(context?.components);
+  const hasComponents = components.length > 0;
   const systemPrompt =
     playgroundCatalog.prompt({
       editModes: ["patch"],
@@ -141,6 +158,7 @@ export async function POST(req: Request) {
     DATA_SOURCE_RULES +
     i18nRules(locale) +
     (hasSiblings ? NAVIGATE_RULES : "") +
+    (hasComponents ? CATALOG_RULES : "") +
     (isEdit ? "" : COMPLETENESS_RULES);
 
   const userPrompt =
@@ -148,7 +166,9 @@ export async function POST(req: Request) {
       prompt,
       currentSpec: spec,
       editModes: ["patch"],
-    }) + (hasSiblings ? siblingScreensBlock(screens) : "");
+    }) +
+    (hasSiblings ? siblingScreensBlock(screens) : "") +
+    (hasComponents ? componentBlock(components) : "");
 
   const result = streamText({
     model: google(model),

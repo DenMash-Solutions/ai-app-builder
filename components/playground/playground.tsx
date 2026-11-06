@@ -53,6 +53,7 @@ import {
   findParentKey,
   freeformRevisionLabel,
   getAncestorPath,
+  getTemplates,
   insertElement,
   insertTemplate,
   moveElement,
@@ -71,6 +72,7 @@ import {
   scopeTargetsInstruction,
   setNavigateRecordParam,
   structureRevisionLabel,
+  subscribeTemplates,
   unwrapElement,
   wrapElement,
 } from "@/lib/editor";
@@ -80,7 +82,13 @@ import type {
   MoveDirection,
   PromptScopeTarget,
 } from "@/lib/editor";
-import { getCatalogAssets, getCatalogVersions } from "@/lib/catalog/catalog";
+import {
+  CATALOG_TYPES,
+  getCatalogAssets,
+  getCatalogInstalls,
+  getCatalogVersions,
+  subscribeCatalog,
+} from "@/lib/catalog/catalog";
 import {
   forkCatalogAsset,
   insertCatalogComponent,
@@ -89,6 +97,16 @@ import {
 } from "@/lib/catalog/install";
 import { createClient } from "@/lib/supabase/client";
 import { examplePropsFor } from "@/lib/playground/catalog";
+import {
+  MAX_LISTED_COMPONENTS,
+  type ComponentListing,
+} from "@/lib/playground/catalog-rules";
+import {
+  expandComponentRefs,
+  mergePendingInstalls,
+  recordComponentInstalls,
+  type PendingComponentInstall,
+} from "@/lib/playground/component-refs";
 import { PLAYGROUND_FUNCTIONS } from "@/lib/playground/computed-functions";
 import { EXAMPLE_PROMPTS } from "@/lib/playground/example-prompts";
 import { getModel, setModel } from "@/lib/playground/model-store";
@@ -133,6 +151,7 @@ import {
 } from "@/lib/history";
 import {
   createProjectEntry,
+  getActiveProjectId,
   getProjects,
   getServerProjects,
   subscribeProjects,
@@ -359,6 +378,10 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
   // Pristine pre-steer spec for the no-op guard — the stream mutates
   // context.previousSpec in place (see the onComplete comment).
   const steerBaselineRef = useRef<Spec | null>(null);
+  // F22 (072): install rows for data-component-ref expansions — phase A
+  // (completion effect) fills it, phase B records it once the host entry
+  // exists. A fresh op overwrites it; only a heal re-entry merges.
+  const componentInstallsRef = useRef<PendingComponentInstall[]>([]);
   // Deferred completion (docs/plan/043-data-sources, rev 1.3): onComplete
   // stashes the streamed spec here; the commit effect below consumes it
   // once the stream state (incl. rawLines) has fully settled.
@@ -412,6 +435,57 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
         : undefined,
     );
   }, [history, activeEntry, memberships, projects]);
+
+  // F22 (072): the component list must refresh when installs or saved
+  // templates change — one tick state invalidates the memo on either
+  // store's write.
+  const [componentsTick, setComponentsTick] = useState(0);
+  useEffect(() => {
+    const unsubCatalog = subscribeCatalog(() =>
+      setComponentsTick((tick) => tick + 1),
+    );
+    const unsubTemplates = subscribeTemplates(() =>
+      setComponentsTick((tick) => tick + 1),
+    );
+    return () => {
+      unsubCatalog();
+      unsubTemplates();
+    };
+  }, []);
+
+  // Components available to the current scope (072 F22, decision 7): the
+  // project's catalog installs first (chrome that must stay shared — each
+  // expansion records its own install row), then saved templates (the
+  // account-global library), deduped by id (a migrated template IS its
+  // catalog asset) and capped like the sibling list.
+  const projectComponents = useMemo<ComponentListing[]>(() => {
+    void componentsTick; // store-write invalidation (subscriptions above)
+    const scope = screenScope(activeEntry);
+    const projectId = typeof scope === "string" ? scope : null;
+    const seen = new Set<string>();
+    const rows: ComponentListing[] = [];
+    if (projectId) {
+      for (const install of getCatalogInstalls()) {
+        if (install.projectId !== projectId || seen.has(install.assetId)) {
+          continue;
+        }
+        const asset = getCatalogAssets().find(
+          (row) => row.id === install.assetId,
+        );
+        if (!asset || asset.type !== CATALOG_TYPES.component) continue;
+        seen.add(asset.id);
+        rows.push({ id: asset.id, name: asset.name });
+        if (rows.length >= MAX_LISTED_COMPONENTS) return rows;
+      }
+    }
+    for (const template of getTemplates()) {
+      if (seen.has(template.id)) continue;
+      seen.add(template.id);
+      rows.push({ id: template.id, name: template.name });
+      if (rows.length >= MAX_LISTED_COMPONENTS) break;
+    }
+    return rows;
+  }, [activeEntry, componentsTick]);
 
   const { spec, isStreaming, send, clear, rawLines } = useUIStream({
     api: "/api/generate",
@@ -510,6 +584,11 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
       model: getModel(),
       locale,
       ...(siblingScreens.length > 0 ? { screens: siblingScreens } : {}),
+      // Component refs (072 F22): same pairing rule as screens — the route
+      // only offers the marker vocabulary when the list ships.
+      ...(projectComponents.length > 0
+        ? { components: projectComponents }
+        : {}),
     });
   };
 
@@ -593,6 +672,42 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
       return;
     }
 
+    // Component refs (072 F22, decision 3): expand data-component-ref
+    // markers AFTER validation and BEFORE the heal — a marker is never a
+    // dangling ref, and an expanded subtree still gets healed before it
+    // commits. Installs are recorded once the host entry exists (generate:
+    // right after createProjectEntry; edit: after the entry lookup below).
+    const expansion = expandComponentRefs(boundSpec, {
+      projectId:
+        op.kind === PENDING_OP_KINDS.generate
+          ? getActiveProjectId()
+          : (getHistory().find((candidate) => candidate.id === op.entryId)
+              ?.projectId ?? null),
+      resolveCatalog: (id) => {
+        const asset = getCatalogAssets().find((row) => row.id === id);
+        if (!asset || asset.type !== CATALOG_TYPES.component) return null;
+        // Pin the asset's LATEST (072: a fresh expansion installs at
+        // current, exactly like the picker's insert path).
+        const version = getCatalogVersions().find(
+          (row) => row.id === asset.latestVersionId && row.assetId === asset.id,
+        );
+        return version ? { asset, version } : null;
+      },
+      resolveTemplate: (id) =>
+        getTemplates().find((row) => row.id === id)?.subtree ?? null,
+    });
+    if (expansion.installs.length > 0) {
+      // The heal re-enters this effect carrying the expanded spec (no
+      // markers left) — merge, so run #1's rows survive. A fresh op
+      // overwrites: a failed op's leftovers can never leak forward.
+      componentInstallsRef.current = op.healAttempted
+        ? mergePendingInstalls(componentInstallsRef.current, expansion.installs)
+        : expansion.installs;
+    } else if (!op.healAttempted) {
+      componentInstallsRef.current = [];
+    }
+    const specWithComponents = expansion.spec;
+
     // Generation resilience (plan 054): a completion that references
     // elements it never defined (dropped or omitted JSONL lines) renders
     // as blank sections — a repeat grid with a missing template shows
@@ -601,7 +716,7 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
     // `healAttempted` set, so a still-broken result commits what it has
     // and says so — never a silent loop. The heal stream stays on the
     // current mount (the generate branch has not navigated yet).
-    const dangling = danglingChildRefs(boundSpec);
+    const dangling = danglingChildRefs(specWithComponents);
     if (dangling.length > 0) {
       if (op.healAttempted) {
         toast.error(t("playground.uiIncomplete"), {
@@ -611,14 +726,21 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
         if (pendingLang) toast.dismiss(langToastId(pendingLang));
         pendingOpRef.current = { ...op, healAttempted: true };
         sendNow(danglingRefsInstruction(dangling), {
-          previousSpec: structuredClone(boundSpec),
+          previousSpec: structuredClone(specWithComponents),
         });
         return;
       }
     }
 
     if (op.kind === PENDING_OP_KINDS.generate) {
-      const entry = createProjectEntry(op.prompt, boundSpec);
+      const entry = createProjectEntry(op.prompt, specWithComponents);
+      // Phase B: the host id exists now — record the expansions' installs
+      // (072 F22) before the screen becomes reachable.
+      recordComponentInstalls(componentInstallsRef.current, {
+        hostUiId: entry.id,
+        projectId: entry.projectId ?? null,
+      });
+      componentInstallsRef.current = [];
       addEntry(entry);
       // The URL owns the active UI: the landing streams the generation,
       // then the committed entry takes over at /ui/[id] (the destination
@@ -646,14 +768,20 @@ export function Playground({ initialRef, initialParam }: PlaygroundProps) {
       }
       return;
     }
+    // Phase B for edits: the host is the edited entry itself.
+    recordComponentInstalls(componentInstallsRef.current, {
+      hostUiId: entry.id,
+      projectId: entry.projectId ?? null,
+    });
+    componentInstallsRef.current = [];
     // An add-language steer owns the design's own switcher too: the model
     // was told to offer the new option — this fix-up guarantees it even if
     // the stream missed the element change (pure, so it no-ops when the
     // model already did it). The switch_language binding was already
     // guaranteed at the ingest seam above.
     const specToCommit = pendingLang
-      ? withLanguageSwitcherOption(boundSpec, pendingLang, true)
-      : boundSpec;
+      ? withLanguageSwitcherOption(specWithComponents, pendingLang, true)
+      : specWithComponents;
     const updated = commitRevision(entry, specToCommit, op.label);
     updateEntry(updated);
     if (pendingLang) {
