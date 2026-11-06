@@ -414,6 +414,8 @@
       "updateDescription": "Elige la versión a instalar: la última actualiza, una anterior revierte.",
       "updateTo": "Actualizar a v{version}",
       "rollbackTo": "Revertir a v{version}",
+      "updateToMany": "Actualizar {count} copias a v{version}",
+      "rollbackToMany": "Revertir {count} copias a v{version}",
       "updateCancel": "Cancelar",
       "updateNoVersions": "No hay versiones disponibles",
       "installedChip": "Instalado",

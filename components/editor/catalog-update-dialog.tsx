@@ -19,8 +19,13 @@ import type {
 interface CatalogUpdateDialogProps {
   open: boolean;
   asset: CatalogAsset;
-  /** The install being re-pinned — its version reads as "Installed". */
-  install: CatalogInstall;
+  /**
+   * Every copy of the asset in the active project — the update is
+   * project-scoped (plan 071), so the dialog speaks for the whole set and
+   * labels itself with the copy count when there is more than one. A
+   * version any copy holds reads as "Installed".
+   */
+  installs: CatalogInstall[];
   /** Versions OF the asset; the dialog orders newest-first itself. */
   versions: CatalogAssetVersion[];
   onOpenChange: (open: boolean) => void;
@@ -40,7 +45,7 @@ interface CatalogUpdateDialogProps {
 export function CatalogUpdateDialog({
   open,
   asset,
-  install,
+  installs,
   versions,
   onOpenChange,
   onConfirm,
@@ -51,12 +56,32 @@ export function CatalogUpdateDialog({
     ordered[0]?.id ?? null,
   );
   const selectedVersion = ordered.find((row) => row.id === selected) ?? null;
-  const installedVersion =
-    ordered.find((row) => row.id === install.versionId) ?? null;
+  const copies = installs.length;
+  const pinnedIds = new Set(installs.map((install) => install.versionId));
+  // `ordered` is newest-first, so the first pinned row is the HIGHEST pin:
+  // a selection below it makes at least one copy move BACKWARDS (rollback).
+  const highestPinned = ordered.find((row) => pinnedIds.has(row.id)) ?? null;
   const isRollback =
     selectedVersion !== null &&
-    installedVersion !== null &&
-    selectedVersion.version < installedVersion.version;
+    highestPinned !== null &&
+    selectedVersion.version < highestPinned.version;
+  // More than one copy in the project speaks in plurals (plan 071).
+  const confirmLabel =
+    selectedVersion === null
+      ? ""
+      : isRollback
+        ? copies > 1
+          ? t("editor.picker.rollbackToMany", {
+              count: copies,
+              version: selectedVersion.version,
+            })
+          : t("editor.picker.rollbackTo", { version: selectedVersion.version })
+        : copies > 1
+          ? t("editor.picker.updateToMany", {
+              count: copies,
+              version: selectedVersion.version,
+            })
+          : t("editor.picker.updateTo", { version: selectedVersion.version });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -92,7 +117,7 @@ export function CatalogUpdateDialog({
               <span className="font-mono text-xs font-medium">
                 {t("editor.picker.versionChip", { version: version.version })}
               </span>
-              {version.id === install.versionId && (
+              {pinnedIds.has(version.id) && (
                 <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] text-zinc-400">
                   {t("editor.picker.installedChip")}
                 </span>
@@ -128,14 +153,7 @@ export function CatalogUpdateDialog({
               if (selectedVersion) onConfirm(selectedVersion.id);
             }}
           >
-            {selectedVersion &&
-              (isRollback
-                ? t("editor.picker.rollbackTo", {
-                    version: selectedVersion.version,
-                  })
-                : t("editor.picker.updateTo", {
-                    version: selectedVersion.version,
-                  }))}
+            {confirmLabel}
           </Button>
         </div>
       </DialogContent>

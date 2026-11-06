@@ -12,7 +12,7 @@ import {
 import { adoptPublicCatalog } from "@/lib/catalog/browse";
 import {
   publishCatalogInstallUpdate,
-  updateCatalogInstall,
+  updateCatalogAssetInstalls,
 } from "@/lib/catalog/install";
 import { createClient } from "@/lib/supabase/client";
 import type { SyncClient } from "@/lib/history/sync";
@@ -385,8 +385,10 @@ export function StructureTab({
           onToggleCatalogVisibility={(assetId, visibility) => {
             updateCatalogAsset(assetId, { visibility });
           }}
-          onUpdateCatalogInstall={(installId, versionId) => {
-            updateCatalogInstall(installId, versionId);
+          onUpdateCatalogInstalls={(assetId, projectId, versionId) => {
+            // Project-scoped (plan 071): a row speaks for every copy of the
+            // asset in the active project, not for one arbitrary screen.
+            updateCatalogAssetInstalls(assetId, projectId, versionId);
           }}
           onPublishCatalogUpdate={(installId) => {
             publishCatalogInstallUpdate(installId, user?.id ?? "");

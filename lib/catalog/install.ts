@@ -217,6 +217,52 @@ export function updateCatalogInstall(
   return updated ? { install: updated, applied } : null;
 }
 
+export interface UpdateAssetInstallsResult {
+  /** One entry per copy that moved, in install order. */
+  updates: UpdateInstallResult[];
+  /** Copies already on the target version — nothing to write. */
+  unchanged: number;
+}
+
+/**
+ * Re-pins EVERY copy of `assetId` in `projectId` to `toVersionId` (default:
+ * the asset's latest) — the project-scoped update that the picker's row
+ * speaks for. One project can hold several copies of an asset (plan 070
+ * installs one navbar into seven screens) and a row cannot name them, so the
+ * action moves the whole set instead of an arbitrary one (plan 071).
+ *
+ * Each copy still goes through `updateCatalogInstall`: pin validation, the
+ * `applied` report and the revision-stack swap are unchanged, and copies
+ * already on the target version are skipped. Returns `null` when the asset,
+ * the version, or the project scope is unknown.
+ */
+export function updateCatalogAssetInstalls(
+  assetId: string,
+  projectId: string,
+  toVersionId?: string,
+): UpdateAssetInstallsResult | null {
+  if (assetId === "" || projectId === "") return null;
+  const asset = getCatalogAssets().find((row) => row.id === assetId);
+  if (!asset) return null;
+  const versionId = toVersionId ?? asset.latestVersionId;
+  if (!versionId) return null;
+  const version = getCatalogVersions().find(
+    (row) => row.id === versionId && row.assetId === assetId,
+  );
+  if (!version) return null;
+  const copies = getCatalogInstalls().filter(
+    (row) => row.assetId === assetId && row.projectId === projectId,
+  );
+  if (copies.length === 0) return null;
+  const updates: UpdateInstallResult[] = [];
+  for (const copy of copies) {
+    if (copy.versionId === versionId) continue;
+    const result = updateCatalogInstall(copy.id, versionId);
+    if (result) updates.push(result);
+  }
+  return { updates, unchanged: copies.length - updates.length };
+}
+
 /** Content swap into the materialized copy — best-effort by design (the
  *  pin is the source of truth; a deleted copy is a legitimate state). */
 function swapInstallContent(

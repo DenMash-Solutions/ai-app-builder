@@ -708,4 +708,122 @@ describe("install/update/fork flows (plan 066 task 3)", () => {
       flows.publishCatalogInstallUpdate(install.id, "other-user"),
     ).not.toBeNull();
   });
+
+  test("asset update moves every copy in the project and leaves other projects alone", () => {
+    const OTHER_PROJECT = "99999999-8888-4777-8666-555555555555";
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "Badge",
+      type: catalog.CATALOG_TYPES.component,
+      spec: makeComponentSpec("v1"),
+    })!;
+
+    // Three screens share one component — the 070 navbar shape.
+    const copies = [0, 1, 2].map((index) => {
+      const host = history.createEntry(
+        `Host ${index}`,
+        makeHostSpec(),
+        PROJECT,
+      );
+      history.addEntry(host);
+      const inserted = flows.insertCatalogComponent(host.spec, {
+        parentKey: "root",
+        asset,
+        version,
+        hostUiId: host.id,
+        projectId: PROJECT,
+      })!;
+      history.replaceEntrySpec(
+        host.id,
+        inserted.spec,
+        `structure:insert:${index}`,
+      );
+      return inserted.install;
+    });
+
+    // A second project holds the same component and must NOT move.
+    const outsideHost = history.createEntry(
+      "Outside host",
+      makeHostSpec(),
+      OTHER_PROJECT,
+    );
+    history.addEntry(outsideHost);
+    const outside = flows.insertCatalogComponent(outsideHost.spec, {
+      parentKey: "root",
+      asset,
+      version,
+      hostUiId: outsideHost.id,
+      projectId: OTHER_PROJECT,
+    })!;
+    history.replaceEntrySpec(
+      outsideHost.id,
+      outside.spec,
+      "structure:insert:x",
+    );
+
+    const v2 = catalog.publishCatalogVersion(
+      asset.id,
+      makeComponentSpec("v2"),
+    )!;
+
+    const result = flows.updateCatalogAssetInstalls(asset.id, PROJECT)!;
+    expect(result.updates).toHaveLength(copies.length);
+    expect(result.unchanged).toBe(0);
+    for (const update of result.updates) {
+      expect(update.install.versionId).toBe(v2.id);
+      expect(update.applied).toBe(true);
+    }
+    const inProject = catalog
+      .getCatalogInstalls()
+      .filter((row) => row.assetId === asset.id && row.projectId === PROJECT);
+    expect(inProject).toHaveLength(copies.length);
+    expect(inProject.every((row) => row.versionId === v2.id)).toBe(true);
+
+    const stillOutside = catalog
+      .getCatalogInstalls()
+      .find((row) => row.id === outside.install.id)!;
+    expect(stillOutside.versionId).toBe(version.id);
+
+    // Idempotence: a second run moves nothing, all copies already current.
+    const again = flows.updateCatalogAssetInstalls(asset.id, PROJECT)!;
+    expect(again.updates).toHaveLength(0);
+    expect(again.unchanged).toBe(copies.length);
+  });
+
+  test("asset update re-pins a deleted host and rejects unknown ids", () => {
+    const { asset, version } = catalog.createCatalogAsset({
+      name: "Badge",
+      type: catalog.CATALOG_TYPES.component,
+      spec: makeComponentSpec("v1"),
+    })!;
+    const host = history.createEntry("Host", makeHostSpec(), PROJECT);
+    history.addEntry(host);
+    const install = catalog.addCatalogInstall({
+      projectId: PROJECT,
+      assetId: asset.id,
+      versionId: version.id,
+      targetUiId: host.id,
+      targetKey: "card-1",
+    })!;
+    const v2 = catalog.publishCatalogVersion(
+      asset.id,
+      makeComponentSpec("v2"),
+    )!;
+
+    // The copy is gone, the pin still moves (066's documented contract).
+    history.removeEntry(host.id);
+    const result = flows.updateCatalogAssetInstalls(asset.id, PROJECT)!;
+    expect(result.updates).toHaveLength(1);
+    expect(result.updates[0].applied).toBe(false);
+    expect(result.updates[0].install.id).toBe(install.id);
+    expect(result.updates[0].install.versionId).toBe(v2.id);
+
+    expect(flows.updateCatalogAssetInstalls("ghost", PROJECT)).toBeNull();
+    expect(flows.updateCatalogAssetInstalls(asset.id, "")).toBeNull();
+    expect(
+      flows.updateCatalogAssetInstalls(asset.id, "no-such-project"),
+    ).toBeNull();
+    expect(
+      flows.updateCatalogAssetInstalls(asset.id, PROJECT, "ghost"),
+    ).toBeNull();
+  });
 });

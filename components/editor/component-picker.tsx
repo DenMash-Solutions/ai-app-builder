@@ -30,7 +30,6 @@ import {
   type CatalogInstall,
   type CatalogVisibility,
 } from "@/lib/catalog/catalog";
-import { getInstallStatus } from "@/lib/catalog/install";
 import { CatalogUpdateDialog } from "./catalog-update-dialog";
 
 export const PICKER_MODES = {
@@ -98,8 +97,13 @@ interface ComponentPickerProps {
     assetId: string,
     visibility: CatalogVisibility,
   ) => void;
-  /** Confirmed update/rollback from the dialog (flow logic = Task 3). */
-  onUpdateCatalogInstall?: (installId: string, versionId: string) => void;
+  /** Confirmed update/rollback from the dialog — PROJECT-scoped: every copy of
+   *  the asset in the active project moves (plan 071). */
+  onUpdateCatalogInstalls?: (
+    assetId: string,
+    projectId: string,
+    versionId: string,
+  ) => void;
   /** Publish the working copy's current spec as the next version. */
   onPublishCatalogUpdate?: (installId: string) => void;
   /** Templates mode only — rename (trimmed, non-empty) / delete a row. */
@@ -125,7 +129,7 @@ export function ComponentPicker({
   onInstallCatalogScreen,
   onForkCatalogAsset,
   onToggleCatalogVisibility,
-  onUpdateCatalogInstall,
+  onUpdateCatalogInstalls,
   onPublishCatalogUpdate,
   onRenameTemplate,
   onDeleteTemplate,
@@ -144,8 +148,9 @@ export function ComponentPicker({
   const [typeFilter, setTypeFilter] = useState<CatalogTypeFilter>(
     CATALOG_TYPE_FILTERS.all,
   );
-  // The install whose confirmation dialog is open (null = closed).
-  const [updating, setUpdating] = useState<CatalogInstall | null>(null);
+  // The ASSET whose confirmation dialog is open (null = closed): the dialog
+  // speaks for every copy in the project (plan 071).
+  const [updating, setUpdating] = useState<CatalogAsset | null>(null);
 
   const startRename = (template: ComponentTemplate) => {
     setRenamingId(template.id);
@@ -190,8 +195,9 @@ export function ComponentPicker({
     );
   }, [isTemplates, needle, templates]);
 
-  /** Catalog rows: asset + its latest version row + the install pinned for
-   *  the ACTIVE project (first match), filtered by search/scope/type. */
+  /** Catalog rows: asset + its latest version + EVERY copy installed in the
+   *  active project (the update is project-scoped, plan 071), filtered by
+   *  search/scope/type. */
   const catalogRows = useMemo(() => {
     if (!isCatalog) return [];
     const versionsById = new Map(
@@ -203,23 +209,29 @@ export function ComponentPicker({
           const latest = asset.latestVersionId
             ? (versionsById.get(asset.latestVersionId) ?? null)
             : null;
-          const install =
+          const installs =
             catalogProjectId === ""
-              ? null
-              : (catalogInstalls.find(
+              ? []
+              : catalogInstalls.filter(
                   (row) =>
                     row.projectId === catalogProjectId &&
                     row.assetId === asset.id,
-                ) ?? null);
-          const pinned = install
-            ? (versionsById.get(install.versionId) ?? null)
-            : null;
+                );
+          const pinnedVersions = installs
+            .map((row) => versionsById.get(row.versionId)?.version ?? 0)
+            .filter((version) => version > 0);
           return {
             asset,
             latest,
-            install,
-            pinned,
-            status: install ? getInstallStatus(install) : null,
+            installs,
+            // The LOWEST pinned version is what an update moves away from.
+            pinnedVersion:
+              pinnedVersions.length > 0 ? Math.min(...pinnedVersions) : null,
+            // A single up-to-date copy must not make a project with stale
+            // ones look current.
+            behind:
+              latest !== null &&
+              pinnedVersions.some((version) => version !== latest.version),
           };
         })
         .filter((row) => {
@@ -309,10 +321,6 @@ export function ComponentPicker({
         ? "bg-accent text-accent-foreground"
         : "text-muted-foreground hover:bg-accent/60"
     }`;
-
-  const updatingAsset = updating
-    ? (catalogAssets.find((row) => row.id === updating.assetId) ?? null)
-    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -473,11 +481,12 @@ export function ComponentPicker({
           )}
           {isCatalog &&
             catalogRows.map((row) => {
-              const { asset, latest, install, pinned, status } = row;
+              const { asset, latest, installs, pinnedVersion, behind } = row;
               const mine =
                 asset.ownerId === "" || asset.ownerId === catalogOwnerId;
-              const behind =
-                status !== null && !status.upToDate && latest !== null;
+              // Publishing reads ONE materialized copy; the first that still
+              // has a host is the honest choice for "publish what shows".
+              const publishable = installs.find((row) => row.targetUiId);
               return (
                 <div
                   key={asset.id}
@@ -534,13 +543,13 @@ export function ComponentPicker({
                         ? t("editor.picker.ownerYou")
                         : asset.ownerId.slice(0, 8)}
                     </span>
-                    {behind && pinned && latest && (
+                    {behind && pinnedVersion !== null && latest && (
                       <span
                         className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-400"
                         title={t("editor.picker.updateAvailable")}
                       >
                         {t("editor.picker.versionChip", {
-                          version: pinned.version,
+                          version: pinnedVersion,
                         })}{" "}
                         →{" "}
                         {t("editor.picker.versionChip", {
@@ -594,24 +603,24 @@ export function ComponentPicker({
                         )}
                       </button>
                     )}
-                    {mine && install?.targetUiId && (
+                    {mine && publishable && (
                       <button
                         type="button"
                         aria-label={t("editor.picker.publishUpdate")}
                         title={t("editor.picker.publishUpdate")}
                         className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-emerald-400"
-                        onClick={() => onPublishCatalogUpdate?.(install.id)}
+                        onClick={() => onPublishCatalogUpdate?.(publishable.id)}
                       >
                         <Upload className="h-3 w-3" />
                       </button>
                     )}
-                    {install && behind && (
+                    {installs.length > 0 && behind && (
                       <button
                         type="button"
                         aria-label={t("editor.picker.update")}
                         title={t("editor.picker.update")}
                         className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-amber-400"
-                        onClick={() => setUpdating(install)}
+                        onClick={() => setUpdating(asset)}
                       >
                         <ArrowUpCircle className="h-3 w-3" />
                       </button>
@@ -727,19 +736,27 @@ export function ComponentPicker({
                 )))}
         </div>
 
-        {updating && updatingAsset && (
+        {updating && (
           <CatalogUpdateDialog
             open
-            asset={updatingAsset}
-            install={updating}
+            asset={updating}
+            installs={catalogInstalls.filter(
+              (row) =>
+                row.projectId === catalogProjectId &&
+                row.assetId === updating.id,
+            )}
             versions={catalogVersions.filter(
-              (version) => version.assetId === updating.assetId,
+              (version) => version.assetId === updating.id,
             )}
             onOpenChange={(open) => {
               if (!open) setUpdating(null);
             }}
             onConfirm={(versionId) => {
-              onUpdateCatalogInstall?.(updating.id, versionId);
+              onUpdateCatalogInstalls?.(
+                updating.id,
+                catalogProjectId,
+                versionId,
+              );
               setUpdating(null);
             }}
           />

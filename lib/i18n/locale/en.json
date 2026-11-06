@@ -412,6 +412,8 @@
       "updateDescription": "Pick the version to install — the latest updates, an older one rolls back.",
       "updateTo": "Update to v{version}",
       "rollbackTo": "Roll back to v{version}",
+      "updateToMany": "Update {count} copies to v{version}",
+      "rollbackToMany": "Roll back {count} copies to v{version}",
       "updateCancel": "Cancel",
       "updateNoVersions": "No versions available",
       "installedChip": "Installed",
