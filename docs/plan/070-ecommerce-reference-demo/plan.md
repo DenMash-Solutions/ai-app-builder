@@ -322,6 +322,24 @@ support cross-project reuse; MCP spot-check precedent = plans 032/056
     enables; both product-details host prices fill (probes `32`/`45`);
     `on.press` multi-action lists unaffected (cart row + badge both
     observed).
+16b. **Every demo e2e test is capped at 60s and fails fast (user directive
+    2026-11-06)** — one scenario chain per test, waits explicitly short
+    (10-20s), never the 180s budget other suites use: a long budget hides
+    which step broke. The first slice (generate → grid+card install →
+    fixture rows → navbar install → project B pin → v2 publish) runs in
+    ~27s. Stabilizers found wiring it: (a) **`data-template-id` is a SPEC
+    prop, not a DOM attribute** — the registry never emits it, so install
+    provenance is asserted from stored `props["data-template-id"]` and the
+    rendered navbar by its own `h3` brand, with the version observable
+    being the Orders-link COUNT (v1: 1 = Home's quick link; v2 adds one);
+    (b) re-picking after an install races the revision re-render (the
+    panel unmounts mid-gesture and stability-bound clicks hang) → open the
+    panel once, then `dispatchEvent("click")` on tabs/rows/options; (c) a
+    component installed inside a repeat renders nothing until the repeat
+    has rows, so the install gate is the SPEC's new child key, not pixels;
+    (d) Generate is only offered on an EMPTY canvas (`/ui`) — on a screen
+    the bar offers Steer; (e) Next's hidden route copy duplicates the
+    prompt input → visibility filter + `.first()`.
 
 ## Files
 
@@ -383,8 +401,10 @@ Serial file, split into ~4 tests so a failure localises (069's pattern),
 - [ ] Scenarios 14-15: second project unaffected throughout; anonymous
       visitor sees published pages only
 - [ ] **System coherence — chrome**: every one of the 7 screens shows the
-      Navigation bar root (`[data-template-id="<navbar asset id>"]`,
-      visible, same nav labels) — decision 11
+      Navigation bar — asserted from the SPEC's `props["data-template-id"]`
+      plus the rendered `h3` brand (the registry emits no DOM attribute,
+      decision 16b) and the same nav labels — decision 11. **Home covered
+      2026-11-06; screens 2-7 pending (task 2).**
 - [ ] **System coherence — cart travel**: add an item on Product details →
       navigate to Cart (no reload) → row present; same row visible on
       Checkout summary — fresh read on navigation (decision 10)
@@ -433,3 +453,4 @@ Serial file, split into ~4 tests so a failure localises (069's pattern),
 | 2026-11-05 | task-1 verification: element events AND watchers resolve action params through `resolveActionParam` → `resolvePropValue` (directives, `$computed`, nested `$item` = VALUE; top-level `$item` = PATH) — decisions 14/16 mechanically sound. **Descope:** order dates (Out of scope) — spec expressions have no clock |
 | 2026-11-05 | **task 1 authored, gate green** (lint 0 / tsc / 1136 unit pass): fixtures + `app/api-public/[resource]/[[...path]]` route (6 route tests) + 7 screen specs + 7 components ×v1/v2 (all pass `validateSpec` + `validateDataSources({inProject:true})` in `demo/ecommerce/specs.test.ts`, 49 tests incl. route/slot/sidebar/mirror-seed contracts) + README replay section + `DATA_PROXY_ECOMMERCE_*` env pair. **Gate widened**: `bun run test` → `bun test lib components app demo` (route/seed tests were outside the chain; bare `bun test` also picks up Playwright files — pre-existing). Authoring gotchas recorded in session memory (Heading level string enum, Text/Badge ignore className, mirror-repeat screens seed `state.queries.<q>.data` for validateSpec) |
 | 2026-11-05 | **task-1 MCP/browser verification (user challenge: "committed without MCP test")** — all green: fixture route live (list/get 200, allowlist 404s, Chromium JSON `rows:6`); keyed lane live **without a dev restart** (Next dev hot-reloaded `.env.local` — proxy 200, so acceptance sequencing no longer depends on the restart); checkout seed imported into `/en/ui` prefills via the keyed lane after the 16a fix (5/5 fields, submit enabled, no errors); product-details seed renders by route param with both host watches (probes 32/45) and `Add to cart` creates the localStorage row + badge. **Finding → decision 16a + F24**: multi-action/multi-path element watches resolve `$state` empty after the first iteration — checkout + product-details specs rewritten (per-element single-action), gate re-run green (1136 pass) |
+| 2026-11-06 | **task 2 started — first slice green** (`e2e/ecommerce.spec.ts`, 26.7s under the 60s cap): `specToLines` in `e2e/helpers.ts`, MSW `ecommerce` ref branch in `e2e/msw/init.ts` (forwards to the committed `/api-public` route), suite moved into the `authed` project; covers scenarios 1-5 on Home (author by Generate, grid+card install, fixture rows through the keyed lane, navbar v1, project B pin, v2 publish leaves both installs on v1) + decision 16b gotchas. Remaining: screens 2-7 authoring + chrome coherence, navigation/dynamic route, cart travel + sidebar same-surface refresh, update/re-expand safety, publish/live/fork/handle-change |

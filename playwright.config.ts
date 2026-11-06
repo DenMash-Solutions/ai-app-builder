@@ -27,6 +27,7 @@ export default defineConfig({
         "**/project-publish.spec.ts",
         "**/signout.spec.ts",
         "**/usernames.spec.ts",
+        "**/ecommerce.spec.ts",
       ],
     },
     // Dedicated e2e identities (never a personal session), logged in via
@@ -42,6 +43,7 @@ export default defineConfig({
         "**/catalog.spec.ts",
         "**/usernames.spec.ts",
         "**/project-publish.spec.ts",
+        "**/ecommerce.spec.ts",
       ],
       dependencies: ["chromium"],
     },

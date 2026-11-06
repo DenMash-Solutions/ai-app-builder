@@ -127,6 +127,29 @@ const worker = setupWorker(
     const seen = { ref, path, method, clientSentAuth };
     mockWindow.__LAST_PROXY__ = seen;
     if (method !== "GET") mockWindow.__LAST_PROXY_WRITE__ = seen;
+    // The ecommerce demo's keyed lane (plan 070 decision 13): the spec points
+    // at the committed fixture route, so play the real proxy by fetching the
+    // path same-origin. That request is unhandled here, so the worker bypasses
+    // it and the COMMITTED `app/api-public/[resource]` route serves it — the
+    // demo also exercises the real route, not a fixture copy.
+    if (ref === "ecommerce") {
+      const upstream = await fetch(new URL(path, window.location.origin), {
+        method,
+        ...(method === "GET"
+          ? {}
+          : {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body.body ?? {}),
+            }),
+      });
+      return new HttpResponse(await upstream.text(), {
+        status: upstream.status,
+        headers: {
+          "Content-Type":
+            upstream.headers.get("content-type") ?? "application/json",
+        },
+      });
+    }
     if (ref !== "weather") {
       return HttpResponse.json({ error: "unknown_ref", ref }, { status: 404 });
     }

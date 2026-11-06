@@ -3,7 +3,7 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { STORAGE_KEY } from "@/lib/history";
 import { PROJECT_STORAGE_KEY } from "@/lib/projects/projects";
-import { PROJECTS, ROLE } from "./constants";
+import { PATCH_OP, PATCH_PATH, PROJECTS, ROLE } from "./constants";
 import type { GenerateMockConfig } from "@/e2e/msw/fixture";
 
 export type { GenerateMockConfig };
@@ -55,6 +55,52 @@ export function lastGeneratePrompt(page: Page): Promise<string> {
       (window as unknown as { __LAST_GENERATE_PROMPT__?: string })
         .__LAST_GENERATE_PROMPT__ ?? "",
   );
+}
+
+/** Top-level spec blocks besides `root`/`elements` — each rides its own
+ *  `add` patch, the shape the model's JSONL stream uses (plan 070 task 2). */
+const SPEC_TOP_LEVEL_BLOCKS = {
+  route: "/route",
+  state: PATCH_PATH.state,
+  dataSources: PATCH_PATH.dataSources,
+  resources: PATCH_PATH.resources,
+  queries: PATCH_PATH.queries,
+  i18n: "/i18n",
+  urlSync: PATCH_PATH.urlSync,
+} as const;
+
+/**
+ * Serializes a whole committed spec into the patch-line stream `/api/generate`
+ * streams — the MSW mock returns these lines for a real Generate, so a demo
+ * screen is AUTHORED through the app (plan 070 decision 4) instead of being
+ * imported. Same `{op, path, value}` shape as `headingLines`.
+ */
+export function specToLines(spec: {
+  root: string;
+  elements: Record<string, unknown>;
+  [key: string]: unknown;
+}): string[] {
+  const lines: string[] = [
+    JSON.stringify({
+      op: PATCH_OP.add,
+      path: PATCH_PATH.root,
+      value: spec.root,
+    }),
+  ];
+  for (const [key, element] of Object.entries(spec.elements)) {
+    lines.push(
+      JSON.stringify({
+        op: PATCH_OP.add,
+        path: `${PATCH_PATH.elements}/${key}`,
+        value: element,
+      }),
+    );
+  }
+  for (const [key, path] of Object.entries(SPEC_TOP_LEVEL_BLOCKS)) {
+    if (spec[key] === undefined) continue;
+    lines.push(JSON.stringify({ op: PATCH_OP.add, path, value: spec[key] }));
+  }
+  return lines;
 }
 
 export interface StoredElement {
