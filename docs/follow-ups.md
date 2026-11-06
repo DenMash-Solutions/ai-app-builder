@@ -4,10 +4,12 @@
 > by a new plan. When a follow-up gets a plan, move it to the plan's `NNN` link below and
 > mark it ✅ claimed. Source plans are always `docs/plan/{NNN}-*/plan.md`.
 >
-> Last reviewed: 2026-11-05 (plan 069 implemented — F18 closed, F21
-> registered from task 6's full-suite finding); 2026-11-04: plan 069
-> approved for Slice A/B — F20 registered from its Q2 answer; F17/F18
-> claimed, F15 closed / F19 registered 2026-10-30)
+> Last reviewed: 2026-11-06 (plan 072 split: F22 claimed — plan 072
+> scoped to F22 alone; F23 re-sequenced — now runs AFTER the marketplace
+> (073) and agent-chat (074) plans, decisions preserved in 072); 2026-11-05: plan 069 implemented — F18
+> closed, F21 registered from task 6's full-suite finding); 2026-11-04:
+> plan 069 approved for Slice A/B — F20 registered from its Q2 answer;
+> F17/F18 claimed, F15 closed / F19 registered 2026-10-30)
 
 ## 🔴 Open — needs a plan
 
@@ -23,14 +25,14 @@
 | F6 | **`instant()` e2e regression tests** | 056, "decide at the check-in if wanted" | Open decision for the user |
 | F20 | **Feature a project at the root** — `site_settings.featured_ui_id` is screen-only, so a published project can serve only at `/{locale}/{handle}`. Needs a project slot on `site_settings`, a root-serving rule and the proxy bare-segment path | 069 Q2 answer 2026-11-04 (descoped to keep root semantics unchanged) | Deps: 069 Slice A live project routes (now implemented) |
 | F21 | **Username claim dialog paints claim-mode before the profile settles** — `username_available` does not exclude the caller, so an account that already has its handle reads "That username is taken" the instant the dialog opens ahead of the profile read (`claimIfNeeded` branches on the claim/change title, then fills its own handle into the blocked verdict). Load-sensitive e2e flake: `usernames.spec.ts › claims its own handle` | 069 task 6 full-suite finding 2026-11-05 | Pre-existing 068 race, green in isolation; fix = hold the dialog until the profile settles (mirrors `d59d511`) and/or exclude self in the probe |
-| F22 | **Generation doesn't know a project's installed components** — a freshly generated screen re-authors shared chrome (navbar) instead of reusing it: the generate prompt carries `context.screens` = names/routes only and has no `CATALOG_RULES` block, so drift across pages is inherent. Correct design = model *references* the component and the client expands + records the install (inline emission would orphan provenance — `data-template-id` with no install row → not pinnable/updatable) | 070 design discussion 2026-11-05 | Companion to F23; needs prompt context + client-side install bookkeeping |
-| F23 | **Project-level generation orchestration** — "build me an ecommerce project" should become: planner step → screen list (Home, Products, Detail, Cart, Checkout, Orders) → per-screen generations each carrying the sibling list + installed-component context (F22). Today one prompt = one screen (`/api/generate` returns a single spec; no batch flow exists) | 070 design discussion 2026-11-05 (user: "our target for this project… separated plan") | 070 proves the assembled system with committed specs; this is the long-term generative target |
+| F23 | **Project-level generation orchestration** — "build me an ecommerce project" should become: planner step → screen list (Home, Products, Detail, Cart, Checkout, Orders) → per-screen generations each carrying the sibling list + installed-component context (F22). Today one prompt = one screen (`/api/generate` returns a single spec; no batch flow exists) | 070 design discussion 2026-11-05 (user: "our target for this project… separated plan") | **Split from plan 072 2026-11-06** — sequencing F22 (072) → project templates (073) → agent chat (074) → F23: 073's template installer proves the creation loop (entry → membership → route → installs) F23's planner reuses, and 074's question primitive is the planner's interview; decisions 4/5/6/8 preserved in 072 |
 
 ## 🟡 Claimed — has a plan, not implemented
 
 | # | Follow-up | Claimed by |
 |---|-----------|------------|
 | F17 | **Cross-device project sync** — supabase `projects` table + RLS + a second LWW sync loop so project grouping follows the account (061 kept projects local-only per F14 precedent) | plan 064 (draft 2026-10-31) |
+| F22 | **Generation doesn't know a project's installed components** — a freshly generated screen re-authors shared chrome (navbar) instead of reusing it: the generate prompt carries `context.screens` = names/routes only and has no `CATALOG_RULES` block, so drift across pages is inherent. Correct design = model *references* the component and the client expands + records the install (inline emission would orphan provenance — `data-template-id` with no install row → not pinnable/updatable) | plan 072 (draft 2026-11-06, F22-only after the split) |
 
 ## 🟡 Lower priority / conditional
 

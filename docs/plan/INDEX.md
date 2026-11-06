@@ -79,5 +79,8 @@ row in the same turn as any status change** (rule:
 | 069 | [project-publishing](069-project-publishing/plan.md) | implemented | 2026-10-31 |
 | 070 | [ecommerce-reference-demo](070-ecommerce-reference-demo/plan.md) | implemented | 2026-11-06 |
 | 071 | [catalog-multi-install-updates](071-catalog-multi-install-updates/plan.md) | implemented | 2026-11-06 |
+| 072 | [generation-orchestration](072-generation-orchestration/plan.md) | approved | 2026-11-06 |
+| 073 | [project-template-marketplace](073-project-template-marketplace/plan.md) | approved | 2026-11-06 |
+| 074 | [agent-chat](074-agent-chat/plan.md) | approved | 2026-11-06 |
 
-_71 plans: 67 implemented · 1 approved (`033`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._
+_74 plans: 67 implemented · 4 approved (`033`, `072`, `073`, `074`) · 2 draft (`015`, `035`) · 1 rejected (`026`)._
