@@ -11,7 +11,8 @@
       "expandSidebar": "Expand sidebar",
       "primary": "Main navigation",
       "playground": "Playground",
-      "livePages": "Live pages"
+      "livePages": "Live pages",
+      "catalog": "Catalog"
     },
     "account": {
       "signIn": "Sign in",
@@ -147,7 +148,9 @@
       "reserved": "That word is reserved",
       "taken": "That username is taken"
     },
-    "errors": { "generic": "Could not save that username. Try again." },
+    "errors": {
+      "generic": "Could not save that username. Try again."
+    },
     "claim": {
       "title": "Claim your username",
       "description": "Your username is your public profile address: /user/your-name/ui.",
@@ -212,6 +215,38 @@
     "featuredToast": "This page is now your root page.",
     "unfeaturedToast": "Root page cleared — the playground is back on /.",
     "failed": "That didn't work — try again."
+  },
+  "catalog": {
+    "title": "Catalog",
+    "description": "Complete project templates, screens and components you can preview and install. Templates arrive with their screens, routes and components wired up.",
+    "empty": "Nothing in the catalog yet — publish a screen or component from the history drawer to see it here.",
+    "searchPlaceholder": "Search by name or description",
+    "sortLatest": "Sorted by latest",
+    "open": "Open",
+    "typeAll": "All",
+    "typeTemplates": "Templates",
+    "typeScreens": "Screens",
+    "typeComponents": "Components",
+    "scopeAll": "Everything",
+    "scopeMine": "My content",
+    "typeTemplate": "Template",
+    "typeScreen": "Screen",
+    "typeComponent": "Component",
+    "screensUnit": "screens",
+    "back": "Back to the catalog",
+    "preview": "Preview",
+    "use": "Use",
+    "screens": "Screens",
+    "notFound": "This catalog item is not available in this browser yet.",
+    "previewFailed": "Could not start the preview — nothing was kept.",
+    "useFailed": "Could not install this template — nothing was kept.",
+    "previewBanner": "Previewing {name}",
+    "keepTemplate": "Use this template",
+    "discardPreview": "Discard",
+    "kept": "Template kept as a normal project.",
+    "discarded": "Preview discarded.",
+    "loading": "Loading the catalog…",
+    "installed": "Installed {name}."
   },
   "publish": {
     "goLive": "Go live: {name}",

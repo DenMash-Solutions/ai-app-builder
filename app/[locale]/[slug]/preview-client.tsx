@@ -1,5 +1,6 @@
 "use client";
 
+import { PreviewTemplateBanner } from "@/components/catalog/preview-banner";
 import { useRuntimeClasses } from "@/components/playground/use-runtime-classes";
 import { QueryLoader } from "@/components/data-sources/query-loader";
 import { NavigateHandler } from "@/components/projects/navigate-handler";
@@ -446,6 +447,9 @@ export default function PreviewPage({
         {entryName ? <title>{entryName}</title> : null}
         {bakedCss ? <style>{bakedCss}</style> : null}
         <Renderer spec={fixupScrollLayout(localized)} registry={registry} />
+        {/* Template preview lifecycle (plan 073): renders only while the
+            project under this slug is a `Preview: …` throwaway. */}
+        <PreviewTemplateBanner slug={slug} />
         <Button asChild className="fixed bottom-4 right-4 z-50 shadow-lg">
           {/* The owner's local copy opens in their playground; a purely
                     public visit lands on the playground landing instead. */}

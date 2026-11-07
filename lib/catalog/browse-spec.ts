@@ -55,6 +55,22 @@ const ROW_SCOPES = {
   public: "public",
 } as const;
 
+/** Filter VALUES the spec's facets write into state — `all` is the empty
+ *  query `filterItems` treats as a pass-through. */
+export const CATALOG_FILTER_VALUES = {
+  all: "",
+  mine: ROW_SCOPES.mine,
+  type: { all: "", ...CATALOG_TYPES },
+} as const;
+
+/**
+ * First-page cap for live thumbnails (plan 073 decision 9 accepted the grid
+ * perf cost): each card mounts a full nested render, so the browse surface
+ * lists the most recently updated rows only. Search and facets operate on
+ * this page — a larger catalog wants virtualization, not a bigger cap.
+ */
+export const CATALOG_CARD_CAP = 36;
+
 function typeLabel(
   type: CatalogAsset["type"],
   labels: CatalogCardLabels,

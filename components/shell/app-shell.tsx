@@ -10,6 +10,7 @@ import {
   Menu,
   PanelLeft,
   Sparkles,
+  Store,
   X,
 } from "lucide-react";
 import { Suspense, useState } from "react";
@@ -245,6 +246,13 @@ function NavItems() {
       label: t("nav.playground"),
       icon: LayoutGrid,
       active: normalized === "/ui" || normalized.startsWith("/ui/"),
+    },
+    // Marketplace (plan 073): a first-class route, next to the playground.
+    {
+      href: "/catalog",
+      label: t("nav.catalog"),
+      icon: Store,
+      active: normalized === "/catalog" || normalized.startsWith("/catalog/"),
     },
     // Live pages: rendered only for admins (the console itself keeps the
     // client guard + RLS as defense in depth).

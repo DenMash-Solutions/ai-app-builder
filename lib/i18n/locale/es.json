@@ -11,7 +11,8 @@
       "expandSidebar": "Expandir barra lateral",
       "primary": "Navegación principal",
       "playground": "Playground",
-      "livePages": "Páginas en vivo"
+      "livePages": "Páginas en vivo",
+      "catalog": "Catálogo"
     },
     "account": {
       "signIn": "Iniciar sesión",
@@ -214,6 +215,38 @@
     "featuredToast": "Esta página es ahora tu página raíz.",
     "unfeaturedToast": "Página raíz vacía — el playground vuelve a /.",
     "failed": "No se pudo — inténtalo de nuevo."
+  },
+  "catalog": {
+    "title": "Catálogo",
+    "description": "Plantillas de proyecto completas, pantallas y componentes que puedes previsualizar e instalar. Las plantillas llegan con sus pantallas, rutas y componentes ya conectados.",
+    "empty": "Aún no hay nada en el catálogo — publica una pantalla o un componente desde el historial para verlo aquí.",
+    "searchPlaceholder": "Busca por nombre o descripción",
+    "sortLatest": "Ordenado por lo más reciente",
+    "open": "Abrir",
+    "typeAll": "Todo",
+    "typeTemplates": "Plantillas",
+    "typeScreens": "Pantallas",
+    "typeComponents": "Componentes",
+    "scopeAll": "Todo",
+    "scopeMine": "Mi contenido",
+    "typeTemplate": "Plantilla",
+    "typeScreen": "Pantalla",
+    "typeComponent": "Componente",
+    "screensUnit": "pantallas",
+    "back": "Volver al catálogo",
+    "preview": "Previsualizar",
+    "use": "Usar",
+    "screens": "Pantallas",
+    "notFound": "Este elemento del catálogo aún no está disponible en este navegador.",
+    "previewFailed": "No se pudo iniciar la previsualización — no se conservó nada.",
+    "useFailed": "No se pudo instalar esta plantilla — no se conservó nada.",
+    "previewBanner": "Previsualizando {name}",
+    "keepTemplate": "Usar esta plantilla",
+    "discardPreview": "Descartar",
+    "kept": "Plantilla conservada como proyecto normal.",
+    "discarded": "Previsualización descartada.",
+    "loading": "Cargando el catálogo…",
+    "installed": "«{name}» instalado."
   },
   "publish": {
     "goLive": "Publicar: {name}",

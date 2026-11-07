@@ -6,6 +6,8 @@ export const RESERVED_SLUGS = {
   signup: "signup",
   /** Plan 068: the public profile route lives at /user/<username>/ui. */
   user: "user",
+  /** Plan 073: the marketplace browse/detail route lives at /catalog. */
+  catalog: "catalog",
 } as const;
 
 export const SLUG_MAX_LENGTH = 48;

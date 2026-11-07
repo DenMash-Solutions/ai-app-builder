@@ -22,7 +22,15 @@ export const LOCALE_LABELS: Record<Locale, string> = {
  * /_not-found when the second segment is not a canonical language tag
  * (`proxy.ts`), which is exactly `/en/user/<username>/ui`.
  */
-export const APP_SEGMENTS = ["ui", "admin", "login", "signup", "user"] as const;
+export const APP_SEGMENTS = [
+  "ui",
+  "admin",
+  "login",
+  "signup",
+  "user",
+  /** Plan 073: the marketplace browse route (`/catalog`, `/catalog/{assetId}`). */
+  "catalog",
+] as const;
 
 export const routing = defineRouting({
   locales: LOCALES,
