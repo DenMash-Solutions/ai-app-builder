@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Spec } from "@json-render/core";
@@ -12,6 +12,7 @@ import {
   useCatalogState,
 } from "@/components/catalog/use-catalog";
 import { SpecPage } from "@/components/spec-page/spec-page";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   buildCatalogDetailSpec,
   catalogDetailModel,
@@ -38,8 +39,14 @@ const EMPTY_DETAIL: CatalogDetailModel = {
  * Marketplace detail (`/catalog/{assetId}`): the manifest summary (screens
  * and routes) plus the two lifecycle actions — Preview (throwaway project)
  * and Use (new permanent project).
+ *
+ * The asset id is an arbitrary param (no `generateStaticParams`), so it is
+ * unknown during prerendering and `useParams` suspends — the reader must
+ * sit inside Suspense or the Cache Components build fails
+ * (`node_modules/next/dist/docs/.../dynamic-routes.md`, "Without
+ * generateStaticParams"; same shape as the `/ui/[ref]` route).
  */
-export default function CatalogDetailPage() {
+function CatalogDetail() {
   const t = useTranslations("catalog");
   const { locale, assetId } = useParams<{
     locale: string;
@@ -102,5 +109,19 @@ export default function CatalogDetailPage() {
     >
       <CatalogActions />
     </SpecPage>
+  );
+}
+
+export default function CatalogDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[100dvh] w-full items-center justify-center p-8">
+          <Skeleton className="h-64 w-full max-w-3xl rounded-md" />
+        </div>
+      }
+    >
+      <CatalogDetail />
+    </Suspense>
   );
 }

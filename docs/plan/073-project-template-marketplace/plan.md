@@ -269,6 +269,12 @@ identified as missing regardless of templates.
       copy (slot target exists). (Route journey green in
       `test:e2e:catalog-route`; the 071 component-update leg is still
       missing, so the box stays open.)
+- [x] `bun run build` — the detail route needs a Suspense boundary:
+      `[assetId]` has no `generateStaticParams`, so `useParams` suspends
+      during prerendering (dynamic-routes.md, "Without
+      generateStaticParams"; the `/ui/[ref]` route documents the same
+      shape). The page now exports a `<Suspense>` wrapper around the
+      reader.
 - [ ] Full chain: `bun run lint && bunx tsc --noEmit && bun run test` +
       `bun run test:e2e` (or the per-spec scripts; catalog/ecommerce
       flakes → `--workers=1`, no timeout raises — mistake #32).
