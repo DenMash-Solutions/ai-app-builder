@@ -545,7 +545,17 @@
     "moveUp": "Mover antes",
     "moveDown": "Mover después",
     "noOtherProjects": "Ningún otro proyecto",
-    "rowActions": "Acciones de {name}"
+    "rowActions": "Acciones de {name}",
+    "sources": "Fuentes",
+    "sourcesEmpty": "Ninguna pantalla de este proyecto declara fuentes de datos.",
+    "sourcesReady": "Lista",
+    "sourcesNeedsKey": "Necesita una clave del servidor",
+    "components": "Componentes",
+    "componentsEmpty": "Aún no hay componentes del catálogo instalados.",
+    "componentCopies": "{count, plural, one {# copia} other {# copias}}",
+    "componentUpdate": "Actualizar",
+    "componentUpdated": "{count, plural, one {# copia actualizada} other {# copias actualizadas}}",
+    "componentUpdateFailed": "No se pudieron actualizar esas copias — inténtalo de nuevo."
   },
   "localeSwitcher": {
     "label": "Idioma"

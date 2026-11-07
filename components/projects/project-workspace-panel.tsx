@@ -14,6 +14,16 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
+  getCatalogState,
+  getServerCatalog,
+  subscribeCatalog,
+} from "@/lib/catalog/catalog";
+import { updateCatalogAssetInstalls } from "@/lib/catalog/install";
+import {
+  projectComponentRows,
+  projectSources,
+} from "@/lib/projects/project-insights";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -90,6 +100,12 @@ export function ProjectWorkspacePanel({
     getServerProjects,
   );
 
+  const catalog = useSyncExternalStore(
+    subscribeCatalog,
+    getCatalogState,
+    getServerCatalog,
+  );
+
   const project = projects.find((candidate) => candidate.id === projectId);
   const members = useMemo(
     () =>
@@ -115,6 +131,41 @@ export function ProjectWorkspacePanel({
   }, [editingScreenId, onEditingChange]);
   // Collapse/unmount while editing must never strand the drawer's veto.
   useEffect(() => () => onEditingChange(false), [onEditingChange]);
+
+  // Plan 073: the two read-only project sections — the union of the member
+  // screens' data sources (publish-dialog config semantics) and the catalog
+  // installs with their pinned → latest versions (071).
+  const sources = useMemo(
+    () =>
+      projectSources(
+        members.map((member) => ({
+          name: member.entry.name,
+          spec: member.entry.spec,
+        })),
+      ),
+    [members],
+  );
+  const componentRows = useMemo(
+    () =>
+      projectComponentRows({
+        projectId,
+        installs: catalog.installs,
+        assets: catalog.assets,
+        versions: catalog.versions,
+      }),
+    [projectId, catalog],
+  );
+
+  const updateComponents = (assetId: string): void => {
+    const result = updateCatalogAssetInstalls(assetId, projectId);
+    if (!result || result.updates.length === 0) {
+      toast.error(t("projects.componentUpdateFailed"));
+      return;
+    }
+    toast.success(
+      t("projects.componentUpdated", { count: result.updates.length }),
+    );
+  };
 
   const memberIds = new Set(members.map((member) => member.entry.id));
   const candidates = entries.filter((entry) => !memberIds.has(entry.id));
@@ -409,6 +460,96 @@ export function ProjectWorkspacePanel({
           </ul>
         </>
       )}
+
+      <div
+        data-project-sources
+        className="mt-1 flex flex-col gap-1 rounded-md border bg-background/40 p-2"
+      >
+        <span className="text-xs font-medium uppercase text-muted-foreground">
+          {t("projects.sources")}
+        </span>
+        {sources.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {t("projects.sourcesEmpty")}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {sources.map((source) => (
+              <li
+                key={source.key}
+                className="flex items-center justify-between gap-2 text-xs"
+                title={source.screens.join(", ")}
+              >
+                <span className="min-w-0 truncate">
+                  <span className="font-medium">{source.name}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {source.provider}
+                  </span>
+                </span>
+                <span
+                  className={
+                    source.needsConfig
+                      ? "shrink-0 text-amber-600 dark:text-amber-500"
+                      : "shrink-0 text-muted-foreground"
+                  }
+                >
+                  {source.needsConfig
+                    ? t("projects.sourcesNeedsKey")
+                    : t("projects.sourcesReady")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div
+        data-project-components
+        className="mt-1 flex flex-col gap-1 rounded-md border bg-background/40 p-2"
+      >
+        <span className="text-xs font-medium uppercase text-muted-foreground">
+          {t("projects.components")}
+        </span>
+        {componentRows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {t("projects.componentsEmpty")}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {componentRows.map((row) => (
+              <li
+                key={row.assetId}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="min-w-0 truncate">
+                  <span className="font-medium">{row.name}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {t("projects.componentCopies", { count: row.copies })}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  <code className="rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                    {row.upToDate
+                      ? `v${row.latestVersion}`
+                      : `v${row.installedVersion} → v${row.latestVersion}`}
+                  </code>
+                  {row.upToDate ? null : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-6 px-1.5 text-xs"
+                      onClick={() => updateComponents(row.assetId)}
+                    >
+                      {t("projects.componentUpdate")}
+                    </Button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

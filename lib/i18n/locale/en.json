@@ -545,7 +545,17 @@
     "moveUp": "Move earlier",
     "moveDown": "Move later",
     "noOtherProjects": "No other project",
-    "rowActions": "Actions for {name}"
+    "rowActions": "Actions for {name}",
+    "sources": "Sources",
+    "sourcesEmpty": "No data sources declared by this project's screens.",
+    "sourcesReady": "Ready",
+    "sourcesNeedsKey": "Needs a server key",
+    "components": "Components",
+    "componentsEmpty": "No catalog components installed yet.",
+    "componentCopies": "{count, plural, one {# copy} other {# copies}}",
+    "componentUpdate": "Update",
+    "componentUpdated": "{count, plural, one {Updated # copy} other {Updated # copies}}",
+    "componentUpdateFailed": "Could not update those copies — try again."
   },
   "localeSwitcher": {
     "label": "Language"
