@@ -531,6 +531,13 @@ export function removeProject(id: string): void {
   writeStoredDeletions(pending);
   if (loadActive() === id) setActiveProjectId(null);
   clearProjectFromEntries(id);
+  // Plan 073: the project's membership rows go with it. The screens stay in
+  // history as "no project"; a surviving row would point at a deleted
+  // parent (FK-refused push, listed under "No project" in the drawer).
+  // Imported lazily because the memberships store already imports this one.
+  void import("@/lib/projects/memberships")
+    .then(({ removeProjectMemberships }) => removeProjectMemberships(id))
+    .catch(() => {});
   // Plan 067 decision 4: deletion owns the project's data — local rows now,
   // remote `genui_records` best-effort (never blocks or fails the delete).
   void purgeProjectData(id);

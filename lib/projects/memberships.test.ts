@@ -329,6 +329,29 @@ describe("membership store", () => {
     expect(storeB.getMembership(project.id, screen)).toBeNull();
   });
 
+  test("deleting the project drops its memberships and keeps the screens (073)", async () => {
+    const project = seedProject("Doomed");
+    const kept = seedProject("Kept");
+    const screen = seedEntry("doomed-screen", project.id);
+    const other = seedEntry("kept-screen", kept.id);
+    store.addScreenToProject(project.id, screen);
+    store.addScreenToProject(kept.id, other);
+
+    removeProject(project.id);
+    // The cleanup hop is lazy (memberships already imports the projects
+    // store); one microtask is enough for it to land.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const stored = JSON.parse(
+      ls().getItem(MEMBERSHIP_STORAGE_KEY) ?? "[]",
+    ) as ProjectMembership[];
+    expect(stored.some((row) => row.projectId === project.id)).toBe(false);
+    // Another project's rows are untouched, and the screens survive.
+    expect(stored.some((row) => row.projectId === kept.id)).toBe(true);
+    expect(getHistory().some((entry) => entry.id === screen)).toBe(true);
+    expect(getProjects().some((row) => row.id === kept.id)).toBe(true);
+  });
+
   test("copy: new screen at revision 0 in the destination; source untouched", () => {
     const from = seedProject("CopyFrom");
     const to = seedProject("CopyTo");

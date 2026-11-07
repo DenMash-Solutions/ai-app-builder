@@ -493,6 +493,23 @@ export function removeScreenFromProject(
 }
 
 /**
+ * Drop every membership row of a DELETED project (plan 073). Its screens
+ * stay in history as "no project" (plan 067: deletion owns project data,
+ * never the shared screens), but a surviving row would reference a project
+ * that no longer exists — the memberships loop would push it against a
+ * missing FK, and the drawer would list it under "No project". Returns how
+ * many rows went.
+ */
+export function removeProjectMemberships(projectId: string): number {
+  const rows = load();
+  const next = rows.filter((row) => row.projectId !== projectId);
+  if (next.length === rows.length) return 0;
+  cache = next;
+  persist();
+  return rows.length - next.length;
+}
+
+/**
  * Copy a member screen into ANOTHER project as a NEW screen (decision 3):
  * the copy gets a fresh `HistoryEntry`/`uis` identity at revision 0 and a
  * membership row in the destination — the source membership, entry and its
