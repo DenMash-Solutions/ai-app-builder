@@ -241,22 +241,23 @@ identified as missing regardless of templates.
 
 ## Verification
 
-- [ ] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
-- [ ] Migration applied via Supabase MCP (`catalog_assets_type_check`
+- [x] `bun run format && bun run lint && bunx tsc --noEmit && bun run test`
+      (1204 pass; re-run after the delete-pass fix)
+- [x] Migration applied via Supabase MCP (`catalog_assets_type_check`
       accepts `'project'`) and `db/01_schema.sql` check constraint kept in
       sync (README re-runnable contract).
-- [ ] Unit — `isProjectManifest`: valid manifest passes; bad screen spec,
+- [x] Unit — `isProjectManifest`: valid manifest passes; bad screen spec,
       dangling slot key, slot → non-listed component, two `home` flags
       fail; `publishCatalogVersion` branches per type (project manifest
       rejected for a screen asset and vice versa).
-- [ ] Unit — installer: screens created with memberships/routes/home in
+- [x] Unit — installer: screens created with memberships/routes/home in
       order, slot expansion produces install rows with real targets +
       `data-template-id`, unknown component id fails the install with a
       step-labeled error, idempotence guard (re-run doesn't duplicate).
-- [ ] Unit — `load-template.ts` manifest: 7 screens, one home, every slot
+- [x] Unit — `load-template.ts` manifest: 7 screens, one home, every slot
       key exists in its screen spec, component ids match the seed set;
       generator output contains fixed UUIDs + `on conflict do nothing`.
-- [ ] Unit — settings sections: sources union dedupes across screens and
+- [x] Unit — settings sections: sources union dedupes across screens and
       flags missing config; components section shows lowest pinned →
       latest.
 - [ ] e2e (extends the seeded-DB pattern of `ecommerce.spec.ts`) —
@@ -269,9 +270,10 @@ identified as missing regardless of templates.
 - [ ] Full chain: `bun run lint && bunx tsc --noEmit && bun run test` +
       `bun run test:e2e` (or the per-spec scripts; catalog/ecommerce
       flakes → `--workers=1`, no timeout raises — mistake #32).
-- [ ] Optional MCP/live: on the real account, preview the ecommerce
+- [x] Optional MCP/live: on the real account, preview the ecommerce
       template, play (navigate + add to cart), Use it, confirm Sources
-      and Components in settings, Discard it.
+      and Components in settings, Discard it. (2026-11-07 — done, see the
+      status log; the cart click itself was not exercised.)
 
 ## Status log
 
@@ -293,3 +295,5 @@ identified as missing regardless of templates.
 | 2026-11-07 | **Task 5 — first-party seed implemented and applied.** `demo/ecommerce/load-template.ts` assembles the committed demo into one manifest (7 screens in nav order + 7 components, fixed UUIDs `b240…`/`b241…`): the product card is composed INTO the seeded grid spec because its slot lives inside the grid component, which a screen-level slot map cannot reach. `scripts/generate-template-seed.ts` emits `db/07_project_templates.sql` (owner = admin email subselect, `on conflict do nothing`, dollar-quoted jsonb) and `scripts/apply-template-seed.ts` applies the same builder output through the service role. Applied to the live project: 8/8 asset rows and 8/8 version rows present; template reads back `project`/public/7 screens/7 components. Unit: `load-template.test.ts` (5, incl. committed-SQL guard). |
 | 2026-11-07 | **Task 6 — workspace-panel Sources + Components implemented.** New `lib/projects/project-insights.ts` holds both builders (pure, no store writes): `projectSources` unions the member screens' `dataSources` (name+provider+config identity dedupes, screens collected, resources → collections, queries → reads, `api` without `config.auth.ref` flags `needsConfig` — the 067 publish gate's meaning) and `projectComponentRows` groups the project's installs per asset (copies, LOWEST pinned → latest version, `upToDate` per 071). `ProjectWorkspacePanel` subscribes the catalog store and renders the two read-only sections under the pages list; `Update` calls `updateCatalogAssetInstalls` with plural toasts. en/es copy at parity. Unit: `project-insights.test.ts` (7). Gate: format/lint/tsc clean, 1202 unit pass. |
 | 2026-11-07 | **Task 7 — catalog-route e2e + two seam fixes.** `e2e/catalog-route.spec.ts` (authed, registered in chromium ignore + authed match, script `test:e2e:catalog-route`) drives sidebar → browse (thumbnails, search, type facet) → detail → Preview (banner + `/en/preview-ecommerce-storefront` + home render, ≥7 install rows all carrying `targetKey`, `/products` member route) → Use (active project named exactly the template name, no banner) → workspace panel present → second preview → Discard back to `/catalog`. Green (22.0s). Two fixes fell out of it: (a) `{"$item": …}` in ACTION params resolves to the item's state PATH, not its value — `CatalogActions` now maps the pointer through `useStateStore()` + `getByPath`, fixing Open landing on `/catalog/catalog/visible/0/assetId`; (b) project deletion guard — `removeProject` records the id (`genui-project-deletions`), `applyRemoteProject` refuses a pending id and the projects sync loop clears it via `onRemoteDeleted`, because the pull resurrected a discarded preview (remote row survived; verified by SQL); unit test added. **Known gap recorded for follow-up:** in this run a discarded preview row still reappeared after the discard (its id was not in the pending set), so the e2e asserts the navigation only — the store-level discard guarantee needs its own investigation. Full-chain e2e run pending. |
+| 2026-11-07 | **MCP live verification on the real account** (signed-in admin, dev server :3000). Browse: 8 `SpecPreview` cards, search filters to 0 / 1. Open → detail. **Preview**: `/en/preview-ecommerce-storefront`, banner "Previewing Ecommerce storefront", project `Preview: Ecommerce storefront` with 7 memberships *all* matching `genui-playground-history` ids, 16 install rows (every one carrying `targetKey`), storefront renders with fixture products, `Products` nav → `/products-a1db8237` (route navigation works). **Workspace panel**: 7 pages with routes, SOURCES (`browserStore localStorage`, `storefront api`, both Ready), COMPONENTS (6 assets, `Store navigation 7 copies`). **Use** (detail) → new project `Ecommerce storefront`, no banner. **Keep** (banner) → same id renamed, slug deduped to `ecommerce-storefront-2`, banner gone, URL followed. The task-7 "screens missing / no screens" gap does **not** reproduce here: memberships and entries match 7/7, so that observation was a Playwright-run artifact, not a product bug. |
+| 2026-11-07 | **Discard defect found by that test and fixed** (`da4a529`). `removeProject` wrote the `genui-project-deletions` marker, but the delete pass only looked at `syncedIds`, so a preview discarded *before its next full merge* never entered it again after a reload (the pull refuses the row) — the remote `projects` row survived forever and its 7 `project_screens` rows came back on the next pull. Fix: `SyncSpec.pendingDeletions()` + `getProjectDeletions()` feed the marker ids into the delete pass (same owner check, absent remote rows report back so the marker can clear). Unit test reproduces the reload case. Gate: format/lint/tsc clean, 1204 unit pass, `test:e2e:catalog-route` green (16.9s). Live re-check: after discard + reload the marker is gone and the remote row is deleted. **Open (not fixed):** the discard still leaves the project's 7 `project_screens` rows in `localStorage` (only `clearProjectFromEntries` runs, which strips the history pointer) — they are orphaned memberships with a deleted parent, so the memberships loop will push them against a missing FK and the drawer can list them under "No project". Needs its own pass. |
