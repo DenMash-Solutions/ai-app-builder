@@ -10,6 +10,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "bun test lib components app demo",
+    "seed:templates": "bun scripts/generate-template-seed.ts",
+    "seed:templates:apply": "bun scripts/apply-template-seed.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:authed": "playwright test e2e/authed.spec.ts --no-deps",
