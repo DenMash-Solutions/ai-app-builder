@@ -153,10 +153,7 @@ function readFromStorage(): HistoryEntry[] {
     if (!raw) return EMPTY_HISTORY;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return EMPTY_HISTORY;
-    const entries = parsed
-      .filter(isValidEntry)
-      .map(normalizeEntry)
-      .slice(0, MAX_ENTRIES);
+    const entries = capHistory(parsed.filter(isValidEntry).map(normalizeEntry));
     return entries.length > 0 ? entries : EMPTY_HISTORY;
   } catch {
     return EMPTY_HISTORY;
@@ -214,6 +211,25 @@ function commit(entries: HistoryEntry[]): void {
   notify();
 }
 
+/**
+ * Cap the store at MAX_ENTRIES without dropping newer work. Eviction is by
+ * `updatedAt`, not by position: the account-sync pull PREPENDS every row it
+ * adopts, so a tail slice silently dropped an entry that had just been
+ * created locally (a device adopting more than MAX_ENTRIES rows while a
+ * generation lands rewrote a live entry away — the "UI not found" flip,
+ * F2). Kept entries keep their relative order.
+ */
+function capHistory(entries: HistoryEntry[]): HistoryEntry[] {
+  if (entries.length <= MAX_ENTRIES) return entries;
+  const keep = new Set(
+    [...entries]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_ENTRIES)
+      .map((entry) => entry.id),
+  );
+  return entries.filter((entry) => keep.has(entry.id));
+}
+
 export function addEntry(entry: HistoryEntry): void {
   // A provided updatedAt belongs to an account-synced copy — keep it so the
   // merge sees the original write time; local creations carry their own now.
@@ -222,7 +238,7 @@ export function addEntry(entry: HistoryEntry): void {
     updatedAt:
       typeof entry.updatedAt === "number" ? entry.updatedAt : Date.now(),
   };
-  commit([stamped, ...getHistory()].slice(0, MAX_ENTRIES));
+  commit(capHistory([stamped, ...getHistory()]));
 }
 
 export function removeEntry(id: string): void {
@@ -253,7 +269,7 @@ export function applyRemoteEntry(remote: HistoryEntry): void {
   const next = exists
     ? history.map((entry) => (entry.id === remote.id ? remote : entry))
     : [remote, ...history];
-  commit(next.slice(0, MAX_ENTRIES));
+  commit(capHistory(next));
 }
 
 /**

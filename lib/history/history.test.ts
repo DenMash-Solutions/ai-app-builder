@@ -3,6 +3,7 @@ import type { Spec } from "@json-render/core";
 import {
   REVISION_LABELS,
   addEntry,
+  applyRemoteEntry,
   canRedo,
   canUndo,
   clearHistory,
@@ -346,5 +347,44 @@ describe("replaceEntrySpec", () => {
       replaceEntrySpec("missing-id", makeSpec("v1"), REVISION_LABELS.import),
     ).toBeNull();
     expect(getHistory()).toEqual(before);
+  });
+});
+
+function remoteEntry(index: number, updatedAt: number): HistoryEntry {
+  const spec = makeSpec(`remote ${index}`);
+  return {
+    id: `remote-${index}`,
+    name: `remote ${index}`,
+    slug: `remote-${index}`,
+    prompt: `remote ${index}`,
+    spec,
+    revisions: [
+      { spec, label: REVISION_LABELS.generate, createdAt: updatedAt },
+    ],
+    head: 0,
+    createdAt: updatedAt,
+    updatedAt,
+  };
+}
+
+describe("applyRemoteEntry", () => {
+  test("a pull adopting more than MAX_ENTRIES rows keeps a just-created entry (F2)", () => {
+    clearHistory();
+    const local = createEntry("fresh generation", makeSpec("fresh"));
+    addEntry(local);
+    const base = local.updatedAt - 10_000;
+
+    // A device with an empty store adopts every remote row, oldest last; each
+    // adoption prepends, which used to slice the new local entry off the tail.
+    for (let index = 0; index < 60; index++) {
+      applyRemoteEntry(remoteEntry(index, base + index));
+    }
+
+    const history = getHistory();
+    expect(history).toHaveLength(50);
+    expect(history.some((entry) => entry.id === local.id)).toBe(true);
+    // The cap drops the oldest writes, not whoever happens to sit at the end.
+    expect(history.some((entry) => entry.id === "remote-0")).toBe(false);
+    expect(history.some((entry) => entry.id === "remote-59")).toBe(true);
   });
 });
