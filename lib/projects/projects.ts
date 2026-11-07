@@ -28,6 +28,13 @@ import type { Spec } from "@json-render/core";
 
 export const PROJECT_STORAGE_KEY = "genui-projects";
 export const ACTIVE_PROJECT_STORAGE_KEY = "genui-active-project";
+/**
+ * Ids deleted locally whose remote row may still exist (plan 073). Without
+ * it the sync loop's pull re-adopts a just-deleted project before its delete
+ * pass runs — a template preview would come back after Discard. Persisted so
+ * a reload before the delete lands does not resurrect the row either.
+ */
+export const PROJECT_DELETIONS_STORAGE_KEY = "genui-project-deletions";
 
 export interface Project {
   id: string;
@@ -201,6 +208,54 @@ function readStored(): Project[] {
     // Unreadable/corrupt value — fall back to an empty project list.
     return EMPTY;
   }
+}
+
+/** Ids of projects deleted locally whose remote delete is still pending. */
+function readStoredDeletions(): Set<string> {
+  try {
+    const stored = window.localStorage.getItem(PROJECT_DELETIONS_STORAGE_KEY);
+    if (!stored) return new Set();
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((id): id is string => typeof id === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeStoredDeletions(ids: ReadonlySet<string>): void {
+  try {
+    if (ids.size === 0) {
+      window.localStorage.removeItem(PROJECT_DELETIONS_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(
+      PROJECT_DELETIONS_STORAGE_KEY,
+      JSON.stringify([...ids]),
+    );
+  } catch {
+    // Best-effort — the in-memory set still guards this session.
+  }
+}
+
+let pendingDeletions: Set<string> | null = null;
+
+function deletions(): Set<string> {
+  if (pendingDeletions === null) pendingDeletions = readStoredDeletions();
+  return pendingDeletions;
+}
+
+/** True while `id` awaits its remote delete (the pull must not re-adopt it). */
+export function isProjectDeletionPending(id: string): boolean {
+  return deletions().has(id);
+}
+
+/** The delete pass removed these remotely — stop guarding them. */
+export function clearProjectDeletions(ids: readonly string[]): void {
+  const current = deletions();
+  let changed = false;
+  for (const id of ids) changed = current.delete(id) || changed;
+  if (changed) writeStoredDeletions(current);
 }
 
 function readStoredActive(): string | null {
@@ -462,6 +517,11 @@ export function removeProject(id: string): void {
   if (!projects.some((project) => project.id === id)) return;
   cache = projects.filter((project) => project.id !== id);
   persist();
+  // Guard the row against the sync pull re-adopting it before its delete
+  // pass runs (plan 073: a discarded template preview must stay discarded).
+  const pending = deletions();
+  pending.add(id);
+  writeStoredDeletions(pending);
   if (loadActive() === id) setActiveProjectId(null);
   clearProjectFromEntries(id);
   // Plan 067 decision 4: deletion owns the project's data — local rows now,
@@ -539,6 +599,9 @@ export function setSessionState(
  * from this realm can't clobber the freshly adopted shared state.
  */
 export function applyRemoteProject(remote: Project): void {
+  // A locally deleted project is gone by intent — the pull must not bring it
+  // back while the delete pass is still on its way.
+  if (isProjectDeletionPending(remote.id)) return;
   const projects = load();
   const adoptedSlugs = new Set([remote.slug]);
   const next = projects.map((project) => {

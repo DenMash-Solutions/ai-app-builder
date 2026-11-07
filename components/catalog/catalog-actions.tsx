@@ -8,10 +8,11 @@
  * project. Every failure path removes the half-built project again, so a
  * refused install never leaves junk behind.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useActions } from "@json-render/react";
+import { getByPath } from "@json-render/core";
+import { useActions, useStateStore } from "@json-render/react";
 import { toast } from "sonner";
 import { CATALOG_TYPES, getCatalogAssets } from "@/lib/catalog/catalog";
 import { previewProjectName } from "@/lib/catalog/preview";
@@ -24,10 +25,32 @@ export function CatalogActions() {
   const router = useRouter();
   const { locale } = useParams<{ locale: string }>();
   const t = useTranslations("catalog");
+  const { state } = useStateStore();
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  /**
+   * `{"$item": "assetId"}` in ACTION params resolves to the item's state
+   * PATH, not its value (props resolve to values). Cards live in a repeat, so
+   * the browse frame hands over `/catalog/visible/<i>/assetId`; reading it
+   * back from the spec state gives the id. A literal id (the detail frame's
+   * `$state` param) resolves to undefined and passes through unchanged.
+   */
+  const assetIdOf = (params: Record<string, unknown>): string => {
+    const raw = typeof params.assetId === "string" ? params.assetId : "";
+    if (raw === "") return "";
+    const value = getByPath(
+      stateRef.current,
+      raw.startsWith("/") ? raw : `/${raw}`,
+    );
+    return typeof value === "string" && value !== "" ? value : raw;
+  };
 
   useEffect(() => {
     registerHandler(CATALOG_ACTIONS.open, async (params) => {
-      const assetId = typeof params.assetId === "string" ? params.assetId : "";
+      const assetId = assetIdOf(params);
       if (assetId === "") return;
       router.push(`/${locale}/catalog/${assetId}`);
     });
@@ -68,11 +91,11 @@ export function CatalogActions() {
     };
 
     registerHandler(CATALOG_ACTIONS.preview, async (params) => {
-      install(typeof params.assetId === "string" ? params.assetId : "", true);
+      install(assetIdOf(params), true);
     });
 
     registerHandler(CATALOG_ACTIONS.use, async (params) => {
-      install(typeof params.assetId === "string" ? params.assetId : "", false);
+      install(assetIdOf(params), false);
     });
   }, [registerHandler, router, locale, t]);
 

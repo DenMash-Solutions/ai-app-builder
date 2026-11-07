@@ -4,6 +4,7 @@ import { addEntry, createEntry, getHistory, removeEntry } from "@/lib/history";
 import type { HistoryEntry } from "@/lib/history";
 import {
   ACTIVE_PROJECT_STORAGE_KEY,
+  PROJECT_DELETIONS_STORAGE_KEY,
   PROJECT_STORAGE_KEY,
   slugifyProjectName,
 } from "./projects";
@@ -76,6 +77,31 @@ describe("project store", () => {
     }
     ls().removeItem(PROJECT_STORAGE_KEY);
     ls().removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+    ls().removeItem(PROJECT_DELETIONS_STORAGE_KEY);
+  });
+
+  test("a removed project stays removed until its remote delete lands", () => {
+    const created = store.createProject("Discard me");
+    expect(created).not.toBeNull();
+    const project = created!;
+
+    store.removeProject(project.id);
+    expect(store.getProjects().some((row) => row.id === project.id)).toBe(
+      false,
+    );
+    expect(store.isProjectDeletionPending(project.id)).toBe(true);
+
+    // The pull delivers the row again — the guard refuses the adoption.
+    store.applyRemoteProject({ ...project, updatedAt: Date.now() });
+    expect(store.getProjects().some((row) => row.id === project.id)).toBe(
+      false,
+    );
+
+    // The delete pass removed it remotely; a later pull may adopt again.
+    store.clearProjectDeletions([project.id]);
+    expect(store.isProjectDeletionPending(project.id)).toBe(false);
+    store.applyRemoteProject({ ...project, updatedAt: Date.now() });
+    expect(store.getProjects().some((row) => row.id === project.id)).toBe(true);
   });
 
   test("hydration keeps only valid projects and resolves the active id", async () => {

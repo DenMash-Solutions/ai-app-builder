@@ -7,6 +7,7 @@ import {
 import type { HistoryEntry, SpecRevision } from "./history";
 import {
   applyRemoteProject,
+  clearProjectDeletions,
   getProjects,
   reconcileProjectSlugs,
   sanitizeProjects,
@@ -347,6 +348,10 @@ export interface SyncSpec<T extends { id: string; updatedAt: number }> {
    *  up local data colliding with remote rows (slug uniqueness, 064
    *  decision 5). Absent for entries — their namespaces reconcile today. */
   reconcile?(remote: readonly SlimRow[]): void;
+  /** Called after the delete pass removed `ids` remotely — lets a store
+   *  clear the local "this row is gone" marker it used to keep the pull
+   *  from re-adding it (plan 073: project Discard). */
+  onRemoteDeleted?(ids: readonly string[]): void;
   /** Rows that NEVER change once created (066 versions — the DB's
    *  immutability trigger refuses updates): the compare is strict `>` so an
    *  equal remote copy is treated as already synced and never re-upserted
@@ -555,6 +560,7 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
           scheduleRetry();
           return;
         }
+        spec.onRemoteDeleted?.(removed);
       }
     }
 
@@ -704,6 +710,7 @@ export const projectsSyncSpec: SyncSpec<Project> = {
   toEntity: rowToProject,
   toRow: projectToRow,
   reconcile: reconcileProjectSlugs,
+  onRemoteDeleted: clearProjectDeletions,
 };
 
 /** The `project_screens` row shape the full-row phase returns (065). */

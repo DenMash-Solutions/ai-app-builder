@@ -33,6 +33,7 @@ export const PATHS = {
   login: "/en/login",
   signup: "/en/signup",
   admin: "/en/admin",
+  catalog: "/en/catalog",
 } as const;
 
 export const UI = {
@@ -85,6 +86,8 @@ export const PROJECTS = {
   delete: en.projects.delete,
   namePlaceholder: en.projects.createPlaceholder,
   expandWorkspace: en.projects.expandWorkspace,
+  collapseWorkspace: en.projects.collapseWorkspace,
+  workspace: en.projects.workspace,
   addScreen: en.projects.addScreen,
   setHome: en.projects.setHome,
   unsetHome: en.projects.unsetHome,
@@ -92,6 +95,25 @@ export const PROJECTS = {
   removeScreen: en.projects.removeScreen,
   rowActions: (name: string): string =>
     en.projects.rowActions.replace("{name}", name),
+} as const;
+
+/** Marketplace route copy (plan 073) — frames read it from injected state. */
+export const CATALOG_UI = {
+  title: en.catalog.title,
+  heading: en.catalog.title,
+  searchPlaceholder: en.catalog.searchPlaceholder,
+  open: en.catalog.open,
+  typeAll: en.catalog.typeAll,
+  typeTemplates: en.catalog.typeTemplates,
+  typeComponents: en.catalog.typeComponents,
+  screens: en.catalog.screens,
+  preview: en.catalog.preview,
+  use: en.catalog.use,
+  keep: en.catalog.keepTemplate,
+  discard: en.catalog.discardPreview,
+  sources: en.projects.sources,
+  components: en.projects.components,
+  ready: en.projects.sourcesReady,
 } as const;
 
 export const RENAME = {
@@ -124,6 +146,7 @@ export const AUTH = {
  *  sign-in/sign-out flows live in the authenticated e2e suites. */
 export const SHELL = {
   playgroundNav: en.shell.nav.playground,
+  catalogNav: en.shell.nav.catalog,
   livePagesNav: en.shell.nav.livePages,
   navLabel: en.shell.nav.primary,
   openMenu: en.shell.nav.openMenu,

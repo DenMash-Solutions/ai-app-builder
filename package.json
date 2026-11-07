@@ -20,7 +20,8 @@
     "test:e2e:project-publish": "playwright test e2e/project-publish.spec.ts --no-deps",
     "test:e2e:signout": "playwright test e2e/signout.spec.ts --no-deps",
     "test:e2e:usernames": "playwright test e2e/usernames.spec.ts --no-deps",
-    "test:e2e:ecommerce": "playwright test e2e/ecommerce.spec.ts --no-deps"
+    "test:e2e:ecommerce": "playwright test e2e/ecommerce.spec.ts --no-deps",
+    "test:e2e:catalog-route": "playwright test e2e/catalog-route.spec.ts --project=authed --no-deps"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.87",

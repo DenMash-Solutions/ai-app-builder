@@ -24,6 +24,7 @@ export default defineConfig({
       testIgnore: [
         "**/authed.spec.ts",
         "**/catalog.spec.ts",
+        "**/catalog-route.spec.ts",
         "**/project-publish.spec.ts",
         "**/signout.spec.ts",
         "**/usernames.spec.ts",
@@ -41,6 +42,7 @@ export default defineConfig({
       testMatch: [
         "**/authed.spec.ts",
         "**/catalog.spec.ts",
+        "**/catalog-route.spec.ts",
         "**/usernames.spec.ts",
         "**/project-publish.spec.ts",
         "**/ecommerce.spec.ts",
