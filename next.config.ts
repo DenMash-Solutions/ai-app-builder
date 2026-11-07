@@ -7,6 +7,13 @@ const nextConfig: NextConfig = {
   // Cache Components (plan 056): every route must be prerenderable; route
   // opt-outs (`export const instant = false`) are the adoption work queue.
   cacheComponents: true,
+  // Screen-to-screen navigation must feel instant: reuse the client Router
+  // Cache instead of re-fetching the RSC payload on every push. `dynamic`
+  // defaults to 0 (no reuse) since Next 15, which made every project screen
+  // navigation a fresh server round trip (`?_rsc=…`).
+  experimental: {
+    staleTimes: { dynamic: 30, static: 180 },
+  },
   // Native oxide scanner + the compile engine must not be bundled into the
   // /api/tailwind route (server-side on-demand Tailwind).
   serverExternalPackages: ["@tailwindcss/node", "@tailwindcss/oxide"],
