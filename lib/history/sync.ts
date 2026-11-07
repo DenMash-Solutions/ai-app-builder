@@ -8,6 +8,7 @@ import type { HistoryEntry, SpecRevision } from "./history";
 import {
   applyRemoteProject,
   clearProjectDeletions,
+  getProjectDeletions,
   getProjects,
   reconcileProjectSlugs,
   sanitizeProjects,
@@ -352,6 +353,11 @@ export interface SyncSpec<T extends { id: string; updatedAt: number }> {
    *  clear the local "this row is gone" marker it used to keep the pull
    *  from re-adding it (plan 073: project Discard). */
   onRemoteDeleted?(ids: readonly string[]): void;
+  /** Ids the local store already dropped but whose remote row may still
+   *  exist (plan 073 project Discard). Unlike `syncedIds` this survives a
+   *  reload: the pull refuses such a row, so it never re-enters `syncedIds`
+   *  and the loop would otherwise leave the remote copy behind forever. */
+  pendingDeletions?(): readonly string[];
   /** Rows that NEVER change once created (066 versions — the DB's
    *  immutability trigger refuses updates): the compare is strict `>` so an
    *  equal remote copy is treated as already synced and never re-upserted
@@ -542,25 +548,35 @@ export function startTableSync<T extends { id: string; updatedAt: number }>(
     // with their owning asset, whose remote cascade owns the cleanup — a
     // direct delete here would race the asset loop and hit the trigger.
     if (!spec.immutableRows) {
-      const removed = [...syncedIds].filter((id) => {
-        if (localIds.has(id)) return false;
-        if (foreignIds.has(id)) return false; // adopted — never ours to delete
-        // A stale local copy of another account's row must not delete it.
+      const removed = new Set(
+        [...syncedIds].filter((id) => {
+          if (localIds.has(id)) return false;
+          if (foreignIds.has(id)) return false; // adopted — never ours to delete
+          // A stale local copy of another account's row must not delete it.
+          const remote = remoteById.get(id);
+          return !remote || remote.owner_id === ownerId;
+        }),
+      );
+      // Store-declared deletions of rows that never made it into `syncedIds`
+      // this session (see `pendingDeletions`): same ownership check, and an
+      // already-absent remote row still reports back so the marker can go.
+      for (const id of spec.pendingDeletions?.() ?? []) {
+        if (localIds.has(id)) continue;
         const remote = remoteById.get(id);
-        return !remote || remote.owner_id === ownerId;
-      });
-      if (removed.length > 0) {
+        if (!remote || remote.owner_id === ownerId) removed.add(id);
+      }
+      if (removed.size > 0) {
         const { error: deleteError } = await client
           .from(spec.table)
           .delete()
-          .in("id", removed);
+          .in("id", [...removed]);
         if (stopped) return;
         if (deleteError) {
           setLoopStatus(spec.table, "offline");
           scheduleRetry();
           return;
         }
-        spec.onRemoteDeleted?.(removed);
+        spec.onRemoteDeleted?.([...removed]);
       }
     }
 
@@ -711,6 +727,7 @@ export const projectsSyncSpec: SyncSpec<Project> = {
   toRow: projectToRow,
   reconcile: reconcileProjectSlugs,
   onRemoteDeleted: clearProjectDeletions,
+  pendingDeletions: getProjectDeletions,
 };
 
 /** The `project_screens` row shape the full-row phase returns (065). */

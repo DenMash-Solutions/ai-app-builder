@@ -56,6 +56,7 @@ import {
   applyRemoteProject,
   createProject,
   getProjects,
+  isProjectDeletionPending,
   removeProject,
 } from "@/lib/projects/projects";
 import type { Project } from "@/lib/projects/projects";
@@ -1008,6 +1009,32 @@ describe("projects loop (plan 064)", () => {
     expect(getSyncStatus()).toBe("saved");
     stopAgain.forEach((stop) => stop());
     expect(getSyncStatus()).toBe("idle");
+  });
+
+  test("a deletion pending from an earlier session still deletes remotely (plan 073)", async () => {
+    // A preview discarded before its reload left the remote row behind: the
+    // pull refuses to re-adopt it, so it never enters `syncedIds` and the
+    // loop used to skip its delete pass entirely.
+    const project = createProject("Preview: Catalog template") as Project;
+    state.rows.push(projectRow(project.id, { name: project.name }));
+    removeProject(project.id);
+    expect(isProjectDeletionPending(project.id)).toBe(true);
+
+    const stop = startTableSync(
+      makeClient(state),
+      "owner-1",
+      projectsSyncSpec,
+      {
+        debounceMs: 1,
+      },
+    );
+    await sleep(30);
+
+    expect(state.rows.some((row) => row.id === project.id)).toBe(false);
+    expect(getProjects()).toHaveLength(0);
+    // The marker is gone, so a later pull may adopt a row that comes back.
+    expect(isProjectDeletionPending(project.id)).toBe(false);
+    stop();
   });
 });
 

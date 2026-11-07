@@ -250,6 +250,13 @@ export function isProjectDeletionPending(id: string): boolean {
   return deletions().has(id);
 }
 
+/** Ids whose remote delete is still outstanding (the delete pass pushes
+ *  them even when they never reached `syncedIds` this session — a preview
+ *  discarded before its row was re-pulled is exactly that case, plan 073). */
+export function getProjectDeletions(): string[] {
+  return [...deletions()];
+}
+
 /** The delete pass removed these remotely — stop guarding them. */
 export function clearProjectDeletions(ids: readonly string[]): void {
   const current = deletions();
