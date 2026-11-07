@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { JSONUIProvider, Renderer } from "@json-render/react";
+import type { ComponentRegistry } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 import { useLocale, useTranslations } from "next-intl";
 import { PenLine } from "lucide-react";
@@ -67,6 +68,7 @@ export function SpecPage({
   extraState,
   children,
   main = true,
+  registry: componentRegistry = registry,
 }: {
   spec: Spec;
   extraState?: Record<string, unknown>;
@@ -74,6 +76,9 @@ export function SpecPage({
   /** Renders the page root as `<main>`; disable when a layout above already
    *  provides the landmark (e.g. the app shell's `SidebarInset`). */
   main?: boolean;
+  /** Renderer registry override — surfaces that need components outside the
+   *  playground catalog (plan 073's marketplace `SpecPreview`) pass their own. */
+  registry?: ComponentRegistry;
 }) {
   // Checks carry { $state } messages the engine doesn't deep-resolve; the
   // localized spec swaps them for the injected copy.
@@ -91,7 +96,7 @@ export function SpecPage({
 
   return (
     <JSONUIProvider
-      registry={registry}
+      registry={componentRegistry}
       initialState={initialState}
       handlers={{}}
       validationFunctions={{}}
@@ -104,11 +109,11 @@ export function SpecPage({
       <QueryLoader spec={spec} namespace={SPEC_PAGE_DATA_NAMESPACE} />
       {main ? (
         <main className="relative w-full">
-          <Renderer spec={localized} registry={registry} />
+          <Renderer spec={localized} registry={componentRegistry} />
         </main>
       ) : (
         <div className="relative w-full">
-          <Renderer spec={localized} registry={registry} />
+          <Renderer spec={localized} registry={componentRegistry} />
         </div>
       )}
       {children}

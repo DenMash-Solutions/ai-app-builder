@@ -10,12 +10,16 @@ import {
 import loginSpecJson from "./login.spec.json";
 import signupSpecJson from "./signup.spec.json";
 import adminSpecJson from "./admin.spec.json";
+import catalogSpecJson from "./catalog.spec.json";
+import catalogDetailSpecJson from "./catalog-detail.spec.json";
 
 // JSON imports are widened to plain literals; the specs satisfy the shape.
 const specs: Array<[string, Spec]> = [
   ["login", loginSpecJson as unknown as Spec],
   ["signup", signupSpecJson as unknown as Spec],
   ["admin", adminSpecJson as unknown as Spec],
+  ["catalog", catalogSpecJson as unknown as Spec],
+  ["catalog-detail", catalogDetailSpecJson as unknown as Spec],
 ];
 
 describe("committed page specs", () => {

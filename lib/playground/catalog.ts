@@ -14,7 +14,7 @@ import { LUCIDE_ICON_NAMES } from "@/lib/playground/icons";
 import { NAVIGATE_ACTION } from "@/lib/projects/screen-nav";
 import { SWITCH_THEME_ACTION } from "@/lib/theme/spec-theme";
 
-const STYLE_PROPS = {
+export const STYLE_PROPS = {
   className: z
     .string()
     .nullable()
@@ -118,7 +118,7 @@ const componentExtensions: Record<
   Input: { events: ["change"] },
 };
 
-const components = {
+export const playgroundComponentDefinitions = {
   ...(Object.fromEntries(
     Object.entries(shadcnComponentDefinitions).map(([name, definition]) => {
       const extension = componentExtensions[name];
@@ -152,7 +152,7 @@ const components = {
 };
 
 export const playgroundCatalog = defineCatalog(schema, {
-  components,
+  components: playgroundComponentDefinitions,
   // D7: filterItems — the prompt lists the name automatically; STYLING_RULES
   // documents the search/filter wiring that uses it.
   functions: PLAYGROUND_FUNCTIONS,

@@ -116,7 +116,9 @@ export interface CatalogInstall {
   updatedAt: number;
 }
 
-interface CatalogState {
+/** Whole-store snapshot (the public `getCatalogState` shape) — exported so
+ *  read-only consumers (plan 073's thumbnails) can type what they resolve. */
+export interface CatalogState {
   assets: CatalogAsset[];
   versions: CatalogAssetVersion[];
   installs: CatalogInstall[];

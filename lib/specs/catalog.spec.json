@@ -1,0 +1,328 @@
+{
+  "root": "page",
+  "state": {
+    "locale": "en",
+    "copy": {
+      "title": "Catalog",
+      "description": "Complete project templates, screens and components you can preview and install. Templates arrive with their screens, routes and components wired up.",
+      "empty": "Nothing in the catalog yet — publish a screen or component from the history drawer to see it here.",
+      "searchPlaceholder": "Search by name or description",
+      "sortLatest": "Sorted by latest",
+      "open": "Open",
+      "typeButtons": [
+        { "label": "All", "value": "" },
+        { "label": "Templates", "value": "project" },
+        { "label": "Screens", "value": "screen" },
+        { "label": "Components", "value": "component" }
+      ],
+      "scopeButtons": [
+        { "label": "Everything", "value": "" },
+        { "label": "My content", "value": "mine" }
+      ]
+    },
+    "catalog": {
+      "query": "",
+      "type": "",
+      "scope": "",
+      "items": [],
+      "stageSearch": [],
+      "stageType": [],
+      "visible": [],
+      "empty": false
+    }
+  },
+  "elements": {
+    "page": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "mx-auto w-full max-w-7xl px-4 py-8 md:px-6 md:py-10"
+      },
+      "children": ["header", "toolbar", "grid", "empty"]
+    },
+    "header": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["header-title", "header-description"]
+    },
+    "header-title": {
+      "type": "Heading",
+      "props": { "text": { "$state": "/copy/title" }, "level": "h1" },
+      "children": []
+    },
+    "header-description": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/copy/description" },
+        "className": "max-w-3xl text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "toolbar": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex flex-wrap items-center gap-3"
+      },
+      "children": ["search-input", "type-facet", "scope-facet", "sort-badge"]
+    },
+    "search-input": {
+      "type": "Input",
+      "props": {
+        "label": "",
+        "name": "catalog-search",
+        "placeholder": { "$state": "/copy/searchPlaceholder" },
+        "value": { "$bindState": "/catalog/query" },
+        "checks": [],
+        "validateOn": "change",
+        "className": "w-full sm:w-72"
+      },
+      "on": {
+        "change": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/stage-search",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/items" },
+                  "query": { "$state": "/catalog/query" },
+                  "fields": ["name", "description"]
+                }
+              }
+            }
+          },
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/stage-type",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/stage-search" },
+                  "query": { "$state": "/catalog/type" },
+                  "fields": ["type"]
+                }
+              }
+            }
+          },
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/visible",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/stage-type" },
+                  "query": { "$state": "/catalog/scope" },
+                  "fields": ["scope"]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "children": []
+    },
+    "type-facet": {
+      "type": "ButtonGroup",
+      "props": {
+        "buttons": { "$state": "/copy/typeButtons" },
+        "selected": { "$bindState": "/catalog/type" }
+      },
+      "on": {
+        "change": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/stage-search",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/items" },
+                  "query": { "$state": "/catalog/query" },
+                  "fields": ["name", "description"]
+                }
+              }
+            }
+          },
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/stage-type",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/stage-search" },
+                  "query": { "$state": "/catalog/type" },
+                  "fields": ["type"]
+                }
+              }
+            }
+          },
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/visible",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/stage-type" },
+                  "query": { "$state": "/catalog/scope" },
+                  "fields": ["scope"]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "children": []
+    },
+    "scope-facet": {
+      "type": "ButtonGroup",
+      "props": {
+        "buttons": { "$state": "/copy/scopeButtons" },
+        "selected": { "$bindState": "/catalog/scope" }
+      },
+      "on": {
+        "change": [
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/stage-search",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/items" },
+                  "query": { "$state": "/catalog/query" },
+                  "fields": ["name", "description"]
+                }
+              }
+            }
+          },
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/stage-type",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/stage-search" },
+                  "query": { "$state": "/catalog/type" },
+                  "fields": ["type"]
+                }
+              }
+            }
+          },
+          {
+            "action": "setState",
+            "params": {
+              "statePath": "/catalog/visible",
+              "value": {
+                "$computed": "filterItems",
+                "args": {
+                  "source": { "$state": "/catalog/stage-type" },
+                  "query": { "$state": "/catalog/scope" },
+                  "fields": ["scope"]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "children": []
+    },
+    "sort-badge": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/copy/sortLatest" },
+        "className": "text-xs text-muted-foreground"
+      },
+      "children": []
+    },
+    "grid": {
+      "type": "Grid",
+      "props": { "columns": 3, "gap": "md" },
+      "repeat": { "statePath": "/catalog/visible", "key": "assetId" },
+      "children": ["catalog-card"]
+    },
+    "catalog-card": {
+      "type": "Card",
+      "props": { "className": "overflow-hidden" },
+      "children": ["catalog-card-body"]
+    },
+    "catalog-card-body": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": [
+        "catalog-card-thumb",
+        "catalog-card-name",
+        "catalog-card-desc",
+        "catalog-card-meta",
+        "catalog-card-open"
+      ]
+    },
+    "catalog-card-thumb": {
+      "type": "SpecPreview",
+      "props": {
+        "assetId": { "$item": "assetId" },
+        "width": 1200,
+        "height": 675,
+        "scale": 0.25
+      },
+      "children": []
+    },
+    "catalog-card-name": {
+      "type": "Heading",
+      "props": {
+        "text": { "$item": "name" },
+        "level": "h3",
+        "className": "text-base font-semibold"
+      },
+      "children": []
+    },
+    "catalog-card-desc": {
+      "type": "Text",
+      "props": {
+        "text": { "$item": "description" },
+        "className": "line-clamp-2 text-sm text-muted-foreground"
+      },
+      "children": []
+    },
+    "catalog-card-meta": {
+      "type": "Text",
+      "props": {
+        "text": { "$item": "summary" },
+        "className": "text-xs text-muted-foreground"
+      },
+      "children": []
+    },
+    "catalog-card-open": {
+      "type": "Button",
+      "props": {
+        "label": { "$state": "/copy/open" },
+        "variant": "secondary",
+        "leadingIcon": "arrow-right"
+      },
+      "on": {
+        "press": {
+          "action": "catalog.open",
+          "params": { "assetId": { "$item": "assetId" } }
+        }
+      },
+      "children": []
+    },
+    "empty": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/copy/empty" },
+        "className": "text-sm text-muted-foreground"
+      },
+      "visible": { "$state": "/catalog/empty" },
+      "children": []
+    }
+  }
+}

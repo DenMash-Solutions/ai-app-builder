@@ -1,0 +1,173 @@
+{
+  "root": "page",
+  "state": {
+    "locale": "en",
+    "copy": {
+      "back": "Back to the catalog",
+      "preview": "Preview",
+      "previewHint": "Opens the template as a throwaway project — navigate it, keep it or discard it.",
+      "use": "Use",
+      "useHint": "Creates a new project with this template's screens, routes and components installed.",
+      "screens": "Screens",
+      "notFound": "This catalog item is not available in this browser yet.",
+      "screensUnit": "screens",
+      "componentsUnit": "components"
+    },
+    "detail": {
+      "assetId": "",
+      "name": "",
+      "description": "",
+      "typeLabel": "",
+      "summary": "",
+      "screens": [],
+      "screenCount": 0,
+      "componentCount": 0,
+      "empty": true
+    }
+  },
+  "elements": {
+    "page": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "lg",
+        "className": "mx-auto w-full max-w-5xl px-4 py-8 md:px-6 md:py-10"
+      },
+      "children": [
+        "back",
+        "header",
+        "thumb",
+        "summary",
+        "actions",
+        "screens-heading",
+        "screens",
+        "empty"
+      ]
+    },
+    "back": {
+      "type": "Button",
+      "props": {
+        "label": { "$state": "/copy/back" },
+        "variant": "secondary",
+        "leadingIcon": "arrow-left",
+        "className": "w-fit"
+      },
+      "on": {
+        "press": { "action": "catalog.back", "params": {} }
+      },
+      "children": []
+    },
+    "header": {
+      "type": "Card",
+      "props": {
+        "title": { "$state": "/detail/name" },
+        "description": { "$state": "/detail/description" }
+      },
+      "children": []
+    },
+    "thumb": {
+      "type": "SpecPreview",
+      "props": {
+        "assetId": { "$state": "/detail/assetId" },
+        "width": 1280,
+        "height": 800,
+        "scale": 0.5
+      },
+      "children": []
+    },
+    "summary": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/detail/summary" },
+        "className": "text-sm text-muted-foreground"
+      },
+      "visible": { "$state": "/detail/empty", "eq": false },
+      "children": []
+    },
+    "actions": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "flex flex-wrap items-center gap-3"
+      },
+      "children": ["preview-button", "use-button"]
+    },
+    "preview-button": {
+      "type": "Button",
+      "props": {
+        "label": { "$state": "/copy/preview" },
+        "variant": "secondary"
+      },
+      "on": {
+        "press": {
+          "action": "catalog.preview",
+          "params": { "assetId": { "$state": "/detail/assetId" } }
+        }
+      },
+      "children": []
+    },
+    "use-button": {
+      "type": "Button",
+      "props": { "label": { "$state": "/copy/use" }, "variant": "primary" },
+      "on": {
+        "press": {
+          "action": "catalog.use",
+          "params": { "assetId": { "$state": "/detail/assetId" } }
+        }
+      },
+      "children": []
+    },
+    "screens-heading": {
+      "type": "Heading",
+      "props": {
+        "text": { "$state": "/copy/screens" },
+        "level": "h2",
+        "className": "text-lg font-semibold"
+      },
+      "visible": { "$state": "/detail/screenCount", "gt": 0 },
+      "children": []
+    },
+    "screens": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "repeat": { "statePath": "/detail/screens", "key": "name" },
+      "visible": { "$state": "/detail/screenCount", "gt": 0 },
+      "children": ["screen-row"]
+    },
+    "screen-row": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm",
+        "className": "items-center justify-between rounded-md border border-border px-3 py-2"
+      },
+      "children": ["screen-name", "screen-route"]
+    },
+    "screen-name": {
+      "type": "Text",
+      "props": {
+        "text": { "$item": "name" },
+        "className": "text-sm font-medium"
+      },
+      "children": []
+    },
+    "screen-route": {
+      "type": "Text",
+      "props": {
+        "text": { "$item": "route" },
+        "className": "font-mono text-xs text-muted-foreground"
+      },
+      "children": []
+    },
+    "empty": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/copy/notFound" },
+        "className": "text-sm text-muted-foreground"
+      },
+      "visible": { "$state": "/detail/empty" },
+      "children": []
+    }
+  }
+}

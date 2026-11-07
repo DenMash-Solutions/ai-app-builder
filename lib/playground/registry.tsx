@@ -18,7 +18,10 @@ import {
 import { withStyleProps } from "./with-style-props";
 import type { AnyComponentImpl } from "./with-style-props";
 
-const components = {
+/** Component renderers for the playground catalog — exported so surface
+ *  catalogs (plan 073's marketplace, which adds `SpecPreview`) reuse the
+ *  exact same implementations instead of re-declaring them. */
+export const playgroundComponentImpls = {
   ...Object.fromEntries(
     Object.entries(shadcnComponents).map(([name, Impl]) => [
       name,
@@ -46,7 +49,7 @@ const components = {
 } as unknown as Components<typeof playgroundCatalog>;
 
 const { registry } = defineRegistry(playgroundCatalog, {
-  components,
+  components: playgroundComponentImpls,
   actions: {
     // Registry-level default is inert: every surface supplies the real
     // switch_language handler through JSONUIProvider's handlers prop — the
