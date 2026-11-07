@@ -31,6 +31,8 @@ import {
   type ComponentTemplate,
 } from "@/lib/editor/templates";
 import type { Spec } from "@json-render/core";
+import { isProjectManifest } from "@/lib/catalog/manifest";
+import type { ProjectManifest } from "@/lib/catalog/manifest";
 
 export const CATALOG_STORAGE_KEY = "genui-catalog";
 /** One-time template-library migration marker (decision 5) — a separate key
@@ -40,6 +42,9 @@ export const CATALOG_SEEDED_STORAGE_KEY = "genui-catalog-seeded";
 export const CATALOG_TYPES = {
   screen: "screen",
   component: "component",
+  /** Plan 073: a complete project template — its version carries a
+   *  `ProjectManifest` (screens + slot map), never a renderable spec. */
+  project: "project",
 } as const;
 export type CatalogAssetType =
   (typeof CATALOG_TYPES)[keyof typeof CATALOG_TYPES];
@@ -73,12 +78,19 @@ export interface CatalogAsset {
   updatedAt: number;
 }
 
+/** What one asset version stores in the shared `spec` jsonb column (plan
+ *  073 decision 1): a renderable spec for screens/components, a project
+ *  manifest for `project` assets. Which one is legal is decided by the
+ *  OWNING ASSET's type (`isPayloadForType`), so this union is widened
+ *  rather than discriminated — consumers narrow before rendering. */
+export type CatalogVersionPayload = Spec | ProjectManifest;
+
 export interface CatalogAssetVersion {
   id: string;
   assetId: string;
   /** Monotonic per asset, starting at 1 (`unique (asset_id, version)`). */
   version: number;
-  spec: Spec;
+  spec: CatalogVersionPayload;
   changelog: string | null;
   /** Same ownership contract as `CatalogAsset.ownerId` (decision 11). */
   ownerId: string;
@@ -122,12 +134,36 @@ function isSpec(value: unknown): value is Spec {
   );
 }
 
+/** Renderable-spec guard for consumers of the widened payload union —
+ *  install/update flows only ever materialize screens and components. */
+export function isSpecPayload(value: unknown): value is Spec {
+  return isSpec(value);
+}
+
+/**
+ * The per-type payload rule (plan 073): `project` assets carry a manifest,
+ * every other type a renderable spec. Shared by create and publish so the
+ * two writers can never disagree with the DB's asset-type column.
+ */
+export function isPayloadForType(
+  type: CatalogAssetType,
+  payload: unknown,
+): payload is CatalogVersionPayload {
+  return type === CATALOG_TYPES.project
+    ? isProjectManifest(payload)
+    : isSpec(payload);
+}
+
 function nonEmptyId(value: unknown): value is string {
   return typeof value === "string" && value !== "";
 }
 
 function isCatalogType(value: unknown): value is CatalogAssetType {
-  return value === CATALOG_TYPES.screen || value === CATALOG_TYPES.component;
+  return (
+    value === CATALOG_TYPES.screen ||
+    value === CATALOG_TYPES.component ||
+    value === CATALOG_TYPES.project
+  );
 }
 
 function asVisibility(value: unknown): CatalogVisibility {
@@ -172,7 +208,10 @@ function isValidVersion(value: unknown): value is CatalogAssetVersion {
     typeof candidate.version === "number" &&
     Number.isInteger(candidate.version) &&
     candidate.version >= 1 &&
-    isSpec(candidate.spec) &&
+    // Shape-agnostic (plan 073): the version row cannot see its asset's
+    // type, so a manifest is as valid here as a spec — the per-type rule
+    // lives in create/publish, where the type is known.
+    (isSpec(candidate.spec) || isProjectManifest(candidate.spec)) &&
     typeof candidate.createdAt === "number"
   );
 }
@@ -321,10 +360,11 @@ function persist(): void {
   for (const listener of listeners) listener();
 }
 
-/** Detach a spec before it enters the store (the `saveTemplate` discipline:
- *  later edits to a source spec never touch a stored version). */
-function cloneSpec(spec: Spec): Spec {
-  return structuredClone(spec);
+/** Detach a payload before it enters the store (the `saveTemplate`
+ *  discipline: later edits to a source spec/manifest never touch a stored
+ *  version). */
+function clonePayload<T>(payload: T): T {
+  return structuredClone(payload);
 }
 
 /** Versions of one asset, ascending — the publish/monotonicity view. */
@@ -344,23 +384,19 @@ export function createCatalogAsset(request: {
   description?: string | null;
   type: CatalogAssetType;
   visibility?: CatalogVisibility;
-  spec: Spec;
+  spec: CatalogVersionPayload;
 }): { asset: CatalogAsset; version: CatalogAssetVersion } | null {
   const name = request.name.trim();
-  if (name === "" || !isSpec(request.spec)) return null;
-  if (
-    request.type !== CATALOG_TYPES.screen &&
-    request.type !== CATALOG_TYPES.component
-  ) {
-    return null;
-  }
+  if (name === "") return null;
+  if (!isCatalogType(request.type)) return null;
+  if (!isPayloadForType(request.type, request.spec)) return null;
   const now = Date.now();
   const assetId = crypto.randomUUID();
   const version: CatalogAssetVersion = {
     id: crypto.randomUUID(),
     assetId,
     version: 1,
-    spec: cloneSpec(request.spec),
+    spec: clonePayload(request.spec),
     changelog: null,
     ownerId: "",
     createdAt: now,
@@ -459,13 +495,15 @@ export function removeCatalogAsset(id: string): boolean {
  */
 export function publishCatalogVersion(
   assetId: string,
-  spec: Spec,
+  spec: CatalogVersionPayload,
   changelog?: string | null,
 ): CatalogAssetVersion | null {
-  if (!isSpec(spec)) return null;
   const state = load();
   const asset = state.assets.find((candidate) => candidate.id === assetId);
   if (!asset) return null;
+  // Per-type validation (plan 073): a project manifest is refused for a
+  // screen/component asset and a bare spec for a project asset.
+  if (!isPayloadForType(asset.type, spec)) return null;
   const next =
     state.versions
       .filter((version) => version.assetId === assetId)
@@ -475,7 +513,7 @@ export function publishCatalogVersion(
     id: crypto.randomUUID(),
     assetId,
     version: next,
-    spec: cloneSpec(spec),
+    spec: clonePayload(spec),
     changelog:
       typeof changelog === "string" && changelog.trim() !== ""
         ? changelog.trim()

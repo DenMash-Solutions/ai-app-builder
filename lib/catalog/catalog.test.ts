@@ -96,8 +96,9 @@ describe("catalog store (plan 066)", () => {
     expect(catalog.getAssetVersions(asset.id)).toHaveLength(1);
 
     // Detached: later edits to the source spec never touch the store.
+    const stored = version.spec as Spec;
     spec.elements.root.props.title = "changed";
-    expect(version.spec.elements.root.props.title).toBe("v1");
+    expect(stored.elements.root.props.title).toBe("v1");
   });
 
   test("create rejects empty names, invalid specs and junk types", () => {
@@ -148,7 +149,7 @@ describe("catalog store (plan 066)", () => {
     expect(versions.map((version) => version.version)).toEqual([1, 2, 3]);
     // Old versions stay byte-identical (decision 3 — immutable snapshots).
     expect(versions[0]).toEqual(v1);
-    expect(versions[0].spec.elements.root.props.title).toBe("v1");
+    expect((versions[0].spec as Spec).elements.root.props.title).toBe("v1");
 
     const [updated] = catalog.getCatalogAssets();
     expect(updated.latestVersionId).toBe(v3!.id);
@@ -500,7 +501,7 @@ describe("catalog store (plan 066)", () => {
       .getCatalogVersions()
       .find((candidate) => candidate.assetId === SEED_TEMPLATE.id);
     expect(version?.version).toBe(1);
-    expect(version?.spec.root).toBe("card-1"); // subtree rootKey → spec.root
+    expect((version?.spec as Spec).root).toBe("card-1"); // rootKey → spec.root
 
     // Second run: nothing new, no duplicate rows.
     expect(catalog.seedCatalogFromTemplates([SEED_TEMPLATE as never])).toBe(0);
@@ -551,5 +552,101 @@ describe("catalog store (plan 066)", () => {
       versions: [],
       installs: [],
     });
+  });
+
+  test("project assets carry a manifest; create validates per type (plan 073)", () => {
+    const manifest = {
+      screens: [{ name: "Home", route: null, spec: makeSpec("Home") }],
+      components: ["b2300000-0000-4000-8000-00000000000a"],
+    };
+    const created = catalog.createCatalogAsset({
+      name: "Storefront",
+      type: catalog.CATALOG_TYPES.project,
+      spec: manifest,
+    });
+    expect(created?.asset.type).toBe(catalog.CATALOG_TYPES.project);
+    expect(created?.version.spec).toEqual(manifest);
+
+    // Per-type rule: a manifest is refused for a screen/component asset and
+    // a bare spec for a project asset.
+    expect(
+      catalog.createCatalogAsset({
+        name: "Screen",
+        type: catalog.CATALOG_TYPES.screen,
+        spec: manifest,
+      }),
+    ).toBeNull();
+    expect(
+      catalog.createCatalogAsset({
+        name: "Project",
+        type: catalog.CATALOG_TYPES.project,
+        spec: makeSpec("v1"),
+      }),
+    ).toBeNull();
+  });
+
+  test("publishCatalogVersion branches on the owning asset type (plan 073)", () => {
+    const manifest = {
+      screens: [{ name: "Home", route: null, spec: makeSpec("Home") }],
+      components: ["b2300000-0000-4000-8000-00000000000a"],
+    };
+    const project = catalog.createCatalogAsset({
+      name: "Storefront",
+      type: catalog.CATALOG_TYPES.project,
+      spec: manifest,
+    })!;
+    const screen = catalog.createCatalogAsset({
+      name: "Card screen",
+      type: catalog.CATALOG_TYPES.screen,
+      spec: makeSpec("v1"),
+    })!;
+
+    // Manifest accepted on the project, refused on the screen; a spec is the
+    // mirror image. Nothing is written for a refused publish.
+    expect(
+      catalog.publishCatalogVersion(project.asset.id, manifest),
+    ).not.toBeNull();
+    expect(
+      catalog.publishCatalogVersion(project.asset.id, makeSpec("x")),
+    ).toBeNull();
+    expect(catalog.publishCatalogVersion(screen.asset.id, manifest)).toBeNull();
+    expect(
+      catalog.publishCatalogVersion(screen.asset.id, makeSpec("v2")),
+    ).not.toBeNull();
+    expect(catalog.getAssetVersions(project.asset.id)).toHaveLength(2);
+    expect(catalog.getAssetVersions(screen.asset.id)).toHaveLength(2);
+  });
+
+  test("sanitize keeps a project asset and its manifest version (sync land path)", () => {
+    const manifest = {
+      screens: [{ name: "Home", route: "", spec: makeSpec("Home") }],
+      components: ["b2300000-0000-4000-8000-00000000000a"],
+    };
+    const assets = catalog.sanitizeCatalogAssets([
+      {
+        id: "asset-1",
+        name: "Storefront",
+        type: "project",
+        visibility: "public",
+        latestVersionId: "version-1",
+        ownerId: "user-1",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+    expect(assets).toHaveLength(1);
+    const versions = catalog.sanitizeCatalogVersions([
+      {
+        id: "version-1",
+        assetId: "asset-1",
+        version: 1,
+        spec: manifest,
+        ownerId: "user-1",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+    expect(versions).toHaveLength(1);
+    expect(versions[0]?.spec).toEqual(manifest);
   });
 });

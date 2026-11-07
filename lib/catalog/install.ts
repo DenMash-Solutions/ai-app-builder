@@ -28,6 +28,7 @@ import {
   getCatalogAssets,
   getCatalogInstalls,
   getCatalogVersions,
+  isSpecPayload,
   publishCatalogVersion,
   setCatalogInstallTarget,
   updateCatalogInstallPin,
@@ -91,7 +92,7 @@ export function installScreenAsset(request: {
   const stored = getCatalogVersions().find(
     (row) => row.id === version.id && row.assetId === asset.id,
   );
-  if (!stored) return null;
+  if (!stored || !isSpecPayload(stored.spec)) return null;
 
   const entry = createEntry(asset.name, stored.spec, projectId);
   addEntry(entry);
@@ -134,7 +135,7 @@ export function insertCatalogComponent(
   const stored = getCatalogVersions().find(
     (row) => row.id === version.id && row.assetId === asset.id,
   );
-  if (!stored) return null;
+  if (!stored || !isSpecPayload(stored.spec)) return null;
 
   const expanded = insertTemplate(spec, {
     parentKey,
@@ -270,6 +271,7 @@ function swapInstallContent(
   asset: CatalogAsset,
   version: CatalogAssetVersion,
 ): boolean {
+  if (!isSpecPayload(version.spec)) return false;
   if (!install.targetUiId) return false;
   const host = getHistory().find((entry) => entry.id === install.targetUiId);
   if (!host) return false;

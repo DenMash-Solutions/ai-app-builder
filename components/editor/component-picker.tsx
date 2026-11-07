@@ -25,6 +25,7 @@ import type { PickerItem } from "@/lib/playground/catalog";
 import {
   CATALOG_TYPES,
   CATALOG_VISIBILITIES,
+  isSpecPayload,
   type CatalogAsset,
   type CatalogAssetVersion,
   type CatalogInstall,
@@ -235,6 +236,10 @@ export function ComponentPicker({
           };
         })
         .filter((row) => {
+          // Plan 073: project templates are discovery-only — the picker stays
+          // contextual (insert into THIS screen), so a manifest never lands
+          // in an insert flow.
+          if (row.asset.type === CATALOG_TYPES.project) return false;
           const mine =
             row.asset.ownerId === "" || row.asset.ownerId === catalogOwnerId;
           if (scope === CATALOG_SCOPES.mine && !mine) return false;
@@ -520,7 +525,9 @@ export function ComponentPicker({
                             : t("editor.picker.typeComponent")}{" "}
                           ·{" "}
                           {t("editor.picker.templateCount", {
-                            count: Object.keys(latest.spec.elements).length,
+                            count: isSpecPayload(latest.spec)
+                              ? Object.keys(latest.spec.elements).length
+                              : 0,
                           })}
                         </span>
                         <span className="shrink-0 rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] text-zinc-400">

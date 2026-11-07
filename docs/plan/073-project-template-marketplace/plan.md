@@ -55,9 +55,45 @@ identified as missing regardless of templates.
   so 071's update/rollback fan-out works on template-installed copies
   exactly like hand-installed ones. Referenced component assets are
   adopted first via `adoptPublicCatalog()` (066 decision 11 path).
-- **Picker: Templates surface** — the type filter gains a `project`
-  chip; project cards show name, description, screen count and slot
-  summary; actions **Preview** and **Use**.
+- **Catalog route + sidebar entry (scope change 2026-11-06: the
+  marketplace is a first-class route, never a dialog)** — new
+  `app/[locale]/(app)/catalog/page.tsx` (app group: SyncEngine +
+  shell apply) + a sidebar item in `components/shell/app-shell.tsx`
+  `NavItems` (between Playground and Live pages; icon `Store` to match
+  the picker's Catalog vocabulary). Mobbin-style browse surface
+  (mobbin.com/explore is the reference): top **search** + **type
+  facets** + **sort (Latest)** + **card grid**; each card = thumbnail +
+  name + description + screen-count summary → card opens detail page
+  `/catalog/[assetId]` with the manifest summary and the actions
+  **Preview** (ephemeral project — decision 2 below) and **Use**
+  (installer above). Route reads adoptable catalog assets for the
+  signed-in user (same adoption path as the picker). **Settled
+  2026-11-06:** route lists the **whole catalog** — Templates /
+  Screens / Components as type facets, templates featured; URL
+  `/catalog`, sidebar label "Catalog" (Store icon, between Playground
+  and Live pages); **live scaled-render thumbnails** (decision 9);
+  facets = Type + My content + name search + Latest sort (taxonomy
+  stays descoped — Out of scope); signed-out → sign-in gate
+  (adoption requires a user, same as the picker).
+- **Picker stays contextual-only (revised 2026-11-06)** — the picker's
+  Browse dialog keeps only its existing insert behavior ("put this
+  into the current screen"); no `project` chip, no marketplace rows,
+  no Preview/Use there. The Templates tab (local saved templates) is
+  untouched. Discovery lives on the route.
+- **Spec-mandate build of the catalog surfaces (user target
+  2026-11-06: "use the specs for our own project, so we can know what
+  is possible or not")** — both pages follow the login/signup/admin
+  pattern: committed frame spec (`lib/specs/catalog.spec.json`,
+  validated in `specs.test.ts`) + pure builder (`buildCatalogSpec` /
+  `buildCatalogDetailSpec` — the `buildAdminSpec` composition
+  pattern) + thin page shells registering action handlers
+  (`admin-actions` precedent: `catalog.preview`, `catalog.use`,
+  `catalog.filter`). **New catalog capability required: `SpecPreview`**
+  — a nested spec-render element for the live thumbnails (decision 9):
+  registry Impl wraps `JSONUIProvider` + `Renderer` at a fixed viewport
+  with CSS scale, `pointer-events-none`; embedded data blocks resolve
+  through `QueryLoader` (playground namespace). Feasibility of the
+  nested render is itself a deliverable of this plan.
 - **Preview = ephemeral project (user decision 2026-11-06)** — Preview
   creates a throwaway project named `Preview: {template}`, installs the
   manifest into it, activates it and shows a banner: **Use this
@@ -89,8 +125,9 @@ identified as missing regardless of templates.
 - **User-published templates** ("share my project as a template") —
   v1 is first-party curated seeds only (user decision 2026-11-06).
 - Marketplace taxonomy — categories, ratings, install counts, author
-  pages, featured slots; the picker's existing search/name filter only
-  (descoped 2026-11-06).
+  pages, featured slots; the route's search/name filter + Type/My
+  content facets only (taxonomy stays descoped 2026-11-06; "Most
+  popular" sort needs install counts, so the route sorts Latest).
 - **Template upgrades** — re-running a template into an EXISTING project
   (component-level updates stay covered by 071's pin/update flow)
   (descoped 2026-11-06).
@@ -102,6 +139,10 @@ identified as missing regardless of templates.
   (user decision 2026-11-06; rejected per decision 2 below).
 - F23 planner / "Build project" — separate plan, sequenced after this
   one (2026-11-06 decision); its decisions live preserved in 072.
+- **Marketplace inside the picker's Browse dialog** — revised
+  2026-11-06 (user directive: "CRITICAL — avoid adding new features as
+  a dialog"); browse/preview/use moved to the `/catalog` route (see In
+  scope). The dialog keeps only its pre-existing contextual insert.
 - Editing a template's manifest through the app (first-party seeds are
   authored in `demo/` and regenerated) (descoped 2026-11-06).
 
@@ -159,6 +200,44 @@ identified as missing regardless of templates.
    signed-out (local store); the SQL seed only matters for cross-device
    browse, and preview/purge behave identically signed-in (remote purge
    best-effort) or signed-out (local only).
+8. **Marketplace = a route, not a dialog (user directive 2026-11-06,
+   "CRITICAL").** The browse/preview/use flow lives on a
+   sidebar-navigable route (`/catalog`) shaped like Mobbin's explore
+   page — search + facets + sort + card grid + detail page. Rejected:
+   the originally approved shape (a `project` chip + cards inside the
+   picker's Browse dialog) — the dialog is contextual ("insert into
+   THIS screen"), while discovery deserves a first-class, linkable,
+   back-button-friendly surface, and an interactive preview cannot live
+   at Mobbin fidelity inside a dialog. The picker keeps only its
+   pre-existing insert behavior.
+9. **Thumbnails = live scaled render (settled 2026-11-06).** Each card
+   embeds the asset's home-screen spec rendered at a fixed viewport and
+   scaled down (`pointer-events-none`, decorative). Rejected: Playwright
+   capture pipeline — new infra plus regeneration on every spec change;
+   rejected: placeholder art — fails the Mobbin reference's core value
+   (the thumbnail carries the page). Accepted costs: grid perf (cap the
+   first page / virtualize) and read-only data-source resolution (the
+   demo template's specs use local fixtures, which render without env).
+10. **The marketplace pages are specs, not hand-written React (user
+    target 2026-11-06).** Frame = committed JSON spec, data = pure
+    builder composition, actions = registered handlers — the exact
+    spec-mandate pattern login/signup/admin already prove. Rejected:
+    hand-rolled TSX grid — ships faster but teaches nothing about the
+    spec system's limits; the stated goal is knowing "what is possible
+    or not" by building our own product surfaces with it. The one
+    genuinely new capability this forces is the nested spec-render
+    element (`SpecPreview`, decision 9) — no upstream package ships an
+    embed element (verified 2026-11-06), so its feasibility is a
+    first-class deliverable, not an implementation detail. Filter
+    interactivity settled at Step 0 (2026-11-06): **spec-native** —
+    the D7 house pattern (`$bindState` + `on.change` → `setState` +
+    `$computed filterItems` → `repeat` grid, documented in
+    `styling-rules.ts` and asserted by its unit test); facets compose
+    as a staged pipeline of action lists; the builder only composes
+    initial rows. Rejected: builder-rebuild — the admin precedent fires
+    on discrete events, while a per-keystroke spec rebuild risks
+    focus/DOM churn and teaches less. Fallback: builder-rebuild for
+    facets only if the staged pipeline proves unwieldy.
 
 ## Verification
 
@@ -200,3 +279,8 @@ identified as missing regardless of templates.
 | ---- | ---- |
 | 2026-11-06 | Drafted (Step 0 done: lessons grep — `template-derived-strings` #22, `radix-escape-capture`, `mcp-verification`; json-render skill loaded earlier this session; seams researched: `CATALOG_TYPES`/`publishCatalogVersion`/`isSpec`, `browse.ts` `adoptPublicCatalog`, sync `ownedBy` decision 11, DB `type check` constraint, `insertCatalogComponent`, demo slot architecture, `createProject`/`purgeProjectData`, `seedCatalogAsset` DB-layer precedent). User decisions: ephemeral preview, sequencing F22 → templates → F23, v1 first-party seeds. |
 | 2026-11-06 | **Approved** by user (alongside 072 and 074). |
+| 2026-11-06 | **Scope change (user directive): marketplace = route, not dialog** — "CRITICAL: avoid adding new features as a dialog; the catalog marketplace must be a new route, in the sidebar", Mobbin (mobbin.com) as reference IA. Picker `project` chip descoped → `/catalog` route + sidebar entry + detail page; layout details (route asset scope, facets, thumbnails, auth gate) under discussion. |
+| 2026-11-06 | **Route design settled (user answers):** whole catalog on the route (Templates/Screens/Components type facets, templates featured) · URL `/catalog` + sidebar "Catalog" (Store icon) · **live scaled-render thumbnails** (decision 9) · taxonomy stays descoped (Type + My content + search + Latest sort) · signed-out → sign-in gate. |
+| 2026-11-06 | **Build approach settled (user target): the catalog route is spec-built** — committed frame spec + pure builder + registered handlers (the admin pattern), so the project dogfoods json-render and maps its real limits; new `SpecPreview` nested-render element forced by decision 9, no upstream embed exists → feasibility is a deliverable (decision 10). |
+| 2026-11-06 | **Step 0 preview approved** (phases P0–P7: foundation → SpecPreview spike → frames/builders → browse route → detail+actions → seed → settings → verification). Filter interactivity closed: **spec-native** (D7 `filterItems`/`repeat` house pattern) + builder for initial composition only. Key seam finds: `SpecPage` already mounts `QueryLoader`; `SpecPreview` props take `assetId` (store-resolved) so repeat item-scope stays trivial. |
+| 2026-11-07 | **P0 foundation implemented.** `CATALOG_TYPES.project` + `CatalogVersionPayload = Spec | ProjectManifest` on versions; `isProjectManifest` (new `lib/catalog/manifest.ts`) validates screens, exactly-one home, slot keys present in that screen's spec, and slot ids listed in `components` (unique, non-empty). `createCatalogAsset`/`publishCatalogVersion` share `isPayloadForType` (manifest ⇔ `project`, spec otherwise); the version-row validator accepts either shape (a version cannot see its asset's type — the per-type rule lives where the type is known). Consumers narrow with the exported `isSpecPayload` (install/update/fork, F22 expansion, picker). Picker filters `project` assets out (discovery lives on the route). DB: `catalog_assets_type_check` widened on the live project via MCP (verified `pg_get_constraintdef`) + `db/01_schema.sql` kept in sync. Unit: `manifest.test.ts` (12) + per-type create/publish/sanitize cases in `catalog.test.ts`; `bun test lib/catalog` 52 pass. |

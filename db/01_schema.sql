@@ -292,7 +292,7 @@ create table if not exists public.catalog_assets (
   latest_version_id uuid,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
-  constraint catalog_assets_type_check check (type in ('screen', 'component')),
+  constraint catalog_assets_type_check check (type in ('screen', 'component', 'project')),
   constraint catalog_assets_visibility_check check (visibility in ('private', 'public')),
   constraint catalog_assets_name_check check (char_length(name) between 1 and 128)
 );

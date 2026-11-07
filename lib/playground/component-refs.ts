@@ -22,7 +22,7 @@
  */
 import type { Spec, UIElement } from "@json-render/core";
 import type { CatalogAsset, CatalogAssetVersion } from "@/lib/catalog/catalog";
-import { addCatalogInstall } from "@/lib/catalog/catalog";
+import { addCatalogInstall, isSpecPayload } from "@/lib/catalog/catalog";
 import type { TemplateSubtree } from "@/lib/editor/templates";
 import {
   findParentKey,
@@ -105,7 +105,7 @@ export function expandComponentRefs(
     if (resolution.projectId !== null && resolution.resolveCatalog) {
       catalog = resolution.resolveCatalog(ref);
     }
-    if (catalog) {
+    if (catalog && isSpecPayload(catalog.version.spec)) {
       subtree = {
         rootKey: catalog.version.spec.root,
         elements: catalog.version.spec.elements,

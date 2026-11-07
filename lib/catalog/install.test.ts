@@ -159,7 +159,8 @@ describe("install/update/fork flows (plan 066 task 3)", () => {
     expect(install.projectId).toBe(PROJECT);
 
     // The version's spec is detached — later source edits never leak in.
-    (version.spec.elements.root.props as { title: string }).title = "changed";
+    ((version.spec as Spec).elements.root.props as { title: string }).title =
+      "changed";
     expect(entry.spec.elements.root.props.title).toBe("v1");
   });
 
@@ -696,8 +697,8 @@ describe("install/update/fork flows (plan 066 task 3)", () => {
     const published = flows.publishCatalogInstallUpdate(install.id, "");
     expect(published).not.toBeNull();
     // The EXPANDED SUBTREE only — never the whole host spec.
-    expect(published!.spec.root).toBe("card-1");
-    expect(Object.keys(published!.spec.elements)).toEqual(["card-1"]);
+    expect((published!.spec as Spec).root).toBe("card-1");
+    expect(Object.keys((published!.spec as Spec).elements)).toEqual(["card-1"]);
 
     // Decision 11 guard: a browse-adopted FOREIGN asset publishes only
     // under its owner's session (else the F2 insert policy refuses the
